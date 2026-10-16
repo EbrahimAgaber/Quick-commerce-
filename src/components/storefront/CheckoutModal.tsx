@@ -132,7 +132,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         shippingFee,
         grandTotal,
         status: 'Received',
-        trackingNotes: 'تم استلام الطلب وتأكيده بنجاح من متجر StoreLink.',
+        trackingNotes: 'تم استلام الطلب وتأكيده بنجاح عبر منصة التجارة السريعة (Quick E-Commerce).',
       };
 
       // If user configured a live Google Web App URL, post asynchronously in background

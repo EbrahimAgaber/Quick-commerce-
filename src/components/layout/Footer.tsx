@@ -66,7 +66,7 @@ export const Footer: React.FC<FooterProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-stone-400" />
-                <span>{settings.supportEmail || 'support@storelink.app'}</span>
+                <span>{settings.supportEmail || 'support@quick-ecommerce.app'}</span>
               </div>
             </div>
           </div>
@@ -153,7 +153,7 @@ export const Footer: React.FC<FooterProps> = ({
               </button>
             )}
             <span className="text-stone-600">•</span>
-            <span className="text-stone-500">منصة المتاجر السحابية StoreLink</span>
+            <span className="text-stone-500">منصة التجارة السريعة (Quick E-Commerce)</span>
           </div>
         </div>
       </div>

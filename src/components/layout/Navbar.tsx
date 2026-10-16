@@ -19,10 +19,12 @@ import {
   LogIn,
   Share2,
   Check,
-  Eye
+  Eye,
+  ShieldCheck,
+  Globe
 } from 'lucide-react';
 
-export type AppViewMode = 'dashboard' | 'storefront' | 'sheet' | 'script';
+export type AppViewMode = 'dashboard' | 'storefront' | 'sheet' | 'script' | 'qa';
 export type DevicePreviewMode = 'desktop' | 'mobile';
 
 interface NavbarProps {
@@ -47,6 +49,7 @@ interface NavbarProps {
   onOpenAuth?: () => void;
   onLogout?: () => void;
   isShopperPreviewOnly?: boolean;
+  onOpenFreeHosting?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -71,6 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onLogout,
   isShopperPreviewOnly = false,
+  onOpenFreeHosting,
 }) => {
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -176,6 +180,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Share2 className="w-3 h-3" />}
               <span>{copiedLink ? 'تم نسخ الرابط!' : 'مشاركة رابط المتجر'}</span>
             </button>
+
+            {/* Free Hosting Portal Trigger */}
+            {onOpenFreeHosting && (
+              <button
+                onClick={onOpenFreeHosting}
+                className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 rounded-lg transition-colors text-xs font-bold cursor-pointer"
+                title="دليل وبوابة النشر والاستضافة المجانية لمتجرك"
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>استضافة مجانية 100%</span>
+              </button>
+            )}
           </div>
 
           {/* Engine Views Switcher */}
@@ -226,6 +242,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Code2 className="w-3.5 h-3.5" />
               <span className="hidden md:inline">Apps Script</span>
+            </button>
+
+            <button
+              onClick={() => onViewModeChange('qa')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'qa'
+                  ? 'bg-emerald-500 text-slate-950 shadow-xs'
+                  : 'text-emerald-400 hover:text-white'
+              }`}
+              title="فحص الجودة (210 رحلة تفاعلية ومحرك الاختبارات)"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>مختبر QA</span>
             </button>
           </div>
 
@@ -417,6 +446,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <PackageCheck className="w-4 h-4 text-[#2563EB]" />
             <span className="hidden sm:inline">تتبع طلبك</span>
+          </button>
+
+          {/* QA Lab Access Button */}
+          <button
+            onClick={() => onViewModeChange('qa')}
+            className={`flex items-center gap-1.5 px-2.5 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+              viewMode === 'qa' 
+                ? 'bg-blue-600 text-white shadow-xs' 
+                : 'text-stone-700 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80'
+            }`}
+            title="فتح لوحة فحص الجودة (210 رحلة تفاعلية ومحرك الاختبارات)"
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span className="hidden md:inline">مختبر الجودة (QA)</span>
           </button>
 
           {/* Sizing & Policies */}

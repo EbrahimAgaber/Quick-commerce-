@@ -32,7 +32,8 @@ import {
   Eye,
   UserCheck,
   X,
-  Tag
+  Tag,
+  Globe
 } from 'lucide-react';
 
 interface StoreDashboardProps {
@@ -51,6 +52,7 @@ interface StoreDashboardProps {
   onSyncLiveData: (data: any) => void;
   currentUser?: MerchantUser | null;
   onOpenAuth?: () => void;
+  onOpenFreeHosting?: () => void;
 }
 
 export const StoreDashboard: React.FC<StoreDashboardProps> = ({
@@ -69,6 +71,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   onSyncLiveData,
   currentUser,
   onOpenAuth,
+  onOpenFreeHosting,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'sheet' | 'script'>('overview');
   const [copiedLink, setCopiedLink] = useState(false);
@@ -102,7 +105,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const storeSlug = settings.storeName.toLowerCase().replace(/\s+/g, '-');
   const storeUrl = typeof window !== 'undefined' && window.location.origin 
     ? `${window.location.origin}?store=${storeSlug}` 
-    : `https://storelink.app/?store=${storeSlug}`;
+    : `https://quick-ecommerce.app/?store=${storeSlug}`;
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(storeUrl);
@@ -325,12 +328,23 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
 
           <button
             onClick={onOpenNewStoreWizard}
-            className="px-3.5 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             title="إنشاء متجر جديد"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">متجر جديد</span>
           </button>
+
+          {onOpenFreeHosting && (
+            <button
+              onClick={onOpenFreeHosting}
+              className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold rounded-xl text-xs sm:text-sm flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="دليل النشر والاستضافة المجانية"
+            >
+              <Globe className="w-4 h-4 text-emerald-600" />
+              <span>استضافة مجانية 100%</span>
+            </button>
+          )}
         </div>
       </div>
 

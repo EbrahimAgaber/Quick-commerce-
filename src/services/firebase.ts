@@ -95,7 +95,7 @@ export async function signInWithGoogle(): Promise<MerchantUser> {
 
   const merchant: MerchantUser = {
     id: fbUser.uid,
-    name: fbUser.displayName || fbUser.email?.split('@')[0] || 'تاجر StoreLink',
+    name: fbUser.displayName || fbUser.email?.split('@')[0] || 'تاجر Quick E-Commerce',
     email: fbUser.email || '',
     avatarUrl: fbUser.photoURL || undefined,
     createdAt: new Date().toISOString()

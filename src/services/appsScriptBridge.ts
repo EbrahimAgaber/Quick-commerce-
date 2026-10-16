@@ -6,7 +6,7 @@ import { Order, Product, StoreSettings, StorePolicy } from '../types/store';
 export function generateGoogleAppsScriptCode(): string {
   return `/**
  * =========================================================================
- * 🛍️ STORELINK - GOOGLE SHEETS E-COMMERCE ENGINE (Code.gs)
+ * 🛍️ QUICK E-COMMERCE - GOOGLE SHEETS BACKEND ENGINE (Code.gs)
  * =========================================================================
  * Transforms this Google Sheet into an instant, high-speed e-commerce backend.
  * 
@@ -18,14 +18,14 @@ export function generateGoogleAppsScriptCode(): string {
  * 5. Click 'Deploy' > 'New deployment' > Select 'Web app'
  *    - Execute as: 'Me'
  *    - Who has access: 'Anyone' (Required for public storefront access)
- * 6. Copy your Web App URL and paste it into the StoreLink connector!
+ * 6. Copy your Web App URL and paste it into the Quick E-Commerce connector!
  * =========================================================================
  */
 
 // Custom Menu in Google Sheets UI
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu('🛍️ متجر StoreLink')
+    .createMenu('🛍️ متجر Quick E-Commerce')
     .addItem('🚀 تهيئة وإنشاء جداول المتجر', 'setupSheetDatabase')
     .addItem('🔄 مسح الكاش والتحديث', 'clearCache')
     .addToUi();
@@ -62,7 +62,7 @@ function setupSheetDatabase() {
     ['Bank IBAN', 'SA4480000201608010123456', 'رقم الآيبان البنكي'],
     ['Account Holder', 'Ebrahim Gaber - Simpler Solutions', 'اسم المستفيد'],
     ['Order Notification Email', 'ea.gaber10@gmail.com', 'البريد لتلقي إشعارات الطلبات الفورية'],
-    ['Announcement Text', '⚡ Welcome to Simpler StoreLink · Powered by Google Sheets & Apps Script', 'شريط الإعلانات أعلى المتجر']
+    ['Announcement Text', '⚡ أهلاً بكم في متجر التجارة السريعة (Quick E-Commerce) · شحن سريع ودفع آمن', 'شريط الإعلانات أعلى المتجر']
   ];
   settingsSheet.getRange(1, 1, settingsData.length, 3).setValues(settingsData);
   formatSheetHeader(settingsSheet, 3, '#0B253F');
@@ -148,7 +148,7 @@ function setupSheetDatabase() {
   infoSheet.getRange(2, 1, sampleInfo.length, 3).setValues(sampleInfo);
   formatSheetHeader(infoSheet, 3, '#15803d');
 
-  SpreadsheetApp.getActiveSpreadsheet().toast('✅ تم إنشاء وتنسيق جداول المتجر بنجاح!', 'StoreLink', 5);
+  SpreadsheetApp.getActiveSpreadsheet().toast('✅ تم إنشاء وتنسيق جداول المتجر بنجاح!', 'Quick E-Commerce', 5);
 }
 
 function formatSheetHeader(sheet, numCols, color) {
@@ -400,7 +400,7 @@ function jsonResponse(data) {
 }
 
 function clearCache() {
-  SpreadsheetApp.getActiveSpreadsheet().toast('تم تحديث البيانات!', 'StoreLink', 3);
+  SpreadsheetApp.getActiveSpreadsheet().toast('تم تحديث البيانات!', 'Quick E-Commerce', 3);
 }
 `;
 }

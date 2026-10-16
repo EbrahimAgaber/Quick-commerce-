@@ -62,7 +62,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   };
 
   const handleQuickDemo = () => {
-    const user = AuthService.login('merchant.demo@storelink.app');
+    const user = AuthService.login('merchant.demo@quick-ecommerce.app');
     onSuccess(user);
     onClose();
   };
@@ -82,7 +82,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               <h3 className="text-base sm:text-lg font-bold text-[#0F172A]">
                 {mode === 'login' ? 'تسجيل دخول التاجر' : 'إنشاء حساب تاجر جديد'}
               </h3>
-              <p className="text-xs text-stone-500">منصة المتاجر السحابية StoreLink</p>
+              <p className="text-xs text-stone-500">منصة التجارة السريعة (Quick E-Commerce)</p>
             </div>
           </div>
 

@@ -34,6 +34,8 @@ import { SheetSimulator } from './components/admin/SheetSimulator';
 import { AppsScriptHub } from './components/admin/AppsScriptHub';
 import { AuthModal } from './components/auth/AuthModal';
 import { Footer } from './components/layout/Footer';
+import { QaReadinessDashboard } from './components/qa/QaReadinessDashboard';
+import { FreeHostingModal } from './components/admin/FreeHostingModal';
 import { Plus, Sparkles, RotateCcw, Eye, EyeOff } from 'lucide-react';
 
 export default function App() {
@@ -74,7 +76,7 @@ export default function App() {
       if (fbUser) {
         const merchant: MerchantUser = {
           id: fbUser.uid,
-          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'تاجر StoreLink',
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'تاجر Quick E-Commerce',
           email: fbUser.email || '',
           avatarUrl: fbUser.photoURL || undefined,
           createdAt: new Date().toISOString()
@@ -136,7 +138,7 @@ export default function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const urlView = params.get('view') as AppViewMode;
-      if (urlView === 'dashboard' || urlView === 'sheet' || urlView === 'script' || urlView === 'storefront') {
+      if (urlView === 'dashboard' || urlView === 'sheet' || urlView === 'script' || urlView === 'storefront' || urlView === 'qa') {
         return urlView;
       }
     } catch {}
@@ -177,6 +179,7 @@ export default function App() {
   const [isPoliciesOpen, setIsPoliciesOpen] = useState(false);
   const [isBrandStudioOpen, setIsBrandStudioOpen] = useState(false);
   const [isNewStoreWizardOpen, setIsNewStoreWizardOpen] = useState(false);
+  const [isFreeHostingOpen, setIsFreeHostingOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
 
@@ -450,9 +453,10 @@ export default function App() {
           setCurrentUser(null);
         }}
         isShopperPreviewOnly={isShopperPreviewOnly}
+        onOpenFreeHosting={() => setIsFreeHostingOpen(true)}
       />
 
-      {/* VIEW MODE 1: BUSINESS OWNER DASHBOARD (STORE.LINK HUB) */}
+      {/* VIEW MODE 1: BUSINESS OWNER DASHBOARD (QUICK E-COMMERCE HUB) */}
       {viewMode === 'dashboard' && (
         <main className="flex-1 w-full py-6">
           <StoreDashboard
@@ -471,6 +475,7 @@ export default function App() {
             onSyncLiveData={handleSyncLiveData}
             currentUser={currentUser}
             onOpenAuth={() => setIsAuthModalOpen(true)}
+            onOpenFreeHosting={() => setIsFreeHostingOpen(true)}
           />
         </main>
       )}
@@ -662,6 +667,26 @@ export default function App() {
         </main>
       )}
 
+      {/* VIEW MODE 5: QA READINESS AUDIT & 210 USER JOURNEYS */}
+      {viewMode === 'qa' && (
+        <main className="flex-1 w-full bg-stone-100">
+          <QaReadinessDashboard
+            settings={settings}
+            onBackToStorefront={() => setViewMode('storefront')}
+            onBackToDashboard={() => setViewMode('dashboard')}
+            onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
+            onOpenNewStoreWizard={() => setIsNewStoreWizardOpen(true)}
+            onOpenCart={() => setIsCartOpen(true)}
+            onOpenCheckout={() => setIsCheckoutOpen(true)}
+            onOpenTracker={() => {
+              setTrackerInitialId('');
+              setIsTrackerOpen(true);
+            }}
+            onOpenPolicies={() => setIsPoliciesOpen(true)}
+          />
+        </main>
+      )}
+
       {/* MODALS */}
       {/* 1. New Store Onboarding Wizard */}
       {isNewStoreWizardOpen && (
@@ -783,6 +808,13 @@ export default function App() {
           setCurrentUser(user);
           setIsAuthModalOpen(false);
         }}
+      />
+
+      {/* 10. Free Hosting & Deployment Guide Modal */}
+      <FreeHostingModal
+        isOpen={isFreeHostingOpen}
+        onClose={() => setIsFreeHostingOpen(false)}
+        storeName={settings.storeName}
       />
     </div>
   );

@@ -9,7 +9,7 @@ export function generateOrderId(prefix: string = 'BA'): string {
 }
 
 /**
- * Formats a clean, professional WhatsApp invoice message that matches Store.link's layout
+ * Formats a clean, professional WhatsApp invoice message that matches Quick E-Commerce's layout
  */
 export function buildWhatsAppInvoiceMessage(order: Order, settings: StoreSettings): string {
   const lineItemsText = order.items
@@ -63,7 +63,13 @@ ${lineItemsText}
  */
 export function createWhatsAppUrl(phoneNumber: string, message: string): string {
   // Strip any +, -, spaces, or parentheses
-  const cleanPhone = phoneNumber.replace(/\D/g, '');
+  let cleanPhone = phoneNumber.replace(/\D/g, '');
+  // Normalize Saudi local mobile numbers e.g. 0501234567 -> 966501234567
+  if (cleanPhone.startsWith('05') && cleanPhone.length === 10) {
+    cleanPhone = '966' + cleanPhone.substring(1);
+  } else if (cleanPhone.startsWith('00')) {
+    cleanPhone = cleanPhone.substring(2);
+  }
   const encodedText = encodeURIComponent(message);
   return `https://wa.me/${cleanPhone}?text=${encodedText}`;
 }
