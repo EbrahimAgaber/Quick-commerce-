@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "merchant": {
+      "title": "Merchant",
+      "description": "Merchant user profile and credentials",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Merchant UID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of merchant"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Merchant email address"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Merchant avatar profile photo URL"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "store": {
+      "title": "Store",
+      "description": "Merchant store record with settings, products, and configurations",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique store ID"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner merchant UID"
+        },
+        "slug": {
+          "type": "string",
+          "description": "Store URL identifier"
+        },
+        "storeName": {
+          "type": "string",
+          "description": "Store display name"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last updated timestamp"
+        },
+        "settings": {
+          "type": "object",
+          "description": "Store settings, theme, and branding"
+        },
+        "products": {
+          "type": "array",
+          "description": "Product catalog"
+        },
+        "orders": {
+          "type": "array",
+          "description": "Store orders"
+        },
+        "policies": {
+          "type": "array",
+          "description": "Store policies"
+        },
+        "googleSheetConfig": {
+          "type": "object",
+          "description": "Google Sheet connection settings"
+        }
+      },
+      "required": ["id", "ownerId", "slug", "storeName"]
+    }
+  },
+  "firestore": {
+    "/merchants/{merchantId}": {
+      "schema": "merchant",
+      "description": "Collection of merchant profiles"
+    },
+    "/stores/{storeId}": {
+      "schema": "store",
+      "description": "Collection of stores created by merchants"
+    }
+  }
+}

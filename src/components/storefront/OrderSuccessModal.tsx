@@ -1,0 +1,124 @@
+import React, { useState } from 'react';
+import { Order, StoreSettings } from '../../types/store';
+import { CheckCircle2, MessageCircle, Copy, Check, ArrowRight, PackageCheck, Sparkles } from 'lucide-react';
+import { buildWhatsAppInvoiceMessage, createWhatsAppUrl } from '../../utils/whatsappInvoice';
+
+interface OrderSuccessModalProps {
+  order: Order | null;
+  settings: StoreSettings;
+  onClose: () => void;
+  onTrackOrder: (orderId: string) => void;
+}
+
+export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
+  order,
+  settings,
+  onClose,
+  onTrackOrder,
+}) => {
+  if (!order) return null;
+
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyInvoice = () => {
+    const text = buildWhatsAppInvoiceMessage(order, settings);
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleReopenWhatsApp = () => {
+    const text = buildWhatsAppInvoiceMessage(order, settings);
+    const url = createWhatsAppUrl(settings.whatsappNumber, text);
+    window.open(url, '_blank');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/75 backdrop-blur-xs">
+      <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
+
+      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10 border border-stone-200 p-6 sm:p-8 text-center space-y-5 animate-in zoom-in-95 duration-200">
+        {/* Celebration Icon */}
+        <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center shadow-inner">
+          <CheckCircle2 className="w-9 h-9" />
+        </div>
+
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold mb-2">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+            <span>تم استلام وتوثيق طلبك بنجاح!</span>
+          </div>
+
+          <h3 className="text-xl font-extrabold text-stone-900">
+            شكراً لتسوقكِ، {order.customerName}
+          </h3>
+
+          <p className="text-xs text-stone-500 mt-1">
+            تم تسجيل طلبك تلقائياً في قاعدة بيانات المتجر وإرسال تفاصيل الفاتورة.
+          </p>
+        </div>
+
+        {/* Order Reference Box */}
+        <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-1">
+          <span className="text-xs text-stone-500">رقم الطلب الخاص بكِ:</span>
+          <div className="text-2xl font-black font-mono text-amber-700 tracking-wider">
+            #{order.id}
+          </div>
+          <p className="text-[11px] text-stone-400">
+            احفظي هذا الرقم لتتبع مسار شحنتك حتى باب بيتك
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="space-y-2.5 pt-2">
+          {/* Re-open WhatsApp */}
+          <button
+            onClick={handleReopenWhatsApp}
+            className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98"
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span>فتح محادثة واتساب مع المتجر</span>
+          </button>
+
+          {/* Copy Invoice */}
+          <button
+            onClick={handleCopyInvoice}
+            className="w-full py-2.5 px-4 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+          >
+            {copied ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-600" />
+                <span className="text-emerald-700">تم نسخ نص الفاتورة!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-4 h-4 text-stone-500" />
+                <span>نسخ نص الفاتورة</span>
+              </>
+            )}
+          </button>
+
+          {/* Track Order Now */}
+          <button
+            onClick={() => {
+              onClose();
+              onTrackOrder(order.id);
+            }}
+            className="w-full py-3 px-4 bg-stone-900 hover:bg-stone-800 text-amber-300 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all"
+          >
+            <PackageCheck className="w-4 h-4" />
+            <span>تتبع حالة هذا الطلب مباشرة</span>
+          </button>
+
+          {/* Back to store */}
+          <button
+            onClick={onClose}
+            className="text-xs text-stone-500 hover:text-stone-800 pt-2 block mx-auto underline"
+          >
+            متابعة تصفح المتجر
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

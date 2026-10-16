@@ -1,0 +1,6 @@
+{
+  "name": "StoreLink - Sheet to Storefront Engine",
+  "description": "Reverse-engineered Store.link engine turning Google Sheets into ultra-fast, mobile-first e-commerce storefronts with WhatsApp checkout and live tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

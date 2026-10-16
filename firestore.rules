@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidMerchant(data) {
+      return data.keys().hasAll(['id', 'name', 'email']) &&
+             data.id is string && data.id.size() <= 128 && data.id == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.email is string && data.email.size() <= 150;
+    }
+
+    function isValidStore(data) {
+      return data.keys().hasAll(['id', 'ownerId', 'slug', 'storeName']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.ownerId is string && data.ownerId.size() <= 128 && data.ownerId == request.auth.uid &&
+             data.slug is string && data.slug.size() > 0 && data.slug.size() <= 128 &&
+             data.storeName is string && data.storeName.size() > 0 && data.storeName.size() <= 200;
+    }
+
+    // Merchants profile collection
+    match /merchants/{merchantId} {
+      allow get: if isSignedIn() && isValidId(merchantId) && request.auth.uid == merchantId;
+      allow create: if isSignedIn() && isValidId(merchantId) && request.auth.uid == merchantId && isValidMerchant(request.resource.data);
+      allow update: if isSignedIn() && isValidId(merchantId) && request.auth.uid == merchantId && isValidMerchant(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Stores collection
+    match /stores/{storeId} {
+      // Public read for customer storefront access across devices
+      allow get: if isValidId(storeId);
+      // Query stores (for merchants)
+      allow list: if isSignedIn();
+      // Owner write operations
+      allow create: if isSignedIn() && isValidId(storeId) && isValidStore(request.resource.data);
+      allow update: if isSignedIn() && isValidId(storeId) && resource.data.ownerId == request.auth.uid && isValidStore(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(storeId) && resource.data.ownerId == request.auth.uid;
+    }
+  }
+}
