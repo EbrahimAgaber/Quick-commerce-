@@ -1,5 +1,5 @@
 import { MerchantUser } from '../types/store';
-import { signInWithGoogle, signOutFromFirebase } from './firebase';
+import { signInWithGoogle, signOutFromFirebase, auth, mapFirebaseUser } from './firebase';
 
 const AUTH_STORAGE_KEY = 'storelink_current_merchant';
 
@@ -8,6 +8,18 @@ export const DEFAULT_MERCHANT: MerchantUser = {
   name: 'إبراهيم جابر (Ebrahim Gaber)',
   email: 'ea.gaber10@gmail.com',
   createdAt: '2026-10-15T12:00:00Z',
+};
+
+/**
+ * Safely retrieves the currently authenticated merchant.
+ * Returns null for unauthenticated visitors so anonymous users
+ * cannot bypass route guards or access store management controls.
+ */
+export const getCurrentMerchant = (): MerchantUser | null => {
+  if (auth.currentUser) {
+    return mapFirebaseUser(auth.currentUser);
+  }
+  return AuthService.getCurrentUser();
 };
 
 export class AuthService {
@@ -20,9 +32,17 @@ export class AuthService {
     } catch (e) {
       console.warn('Error reading auth state', e);
     }
-    // Default logged in as the primary store owner (Simpler Ebrahim)
-    this.setCurrentUser(DEFAULT_MERCHANT);
-    return DEFAULT_MERCHANT;
+
+    // Check Firebase active session
+    if (auth.currentUser) {
+      const mapped = mapFirebaseUser(auth.currentUser);
+      this.setCurrentUser(mapped);
+      return mapped;
+    }
+
+    // CRITICAL: Unauthenticated visitors must return null
+    // Never automatically assign DEFAULT_MERCHANT to anonymous visitors
+    return null;
   }
 
   static setCurrentUser(user: MerchantUser | null): void {

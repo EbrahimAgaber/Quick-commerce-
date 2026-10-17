@@ -97,8 +97,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  // Determine if merchant toolbar should be visible
-  const showMerchantToolbar = !isShopperPreviewOnly && (currentUser !== null || viewMode !== 'storefront');
+  // Determine if merchant toolbar should be visible - strictly requires authenticated merchant
+  const showMerchantToolbar = !isShopperPreviewOnly && currentUser !== null;
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200">

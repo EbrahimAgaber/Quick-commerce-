@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Sensitive Firebase credentials and configs
+firebase-applet-config.json

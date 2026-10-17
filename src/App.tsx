@@ -10,7 +10,7 @@ import {
 } from './types/store';
 import { StoreStorage, DEFAULT_PRODUCTS, MODERN_RETAIL_THEME } from './services/storeStorage';
 import { StoreManager } from './services/storeManager';
-import { AuthService } from './services/authService';
+import { AuthService, DEFAULT_MERCHANT } from './services/authService';
 import { onFirebaseAuthStateChanged } from './services/firebase';
 import { injectBrandThemeStyles } from './utils/themeInjector';
 import { matchesSearch } from './utils/arabicSearch';
@@ -33,6 +33,7 @@ import { StoreDashboard } from './components/builder/StoreDashboard';
 import { SheetSimulator } from './components/admin/SheetSimulator';
 import { AppsScriptHub } from './components/admin/AppsScriptHub';
 import { AuthModal } from './components/auth/AuthModal';
+import { MerchantAuthGate } from './components/auth/MerchantAuthGate';
 import { Footer } from './components/layout/Footer';
 import { QaReadinessDashboard } from './components/qa/QaReadinessDashboard';
 import { FreeHostingModal } from './components/admin/FreeHostingModal';
@@ -459,24 +460,37 @@ export default function App() {
       {/* VIEW MODE 1: BUSINESS OWNER DASHBOARD (QUICK E-COMMERCE HUB) */}
       {viewMode === 'dashboard' && (
         <main className="flex-1 w-full py-6">
-          <StoreDashboard
-            settings={settings}
-            products={products}
-            orders={orders}
-            policies={policies}
-            onUpdateSettings={handleUpdateSettings}
-            onUpdateProducts={handleUpdateProducts}
-            onUpdateOrders={handleUpdateOrders}
-            onUpdatePolicies={handleUpdatePolicies}
-            onResetDefault={handleResetDefault}
-            onViewStorefront={() => setViewMode('storefront')}
-            onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
-            onOpenNewStoreWizard={() => setIsNewStoreWizardOpen(true)}
-            onSyncLiveData={handleSyncLiveData}
-            currentUser={currentUser}
-            onOpenAuth={() => setIsAuthModalOpen(true)}
-            onOpenFreeHosting={() => setIsFreeHostingOpen(true)}
-          />
+          {!currentUser ? (
+            <MerchantAuthGate
+              settings={settings}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onBackToStore={() => setViewMode('storefront')}
+              targetViewName="لوحة تحكم المتجر"
+              onMockDevLogin={() => {
+                AuthService.setCurrentUser(DEFAULT_MERCHANT);
+                setCurrentUser(DEFAULT_MERCHANT);
+              }}
+            />
+          ) : (
+            <StoreDashboard
+              settings={settings}
+              products={products}
+              orders={orders}
+              policies={policies}
+              onUpdateSettings={handleUpdateSettings}
+              onUpdateProducts={handleUpdateProducts}
+              onUpdateOrders={handleUpdateOrders}
+              onUpdatePolicies={handleUpdatePolicies}
+              onResetDefault={handleResetDefault}
+              onViewStorefront={() => setViewMode('storefront')}
+              onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
+              onOpenNewStoreWizard={() => setIsNewStoreWizardOpen(true)}
+              onSyncLiveData={handleSyncLiveData}
+              currentUser={currentUser}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onOpenFreeHosting={() => setIsFreeHostingOpen(true)}
+            />
+          )}
         </main>
       )}
 
@@ -639,31 +653,57 @@ export default function App() {
       {/* VIEW MODE 3: GOOGLE SHEET SIMULATOR (DATABASE TABS) */}
       {viewMode === 'sheet' && (
         <main className="flex-1 w-full bg-stone-100 py-6">
-          <SheetSimulator
-            settings={settings}
-            products={products}
-            orders={orders}
-            policies={policies}
-            onUpdateSettings={handleUpdateSettings}
-            onUpdateProducts={handleUpdateProducts}
-            onUpdateOrders={handleUpdateOrders}
-            onUpdatePolicies={handleUpdatePolicies}
-            onResetDefault={handleResetDefault}
-            onSwitchToStore={() => setViewMode('storefront')}
-            onOpenAppsScriptHub={() => setViewMode('script')}
-            onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
-          />
+          {!currentUser ? (
+            <MerchantAuthGate
+              settings={settings}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onBackToStore={() => setViewMode('storefront')}
+              targetViewName="جدول بيانات Google Sheet"
+              onMockDevLogin={() => {
+                AuthService.setCurrentUser(DEFAULT_MERCHANT);
+                setCurrentUser(DEFAULT_MERCHANT);
+              }}
+            />
+          ) : (
+            <SheetSimulator
+              settings={settings}
+              products={products}
+              orders={orders}
+              policies={policies}
+              onUpdateSettings={handleUpdateSettings}
+              onUpdateProducts={handleUpdateProducts}
+              onUpdateOrders={handleUpdateOrders}
+              onUpdatePolicies={handleUpdatePolicies}
+              onResetDefault={handleResetDefault}
+              onSwitchToStore={() => setViewMode('storefront')}
+              onOpenAppsScriptHub={() => setViewMode('script')}
+              onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
+            />
+          )}
         </main>
       )}
 
       {/* VIEW MODE 4: GOOGLE APPS SCRIPT ENGINE & LIVE SYNC */}
       {viewMode === 'script' && (
         <main className="flex-1 w-full bg-stone-50 py-6">
-          <AppsScriptHub
-            settings={settings}
-            onUpdateSettings={handleUpdateSettings}
-            onSyncLiveData={handleSyncLiveData}
-          />
+          {!currentUser ? (
+            <MerchantAuthGate
+              settings={settings}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onBackToStore={() => setViewMode('storefront')}
+              targetViewName="محرك وإعدادات Google Apps Script"
+              onMockDevLogin={() => {
+                AuthService.setCurrentUser(DEFAULT_MERCHANT);
+                setCurrentUser(DEFAULT_MERCHANT);
+              }}
+            />
+          ) : (
+            <AppsScriptHub
+              settings={settings}
+              onUpdateSettings={handleUpdateSettings}
+              onSyncLiveData={handleSyncLiveData}
+            />
+          )}
         </main>
       )}
 

@@ -14,17 +14,45 @@ import {
   setDoc,
   getDoc
 } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import rawFirebaseConfig from '../../firebase-applet-config.json';
 import { MerchantUser } from '../types/store';
 
+// Resolved configuration prefers secure VITE_ environment variables (recommended for production)
+export const resolvedFirebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || rawFirebaseConfig.apiKey || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || rawFirebaseConfig.authDomain || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || rawFirebaseConfig.projectId || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || rawFirebaseConfig.storageBucket || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || rawFirebaseConfig.messagingSenderId || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || rawFirebaseConfig.appId || '',
+};
+
+export const firestoreDatabaseId = 
+  import.meta.env.VITE_FIREBASE_DATABASE_ID || 
+  rawFirebaseConfig.firestoreDatabaseId || 
+  '(default)';
+
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+const app = initializeApp(resolvedFirebaseConfig);
 
 // CRITICAL: The app will break without specifying firestoreDatabaseId
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app, firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+/**
+ * Maps a Firebase Auth User object to internal MerchantUser format
+ */
+export function mapFirebaseUser(fbUser: FirebaseUser): MerchantUser {
+  return {
+    id: fbUser.uid,
+    name: fbUser.displayName || fbUser.email?.split('@')[0] || 'تاجر Quick E-Commerce',
+    email: fbUser.email || '',
+    avatarUrl: fbUser.photoURL || undefined,
+    createdAt: fbUser.metadata?.creationTime || new Date().toISOString()
+  };
+}
 
 // Test connection on boot per Firebase skill guidelines
 async function testConnection() {
