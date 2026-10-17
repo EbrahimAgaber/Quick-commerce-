@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { CartItem, Order, StoreSettings } from '../../types/store';
 import { generateOrderId, buildWhatsAppInvoiceMessage, createWhatsAppUrl } from '../../utils/whatsappInvoice';
-import { postOrderToLiveGoogleSheet } from '../../services/appsScriptBridge';
 import { X, Send, CreditCard, Banknote, Building2, Check, Copy, AlertCircle } from 'lucide-react';
 
 interface CheckoutModalProps {
@@ -132,15 +131,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         shippingFee,
         grandTotal,
         status: 'Received',
-        trackingNotes: 'تم استلام الطلب وتأكيده بنجاح عبر منصة التجارة السريعة (Quick E-Commerce).',
+        trackingNotes: 'تم استلام الطلب وتأكيده بنجاح.',
       };
-
-      // If user configured a live Google Web App URL, post asynchronously in background
-      if (settings.googleWebAppUrl) {
-        postOrderToLiveGoogleSheet(settings.googleWebAppUrl, newOrder).catch((err) =>
-          console.warn('Background sync note:', err)
-        );
-      }
 
       // Build WhatsApp message
       const whatsappMsg = buildWhatsAppInvoiceMessage(newOrder, settings);

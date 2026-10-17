@@ -23,13 +23,39 @@ service cloud.firestore {
 
     function isValidStore(data) {
       return data.keys().hasAll(['id', 'ownerId', 'slug', 'storeName']) &&
+             !('orders' in data) &&
              data.id is string && data.id.size() <= 128 &&
              data.ownerId is string && data.ownerId.size() <= 128 && data.ownerId == request.auth.uid &&
              data.slug is string && data.slug.size() > 0 && data.slug.size() <= 128 &&
              data.storeName is string && data.storeName.size() > 0 && data.storeName.size() <= 200;
     }
 
-    // Merchants profile collection
+    function isValidOrder(data) {
+      return data.keys().hasAll([
+               'id', 'timestamp', 'customerName', 'customerPhone',
+               'city', 'deliveryAddress', 'paymentMethod', 'items',
+               'subtotal', 'shippingFee', 'grandTotal', 'status'
+             ]) &&
+             data.id is string && data.id.size() > 0 && data.id.size() <= 64 &&
+             data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 120 &&
+             data.customerPhone is string && data.customerPhone.size() >= 7 && data.customerPhone.size() <= 30 &&
+             data.city is string && data.city.size() > 0 && data.city.size() <= 100 &&
+             data.deliveryAddress is string && data.deliveryAddress.size() > 0 && data.deliveryAddress.size() <= 400 &&
+             data.paymentMethod is string && data.paymentMethod.size() > 0 && data.paymentMethod.size() <= 120 &&
+             data.items is list && data.items.size() > 0 && data.items.size() <= 100 &&
+             data.subtotal is number && data.subtotal >= 0 &&
+             data.shippingFee is number && data.shippingFee >= 0 &&
+             data.grandTotal is number && data.grandTotal >= 0 &&
+             data.status in ['Received', 'In Progress', 'Out for Delivery', 'Delivered', 'Cancelled'];
+    }
+
+    function isStoreOwner(storeId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/stores/$(storeId)) &&
+             get(/databases/$(database)/documents/stores/$(storeId)).data.ownerId == request.auth.uid;
+    }
+
+    // Merchants profile collection (Private to the authenticated merchant)
     match /merchants/{merchantId} {
       allow get: if isSignedIn() && isValidId(merchantId) && request.auth.uid == merchantId;
       allow create: if isSignedIn() && isValidId(merchantId) && request.auth.uid == merchantId && isValidMerchant(request.resource.data);
@@ -37,16 +63,21 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Stores collection
+    // Stores collection (Public catalog read, strict owner-only write, no customer PII stored here)
     match /stores/{storeId} {
-      // Public read for customer storefront access across devices
-      allow get: if isValidId(storeId);
-      // Query stores (for merchants)
-      allow list: if isSignedIn();
-      // Owner write operations
+      allow get, list: if true;
       allow create: if isSignedIn() && isValidId(storeId) && isValidStore(request.resource.data);
       allow update: if isSignedIn() && isValidId(storeId) && resource.data.ownerId == request.auth.uid && isValidStore(request.resource.data);
       allow delete: if isSignedIn() && isValidId(storeId) && resource.data.ownerId == request.auth.uid;
+
+      // Dedicated Orders Subcollection:
+      // - Customers can create a validated order and fetch a single order by exact ID for tracking
+      // - Only the verified store owner can list all orders or update order status
+      match /orders/{orderId} {
+        allow create: if isValidId(storeId) && isValidId(orderId) && isValidOrder(request.resource.data);
+        allow get: if isValidId(storeId) && isValidId(orderId);
+        allow list, update, delete: if isStoreOwner(storeId);
+      }
     }
   }
 }

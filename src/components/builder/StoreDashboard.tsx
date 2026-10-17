@@ -1,42 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StoreSettings, Product, Order, StorePolicy, OrderStatus, MerchantUser } from '../../types/store';
-import { SheetSimulator } from '../admin/SheetSimulator';
-import { AppsScriptHub } from '../admin/AppsScriptHub';
 import { 
-  Store, 
-  ExternalLink, 
   Copy, 
   Check, 
-  Share2, 
-  RefreshCw, 
-  Table, 
   ShoppingBag, 
   Package, 
   TrendingUp, 
   DollarSign, 
-  CheckCircle2, 
-  Clock, 
-  Truck, 
   Plus, 
   Palette, 
-  Sliders, 
-  Code2, 
   Sparkles,
   Link2,
-  Phone,
   MessageCircle,
-  FileSpreadsheet,
   Edit3,
   Trash2,
   Search,
-  Eye,
-  UserCheck,
   X,
   Tag,
-  Globe
+  Settings as SettingsIcon,
+  Save
 } from 'lucide-react';
 
 interface StoreDashboardProps {
+  storeSlug: string;
   settings: StoreSettings;
   products: Product[];
   orders: Order[];
@@ -45,17 +31,14 @@ interface StoreDashboardProps {
   onUpdateProducts: (newProducts: Product[]) => void;
   onUpdateOrders: (newOrders: Order[]) => void;
   onUpdatePolicies: (newPolicies: StorePolicy[]) => void;
-  onResetDefault: () => void;
   onViewStorefront: () => void;
   onOpenBrandStudio: () => void;
   onOpenNewStoreWizard: () => void;
-  onSyncLiveData: (data: any) => void;
   currentUser?: MerchantUser | null;
-  onOpenAuth?: () => void;
-  onOpenFreeHosting?: () => void;
 }
 
 export const StoreDashboard: React.FC<StoreDashboardProps> = ({
+  storeSlug,
   settings,
   products,
   orders,
@@ -64,19 +47,20 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   onUpdateProducts,
   onUpdateOrders,
   onUpdatePolicies,
-  onResetDefault,
   onViewStorefront,
   onOpenBrandStudio,
   onOpenNewStoreWizard,
-  onSyncLiveData,
   currentUser,
-  onOpenAuth,
-  onOpenFreeHosting,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'sheet' | 'script'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'settings'>('overview');
   const [copiedLink, setCopiedLink] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  // Editable Settings State for the Settings tab
+  const [editableSettings, setEditableSettings] = useState<StoreSettings>({ ...settings });
+  useEffect(() => {
+    setEditableSettings({ ...settings });
+  }, [settings]);
 
   // Product Management Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -84,43 +68,33 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productForm, setProductForm] = useState({
     name: '',
-    category: 'حلول واستشارات',
+    category: 'منتجات مميزة',
     price: 150,
-    salePrice: 120,
-    variants: 'جلسة ساعة واحدة, باقة 3 جلسات, مراجعة شاملة للمشروع',
-    imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
+    salePrice: 0,
+    variants: 'الخيار الأساسي',
+    imageUrl: '',
     description: '',
     inStock: true,
   });
 
   const brand = settings.brandTheme || {
-    primaryColor: '#0B253F',
-    accentColor: '#0077FF',
-    highlightColor: '#A5F3B6',
-    backgroundColor: '#F8F3ED',
-    neutralColor: '#E4E7EB',
-    textColor: '#0B253F',
+    primaryColor: '#0F172A',
+    accentColor: '#2563EB',
+    highlightColor: '#86EFAC',
+    backgroundColor: '#F8FAFC',
+    neutralColor: '#E2E8F0',
+    textColor: '#0F172A',
   };
 
-  const storeSlug = settings.storeName.toLowerCase().replace(/\s+/g, '-');
+  const cleanSlug = storeSlug || 'aurora';
   const storeUrl = typeof window !== 'undefined' && window.location.origin 
-    ? `${window.location.origin}?store=${storeSlug}` 
-    : `https://quick-ecommerce.app/?store=${storeSlug}`;
+    ? `${window.location.origin}/?store=${encodeURIComponent(cleanSlug)}` 
+    : `https://quick-ecommerce.app/?store=${encodeURIComponent(cleanSlug)}`;
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(storeUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
-  };
-
-  const handleManualSync = () => {
-    setIsSyncing(true);
-    setSyncMessage(null);
-    setTimeout(() => {
-      setIsSyncing(false);
-      setSyncMessage('✅ تمت مزامنة كافة بيانات المتجر بنجاح مع جدول Google Sheets!');
-      setTimeout(() => setSyncMessage(null), 3500);
-    }, 800);
   };
 
   // Metrics
@@ -137,11 +111,11 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     setEditingProduct(null);
     setProductForm({
       name: '',
-      category: 'حلول واستشارات',
-      price: 150,
-      salePrice: 120,
-      variants: 'جلسة ساعة واحدة, باقة 3 جلسات, مراجعة شاملة للمشروع',
-      imageUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
+      category: 'عام',
+      price: 100,
+      salePrice: 0,
+      variants: 'مقاس موحد',
+      imageUrl: '',
       description: '',
       inStock: true,
     });
@@ -172,47 +146,49 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       .map((v) => v.trim())
       .filter(Boolean);
 
+    const defaultImg = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+
     if (editingProduct) {
       const updated = products.map((p) =>
         p.id === editingProduct.id
           ? {
               ...p,
               name: productForm.name.trim(),
-              category: productForm.category.trim(),
+              category: productForm.category.trim() || 'عام',
               price: Number(productForm.price) || 0,
-              salePrice: productForm.salePrice ? Number(productForm.salePrice) : undefined,
+              salePrice: productForm.salePrice && Number(productForm.salePrice) > 0 ? Number(productForm.salePrice) : undefined,
               variants: variantsArray.length > 0 ? variantsArray : ['الخيار الافتراضي'],
-              imageUrl: productForm.imageUrl.trim() || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
+              imageUrl: productForm.imageUrl.trim() || defaultImg,
               description: productForm.description.trim(),
               inStock: productForm.inStock,
             }
           : p
       );
       onUpdateProducts(updated);
-      setSyncMessage('✨ تم تحديث بيانات المنتج ومزامنتها مع المتجر وجدول البيانات!');
+      setSyncMessage('✨ تم تحديث بيانات المنتج وحفظها في المتجر بنجاح!');
     } else {
       const newP: Product = {
         id: `prod-${Date.now()}`,
         name: productForm.name.trim(),
         category: productForm.category.trim() || 'عام',
         price: Number(productForm.price) || 0,
-        salePrice: productForm.salePrice ? Number(productForm.salePrice) : undefined,
+        salePrice: productForm.salePrice && Number(productForm.salePrice) > 0 ? Number(productForm.salePrice) : undefined,
         variants: variantsArray.length > 0 ? variantsArray : ['الخيار الافتراضي'],
-        imageUrl: productForm.imageUrl.trim() || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80',
-        galleryImages: [productForm.imageUrl.trim()],
+        imageUrl: productForm.imageUrl.trim() || defaultImg,
+        galleryImages: [productForm.imageUrl.trim() || defaultImg],
         description: productForm.description.trim(),
         featured: false,
         inStock: productForm.inStock,
       };
       onUpdateProducts([newP, ...products]);
-      setSyncMessage('🎉 تم إضافة المنتج الجديد ونشره فورياً في متجرك الإلكتروني!');
+      setSyncMessage('🎉 تم إضافة المنتج الجديد ونشره فورياً في متجرك!');
     }
     setIsProductModalOpen(false);
     setTimeout(() => setSyncMessage(null), 3000);
   };
 
   const handleDeleteProduct = (id: string) => {
-    if (confirm('هل أنت متأكد من حذف هذا المنتج من قاعدة البيانات؟')) {
+    if (confirm('هل أنت متأكد من حذف هذا المنتج من متجرك؟')) {
       onUpdateProducts(products.filter((p) => p.id !== id));
       setSyncMessage('🗑️ تم حذف المنتج بنجاح');
       setTimeout(() => setSyncMessage(null), 2500);
@@ -222,6 +198,13 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const handleToggleProductStock = (id: string) => {
     const updated = products.map((p) => (p.id === id ? { ...p, inStock: !p.inStock } : p));
     onUpdateProducts(updated);
+  };
+
+  const handleSaveSettingsForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateSettings(editableSettings);
+    setSyncMessage('✅ تم حفظ إعدادات المتجر والشحن والدفع بنجاح!');
+    setTimeout(() => setSyncMessage(null), 3000);
   };
 
   const filteredProductsList = products.filter((p) => {
@@ -238,8 +221,8 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-in fade-in duration-200">
       {/* Toast Alert */}
       {syncMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#0B253F] text-white text-xs sm:text-sm font-bold py-2.5 px-5 rounded-2xl shadow-xl flex items-center gap-2 animate-in zoom-in-95">
-          <Sparkles className="w-4 h-4 text-[#A5F3B6]" />
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#0F172A] text-white text-xs sm:text-sm font-bold py-2.5 px-5 rounded-2xl shadow-xl flex items-center gap-2 animate-in zoom-in-95">
+          <Sparkles className="w-4 h-4 text-[#86EFAC]" />
           <span>{syncMessage}</span>
         </div>
       )}
@@ -258,7 +241,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
               {settings.logoLetter || 'S'}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-xl sm:text-2xl font-black" style={{ color: brand.primaryColor }}>
                   {settings.storeName}
                 </h2>
@@ -266,34 +249,32 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                   متجر نشط · Live
                 </span>
                 {currentUser && (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-[#0077FF] border border-blue-200 inline-flex items-center gap-1">
-                    {currentUser.avatarUrl ? (
-                      <img src={currentUser.avatarUrl} alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
-                    ) : null}
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-[#2563EB] border border-blue-200 inline-flex items-center gap-1">
                     <span>المالك: {currentUser.name}</span>
                   </span>
                 )}
               </div>
               <p className="text-xs text-stone-500">
-                {settings.tagline} · هاتف المتجر: <strong dir="ltr">{settings.supportPhone}</strong>
+                {settings.tagline}
               </p>
             </div>
           </div>
 
           {/* Store URL Bar */}
-          <div className="flex items-center gap-2 pt-2">
-            <span className="text-xs text-stone-400 font-medium">رابط متجرك:</span>
-            <div className="flex items-center gap-1.5 bg-[#F8F3ED] px-3 py-1.5 rounded-xl border border-stone-200 text-xs font-mono">
-              <Link2 className="w-3.5 h-3.5 text-[#0077FF]" />
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            <span className="text-xs text-stone-500 font-bold">رابط متجرك للعملاء:</span>
+            <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-stone-200 text-xs font-mono" dir="ltr">
+              <Link2 className="w-3.5 h-3.5 text-[#2563EB]" />
               <span className="text-stone-700 font-semibold">{storeUrl}</span>
             </div>
 
             <button
               onClick={handleCopyLink}
-              className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 transition-colors"
-              title="نسخ الرابط"
+              className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="نسخ رابط المتجر"
             >
-              {copiedLink ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedLink ? 'تم النسخ!' : 'نسخ الرابط'}</span>
             </button>
           </div>
         </div>
@@ -302,24 +283,24 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={handleOpenAddProduct}
-            className="px-4 py-2.5 bg-[#0B253F] hover:bg-stone-800 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow-xs transition-transform active:scale-95"
+            className="px-4 py-2.5 bg-[#0F172A] hover:bg-stone-800 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow-xs transition-transform active:scale-95 cursor-pointer"
           >
-            <Plus className="w-4 h-4 text-[#A5F3B6]" />
+            <Plus className="w-4 h-4 text-[#86EFAC]" />
             <span>إضافة منتج جديد</span>
           </button>
 
           <button
             onClick={onViewStorefront}
-            className="px-4 py-2.5 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-transform active:scale-95"
+            className="px-4 py-2.5 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-transform active:scale-95 cursor-pointer"
             style={{ backgroundColor: brand.accentColor }}
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>معاينة متجر الزائر</span>
+            <span>معاينة متجر الزبون</span>
           </button>
 
           <button
             onClick={onOpenBrandStudio}
-            className="px-4 py-2.5 bg-white hover:bg-stone-50 text-stone-800 font-bold rounded-xl text-xs sm:text-sm border transition-colors flex items-center gap-1.5"
+            className="px-4 py-2.5 bg-white hover:bg-stone-50 text-stone-800 font-bold rounded-xl text-xs sm:text-sm border transition-colors flex items-center gap-1.5 cursor-pointer"
             style={{ borderColor: brand.neutralColor }}
           >
             <Palette className="w-4 h-4" style={{ color: brand.accentColor }} />
@@ -333,59 +314,6 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">متجر جديد</span>
-          </button>
-
-          {onOpenFreeHosting && (
-            <button
-              onClick={onOpenFreeHosting}
-              className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold rounded-xl text-xs sm:text-sm flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="دليل النشر والاستضافة المجانية"
-            >
-              <Globe className="w-4 h-4 text-emerald-600" />
-              <span>استضافة مجانية 100%</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Google Sheets Connection Status Card (The Core Reverse-Engineered Feature) */}
-      <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-white rounded-3xl p-6 border border-emerald-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-start gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-            <FileSpreadsheet className="w-6 h-6" />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm sm:text-base font-bold text-emerald-950">
-                قاعدة بيانات Google Sheets المتصلة بالمتجر (Sheet-to-Storefront Backend)
-              </h3>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 text-emerald-900">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                متصل ومزامن لحظياً
-              </span>
-            </div>
-            <p className="text-xs text-stone-600 max-w-2xl leading-relaxed">
-              يعمل جدول البيانات كقاعدة بيانات خلفية مباشرة. عند تعديل الأسعار، إضافة منتجات، أو تحديث حالات الطلبات، ينعكس التغيير فورياً على المتجر دون الحاجة لخوادم وسيطة أو اشتراكات.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleManualSync}
-            disabled={isSyncing}
-            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'جاري المزامنة...' : 'مزامنة الآن'}</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('sheet')}
-            className="px-3.5 py-2 bg-white hover:bg-stone-50 text-emerald-900 border border-emerald-300 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors"
-          >
-            <Table className="w-3.5 h-3.5 text-emerald-700" />
-            <span>فتح جدول البيانات</span>
           </button>
         </div>
       </div>
@@ -427,21 +355,21 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
 
         <div className="bg-white p-5 rounded-2xl border shadow-xs" style={{ borderColor: brand.neutralColor }}>
           <div className="flex items-center justify-between text-xs text-stone-500 mb-1">
-            <span>تحويلات الواتساب</span>
+            <span>طلبات الواتساب</span>
             <MessageCircle className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-xl sm:text-2xl font-black font-mono" style={{ color: brand.primaryColor }}>
-            100%
+            مفعّل
           </div>
-          <span className="text-[10px] text-stone-400">طلب فوري مع فاتورة جاهزة</span>
+          <span className="text-[10px] text-stone-400">إرسال فوري للفاتورة</span>
         </div>
       </div>
 
-      {/* Navigation Tabs for Owner */}
-      <div className="flex items-center gap-1.5 border-b border-stone-200 pb-2 overflow-x-auto scrollbar-none text-xs sm:text-sm font-bold">
+      {/* Simple 3-Tab Navigation for Business Owner */}
+      <div className="flex items-center gap-2 border-b border-stone-200 pb-2 overflow-x-auto scrollbar-none text-xs sm:text-sm font-bold">
         <button
           onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
             activeTab === 'overview'
               ? 'text-white shadow-xs'
               : 'bg-white text-stone-600 hover:bg-stone-50 border'
@@ -452,12 +380,12 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
           }}
         >
           <TrendingUp className="w-4 h-4" />
-          <span>لوحة الطلبات الحديثة (Orders CRM)</span>
+          <span>إدارة الطلبات ({orders.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('products')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
             activeTab === 'products'
               ? 'text-white shadow-xs'
               : 'bg-white text-stone-600 hover:bg-stone-50 border'
@@ -468,39 +396,23 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
           }}
         >
           <ShoppingBag className="w-4 h-4" />
-          <span>إدارة المنتجات ({products.length})</span>
+          <span>المنتجات والمخزون ({products.length})</span>
         </button>
 
         <button
-          onClick={() => setActiveTab('sheet')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
-            activeTab === 'sheet'
+          onClick={() => setActiveTab('settings')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'settings'
               ? 'text-white shadow-xs'
               : 'bg-white text-stone-600 hover:bg-stone-50 border'
           }`}
           style={{
-            backgroundColor: activeTab === 'sheet' ? brand.primaryColor : '#FFFFFF',
+            backgroundColor: activeTab === 'settings' ? brand.primaryColor : '#FFFFFF',
             borderColor: brand.neutralColor,
           }}
         >
-          <Table className="w-4 h-4" />
-          <span>جدول البيانات الكامل (Google Sheet Simulator)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('script')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
-            activeTab === 'script'
-              ? 'text-white shadow-xs'
-              : 'bg-white text-stone-600 hover:bg-stone-50 border'
-          }`}
-          style={{
-            backgroundColor: activeTab === 'script' ? brand.primaryColor : '#FFFFFF',
-            borderColor: brand.neutralColor,
-          }}
-        >
-          <Code2 className="w-4 h-4" />
-          <span>كود Apps Script والربط المباشر</span>
+          <SettingsIcon className="w-4 h-4" />
+          <span>إعدادات المتجر والشحن والسياسات</span>
         </button>
       </div>
 
@@ -508,87 +420,97 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       {activeTab === 'overview' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-stone-900">أحدث الطلبات الواردة عبر المتجر</h3>
+            <h3 className="text-base font-bold text-stone-900">سجل طلبات العملاء</h3>
             <span className="text-xs text-stone-500">
-              تغيير الحالة هنا يُحدّث نظام تتبع العميل فورياً
+              تغيير حالة الطلب هنا يظهر مباشرة للعميل عند تتبع طلبه
             </span>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border bg-white shadow-xs" style={{ borderColor: brand.neutralColor }}>
-            <table className="w-full text-xs text-right divide-y divide-stone-200">
-              <thead className="bg-[#F8F3ED] text-stone-700 font-bold">
-                <tr>
-                  <th className="p-3">رقم الطلب</th>
-                  <th className="p-3">العميل والجوال</th>
-                  <th className="p-3">المدينة والعنوان</th>
-                  <th className="p-3">المنتجات المطلوبة</th>
-                  <th className="p-3">الإجمالي</th>
-                  <th className="p-3">طريقة الدفع</th>
-                  <th className="p-3">حالة الطلب (تحديث فوري)</th>
-                  <th className="p-3">ملاحظات التتبع / رقم البوليصة</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100">
-                {orders.map((ord) => (
-                  <tr key={ord.id} className="hover:bg-stone-50 transition-colors">
-                    <td className="p-3 font-mono font-black text-[#0077FF]">#{ord.id}</td>
-                    <td className="p-3">
-                      <div className="font-bold text-stone-900">{ord.customerName}</div>
-                      <div className="text-[11px] text-stone-500 font-mono" dir="ltr">
-                        {ord.customerPhone}
-                      </div>
-                    </td>
-                    <td className="p-3 max-w-xs text-stone-700">
-                      <strong>{ord.city}</strong> - <span className="text-stone-500">{ord.deliveryAddress}</span>
-                    </td>
-                    <td className="p-3 max-w-xs truncate font-mono text-stone-600">
-                      {ord.itemsSummary}
-                    </td>
-                    <td className="p-3 font-black text-stone-900 font-mono">
-                      {ord.grandTotal.toLocaleString('en-US')} {settings.currency}
-                    </td>
-                    <td className="p-3 text-[11px] text-stone-600">{ord.paymentMethod}</td>
-                    <td className="p-3">
-                      <select
-                        value={ord.status}
-                        onChange={(e) => handleOrderStatusChange(ord.id, e.target.value as OrderStatus)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border focus:outline-none ${
-                          ord.status === 'Delivered'
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                            : ord.status === 'Out for Delivery'
-                            ? 'bg-blue-50 text-blue-800 border-blue-300'
-                            : ord.status === 'In Progress'
-                            ? 'bg-amber-50 text-amber-800 border-amber-300'
-                            : 'bg-stone-100 text-stone-800 border-stone-300'
-                        }`}
-                      >
-                        <option value="Received">تم الاستلام</option>
-                        <option value="In Progress">قيد التجهيز والتفصيل</option>
-                        <option value="Out for Delivery">جاري التوصيل</option>
-                        <option value="Delivered">تم التوصيل بنجاح</option>
-                        <option value="Cancelled">ملغي</option>
-                      </select>
-                    </td>
-                    <td className="p-3 min-w-[180px]">
-                      <input
-                        type="text"
-                        value={ord.trackingNotes || ''}
-                        onChange={(e) => {
-                          const updated = orders.map((o) =>
-                            o.id === ord.id ? { ...o, trackingNotes: e.target.value } : o
-                          );
-                          onUpdateOrders(updated);
-                        }}
-                        placeholder="رقم البوليصة أو ملاحظة المندوب..."
-                        className="w-full px-2 py-1 text-xs bg-stone-50 border rounded focus:bg-white"
-                        style={{ borderColor: brand.neutralColor }}
-                      />
-                    </td>
+          {orders.length === 0 ? (
+            <div className="bg-white rounded-3xl border border-stone-200 p-12 text-center space-y-2">
+              <Package className="w-10 h-10 text-stone-300 mx-auto" />
+              <h4 className="text-sm font-bold text-stone-800">لا توجد طلبات مسجلة حتى الآن</h4>
+              <p className="text-xs text-stone-500 max-w-sm mx-auto">
+                شارك رابط متجرك مع عملائك، وستظهر جميع الطلبات الواردة هنا فور إتمامها.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border bg-white shadow-xs" style={{ borderColor: brand.neutralColor }}>
+              <table className="w-full text-xs text-right divide-y divide-stone-200">
+                <thead className="bg-slate-50 text-stone-700 font-bold">
+                  <tr>
+                    <th className="p-3">رقم الطلب</th>
+                    <th className="p-3">العميل والجوال</th>
+                    <th className="p-3">المدينة والعنوان</th>
+                    <th className="p-3">المنتجات المطلوبة</th>
+                    <th className="p-3">الإجمالي</th>
+                    <th className="p-3">طريقة الدفع</th>
+                    <th className="p-3">حالة الطلب</th>
+                    <th className="p-3">ملاحظات الشحن / رقم البوليصة</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {orders.map((ord) => (
+                    <tr key={ord.id} className="hover:bg-stone-50 transition-colors">
+                      <td className="p-3 font-mono font-black text-[#2563EB]">#{ord.id}</td>
+                      <td className="p-3">
+                        <div className="font-bold text-stone-900">{ord.customerName}</div>
+                        <div className="text-[11px] text-stone-500 font-mono" dir="ltr">
+                          {ord.customerPhone}
+                        </div>
+                      </td>
+                      <td className="p-3 max-w-xs text-stone-700">
+                        <strong>{ord.city}</strong> - <span className="text-stone-500">{ord.deliveryAddress}</span>
+                      </td>
+                      <td className="p-3 max-w-xs truncate font-mono text-stone-600">
+                        {ord.itemsSummary}
+                      </td>
+                      <td className="p-3 font-black text-stone-900 font-mono">
+                        {ord.grandTotal.toLocaleString('en-US')} {settings.currency}
+                      </td>
+                      <td className="p-3 text-[11px] text-stone-600">{ord.paymentMethod}</td>
+                      <td className="p-3">
+                        <select
+                          value={ord.status}
+                          onChange={(e) => handleOrderStatusChange(ord.id, e.target.value as OrderStatus)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border focus:outline-none ${
+                            ord.status === 'Delivered'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                              : ord.status === 'Out for Delivery'
+                              ? 'bg-blue-50 text-blue-800 border-blue-300'
+                              : ord.status === 'In Progress'
+                              ? 'bg-amber-50 text-amber-800 border-amber-300'
+                              : 'bg-stone-100 text-stone-800 border-stone-300'
+                          }`}
+                        >
+                          <option value="Received">تم الاستلام</option>
+                          <option value="In Progress">قيد التجهيز</option>
+                          <option value="Out for Delivery">جاري التوصيل</option>
+                          <option value="Delivered">تم التوصيل بنجاح</option>
+                          <option value="Cancelled">ملغي</option>
+                        </select>
+                      </td>
+                      <td className="p-3 min-w-[180px]">
+                        <input
+                          type="text"
+                          value={ord.trackingNotes || ''}
+                          onChange={(e) => {
+                            const updated = orders.map((o) =>
+                              o.id === ord.id ? { ...o, trackingNotes: e.target.value } : o
+                            );
+                            onUpdateOrders(updated);
+                          }}
+                          placeholder="رقم البوليصة أو ملاحظة..."
+                          className="w-full px-2 py-1 text-xs bg-stone-50 border rounded focus:bg-white"
+                          style={{ borderColor: brand.neutralColor }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -598,10 +520,10 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base sm:text-lg font-bold text-stone-900">
-                إدارة كتالوج المنتجات والخدمات ({products.length})
+                كتالوج المنتجات ({products.length})
               </h3>
               <p className="text-xs text-stone-500">
-                يتم مزامنة أي تعديل فورياً مع متجر الزائر وجدول بيانات Google Sheet
+                أي منتج تضيفه أو تعدله هنا يظهر مباشرة لزوار متجرك
               </p>
             </div>
 
@@ -611,15 +533,15 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                   type="text"
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
-                  placeholder="ابحث بالاسم أو الفئة..."
-                  className="w-full pr-8 pl-3 py-2 text-xs bg-white border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0077FF]/30"
+                  placeholder="ابحث بالاسم أو القسم..."
+                  className="w-full pr-8 pl-3 py-2 text-xs bg-white border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                 />
                 <Search className="w-3.5 h-3.5 text-stone-400 absolute right-2.5 top-2.5 pointer-events-none" />
               </div>
 
               <button
                 onClick={handleOpenAddProduct}
-                className="px-4 py-2 bg-[#0077FF] hover:bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs shrink-0"
+                className="px-4 py-2 bg-[#2563EB] hover:bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>إضافة منتج</span>
@@ -633,13 +555,13 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
               <div className="w-12 h-12 rounded-2xl bg-stone-100 text-stone-400 flex items-center justify-center mx-auto">
                 <ShoppingBag className="w-6 h-6" />
               </div>
-              <h4 className="font-bold text-stone-800 text-sm">لم يتم العثور على أي منتجات</h4>
+              <h4 className="font-bold text-stone-800 text-sm">لا توجد منتجات حالياً</h4>
               <p className="text-xs text-stone-500 max-w-sm mx-auto">
-                {productSearch ? 'جرّب البحث بكلمة مختلفة' : 'أضف أول منتج في متجرك الآن أو استورد من جدول Google Sheets'}
+                {productSearch ? 'جرّب البحث بكلمة مختلفة' : 'ابدأ بإضافة أول منتج في متجرك الآن'}
               </p>
               <button
                 onClick={handleOpenAddProduct}
-                className="px-4 py-2 bg-[#0077FF] text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 shadow-xs"
+                className="px-4 py-2 bg-[#2563EB] text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>إضافة أول منتج</span>
@@ -661,7 +583,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             (e.target as any).src =
-                              'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80';
+                              'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
                           }}
                         />
                       </div>
@@ -687,7 +609,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                         </h4>
 
                         <div className="flex items-baseline gap-2 mt-1">
-                          <span className="font-black text-sm text-[#0B253F] font-mono">
+                          <span className="font-black text-sm text-[#0F172A] font-mono">
                             {(prod.salePrice ?? prod.price).toLocaleString('en-US')} {settings.currency}
                           </span>
                           {prod.salePrice && (
@@ -710,7 +632,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                         {prod.variants.slice(0, 3).map((v, i) => (
                           <span
                             key={i}
-                            className="text-[10px] px-2 py-0.5 rounded-md bg-[#F8F3ED] text-[#0B253F] border border-stone-200"
+                            className="text-[10px] px-2 py-0.5 rounded-md bg-slate-50 text-[#0F172A] border border-stone-200"
                           >
                             {v}
                           </span>
@@ -728,7 +650,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                   <div className="px-4 py-2.5 bg-stone-50 border-t border-stone-100 flex items-center justify-between text-xs">
                     <button
                       onClick={() => handleToggleProductStock(prod.id)}
-                      className={`text-[11px] font-bold transition-colors ${
+                      className={`text-[11px] font-bold transition-colors cursor-pointer ${
                         prod.inStock ? 'text-stone-500 hover:text-stone-800' : 'text-emerald-600 font-bold'
                       }`}
                     >
@@ -738,7 +660,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => handleOpenEditProduct(prod)}
-                        className="p-1.5 text-stone-600 hover:text-[#0077FF] hover:bg-white rounded-lg transition-colors"
+                        className="p-1.5 text-stone-600 hover:text-[#2563EB] hover:bg-white rounded-lg transition-colors cursor-pointer"
                         title="تعديل المنتج"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
@@ -746,7 +668,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
 
                       <button
                         onClick={() => handleDeleteProduct(prod.id)}
-                        className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors"
+                        className="p-1.5 text-stone-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
                         title="حذف المنتج"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -760,31 +682,221 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
         </div>
       )}
 
-      {/* TAB 3: SHEET SIMULATOR */}
-      {activeTab === 'sheet' && (
-        <SheetSimulator
-          settings={settings}
-          products={products}
-          orders={orders}
-          policies={policies}
-          onUpdateSettings={onUpdateSettings}
-          onUpdateProducts={onUpdateProducts}
-          onUpdateOrders={onUpdateOrders}
-          onUpdatePolicies={onUpdatePolicies}
-          onResetDefault={onResetDefault}
-          onSwitchToStore={onViewStorefront}
-          onOpenAppsScriptHub={() => setActiveTab('script')}
-          onOpenBrandStudio={onOpenBrandStudio}
-        />
-      )}
+      {/* TAB 3: STORE SETTINGS, SHIPPING, BANK DETAILS & POLICIES */}
+      {activeTab === 'settings' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-200">
+          <form onSubmit={handleSaveSettingsForm} className="lg:col-span-2 space-y-6">
+            {/* Basic Info */}
+            <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
+              <h3 className="text-sm font-bold text-stone-900 border-b border-stone-100 pb-2">
+                بيانات المتجر والتواصل
+              </h3>
 
-      {/* TAB 4: APPS SCRIPT CODE & LIVE CONNECTOR */}
-      {activeTab === 'script' && (
-        <AppsScriptHub
-          settings={settings}
-          onUpdateSettings={onUpdateSettings}
-          onSyncLiveData={onSyncLiveData}
-        />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">اسم المتجر</label>
+                  <input
+                    type="text"
+                    required
+                    value={editableSettings.storeName}
+                    onChange={(e) => setEditableSettings({ ...editableSettings, storeName: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">العملة</label>
+                  <input
+                    type="text"
+                    value={editableSettings.currency}
+                    onChange={(e) => setEditableSettings({ ...editableSettings, currency: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">رقم الواتساب لاستقبال الطلبات (دولي بدون +)</label>
+                  <input
+                    type="text"
+                    value={editableSettings.whatsappNumber}
+                    onChange={(e) => setEditableSettings({ ...editableSettings, whatsappNumber: e.target.value })}
+                    placeholder="9665XXXXXXXX"
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">البريد الإلكتروني لخدمة العملاء</label>
+                  <input
+                    type="email"
+                    value={editableSettings.supportEmail}
+                    onChange={(e) => setEditableSettings({ ...editableSettings, supportEmail: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              <div className="text-xs">
+                <label className="block font-bold text-stone-700 mb-1">وصف المتجر (Tagline)</label>
+                <input
+                  type="text"
+                  value={editableSettings.tagline}
+                  onChange={(e) => setEditableSettings({ ...editableSettings, tagline: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                />
+              </div>
+
+              <div className="text-xs">
+                <label className="block font-bold text-stone-700 mb-1">شريط الإعلانات العلوي</label>
+                <input
+                  type="text"
+                  value={editableSettings.announcementText}
+                  onChange={(e) => setEditableSettings({ ...editableSettings, announcementText: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                />
+              </div>
+            </div>
+
+            {/* Shipping & Bank Transfer */}
+            <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
+              <h3 className="text-sm font-bold text-stone-900 border-b border-stone-100 pb-2">
+                إعدادات الشحن والتحويل البنكي
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    رسوم الشحن العادية ({editableSettings.currency})
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editableSettings.standardShippingRate}
+                    onChange={(e) =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        standardShippingRate: Number(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    الحد الأدنى للشحن المجاني ({editableSettings.currency})
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editableSettings.freeShippingThreshold}
+                    onChange={(e) =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        freeShippingThreshold: Number(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">اسم البنك (للتحويل البنكي)</label>
+                  <input
+                    type="text"
+                    value={editableSettings.bankDetails?.bankName || ''}
+                    onChange={(e) =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        bankDetails: {
+                          ...editableSettings.bankDetails,
+                          bankName: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">اسم صاحب الحساب / المؤسسة</label>
+                  <input
+                    type="text"
+                    value={editableSettings.bankDetails?.accountHolder || ''}
+                    onChange={(e) =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        bankDetails: {
+                          ...editableSettings.bankDetails,
+                          accountHolder: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-stone-700 mb-1">رقم الآيبان (IBAN)</label>
+                  <input
+                    type="text"
+                    value={editableSettings.bankDetails?.iban || ''}
+                    onChange={(e) =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        bankDetails: {
+                          ...editableSettings.bankDetails,
+                          iban: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#2563EB] hover:bg-blue-600 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>حفظ إعدادات المتجر</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {/* Store Policies Column */}
+          <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4 h-fit">
+            <h3 className="text-sm font-bold text-stone-900 border-b border-stone-100 pb-2">
+              سياسات المتجر والضمان
+            </h3>
+            <p className="text-xs text-stone-500">
+              تظهر هذه السياسات للعملاء عند النقر على أيقونة السياسات في المتجر:
+            </p>
+            <div className="space-y-3">
+              {policies.map((pol, idx) => (
+                <div key={pol.id} className="space-y-1">
+                  <label className="block text-xs font-bold text-stone-800">{pol.title}</label>
+                  <textarea
+                    rows={3}
+                    value={pol.content}
+                    onChange={(e) => {
+                      const updated = [...policies];
+                      updated[idx] = { ...pol, content: e.target.value };
+                      onUpdatePolicies(updated);
+                    }}
+                    className="w-full p-2.5 text-xs bg-stone-50 border border-stone-200 rounded-xl leading-relaxed focus:bg-white focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL: ADD / EDIT PRODUCT */}
@@ -795,57 +907,59 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
           <div className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden z-10 border border-stone-200 my-auto p-6 sm:p-8 space-y-6 animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b pb-4">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-[#0B253F] text-white flex items-center justify-center font-bold text-lg shadow-sm">
-                  <ShoppingBag className="w-5 h-5 text-[#A5F3B6]" />
+                <div className="w-10 h-10 rounded-2xl bg-[#0F172A] text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                  <ShoppingBag className="w-5 h-5 text-[#86EFAC]" />
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-bold text-[#0B253F]">
+                  <h3 className="text-base sm:text-lg font-bold text-stone-900">
                     {editingProduct ? 'تعديل بيانات المنتج' : 'إضافة منتج جديد للمتجر'}
                   </h3>
                   <p className="text-xs text-stone-500">
-                    ينعكس مباشرة في متجر الزائر وجدول بيانات Google Sheets
+                    أدخل تفاصيل المنتج وسينعكس التحديث مباشرة في واجهة المتجر
                   </p>
                 </div>
               </div>
 
               <button
                 onClick={() => setIsProductModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-stone-100 text-stone-600 hover:text-stone-900 flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-stone-100 text-stone-600 hover:text-stone-900 flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSaveProduct} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-stone-800 mb-1">
-                  اسم المنتج أو الخدمة <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={productForm.name}
-                  onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                  placeholder="مثال: استشارة هندسية، باقة متجر رقمي، عباية حرير..."
-                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#0077FF]/30"
-                />
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-bold text-stone-800 mb-1">
-                    التصنيف / الفئة <span className="text-red-500">*</span>
+                    اسم المنتج <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    value={productForm.category}
-                    onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
-                    placeholder="مثال: استشارات، منتجات رقمية، أزياء..."
-                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-xs focus:outline-none"
+                    value={productForm.name}
+                    onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                    placeholder="مثال: عطر عود ملكي 100 مل"
+                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                   />
                 </div>
 
+                <div>
+                  <label className="block font-bold text-stone-800 mb-1">القسم / الفئة</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={productForm.category}
+                      onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                      placeholder="مثال: عطور، ساعات، إكسسوارات..."
+                      className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
+                    />
+                    <Tag className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-3 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-bold text-stone-800 mb-1">
                     السعر الأساسي ({settings.currency}) <span className="text-red-500">*</span>
@@ -856,119 +970,87 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                     min={0}
                     value={productForm.price}
                     onChange={(e) => setProductForm({ ...productForm, price: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm font-mono focus:outline-none"
+                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-bold text-stone-800 mb-1">
-                    سعر التخفيض (اختياري)
+                    سعر الخصم الاختياري ({settings.currency})
                   </label>
                   <input
                     type="number"
                     min={0}
-                    value={productForm.salePrice || ''}
-                    onChange={(e) =>
-                      setProductForm({
-                        ...productForm,
-                        salePrice: e.target.value ? Number(e.target.value) : 0,
-                      })
-                    }
-                    placeholder="اتركه فارغاً إن لم يكن هناك خصم"
-                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm font-mono focus:outline-none"
+                    value={productForm.salePrice}
+                    onChange={(e) => setProductForm({ ...productForm, salePrice: Number(e.target.value) })}
+                    placeholder="اتركه 0 إذا لم يوجد خصم"
+                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                   />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-stone-800 mb-1">
-                    حالة التوفر
-                  </label>
-                  <label className="flex items-center gap-2 p-2.5 bg-stone-50 rounded-xl border border-stone-200 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={productForm.inStock}
-                      onChange={(e) => setProductForm({ ...productForm, inStock: e.target.checked })}
-                      className="w-4 h-4 text-[#0077FF] rounded"
-                    />
-                    <span className="font-semibold text-stone-800">متوفر للطلب في المتجر</span>
-                  </label>
                 </div>
               </div>
 
               <div>
                 <label className="block font-bold text-stone-800 mb-1">
-                  الخيارات أو المقاسات (مفصولة بفاصلة)
+                  المقاسات أو الخيارات المتاحة (مفصولة بفاصلة)
                 </label>
                 <input
                   type="text"
                   value={productForm.variants}
                   onChange={(e) => setProductForm({ ...productForm, variants: e.target.value })}
-                  placeholder="مثال: جلسة ساعة, باقة 3 جلسات, أو S, M, L"
-                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-xs focus:outline-none"
+                  placeholder="مثال: صغير، وسط، كبير (أو: أسود، أبيض)"
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-stone-800 mb-1">
-                  رابط صورة المنتج (URL)
-                </label>
+                <label className="block font-bold text-stone-800 mb-1">رابط صورة المنتج (Image URL)</label>
                 <input
                   type="url"
                   value={productForm.imageUrl}
                   onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full px-3.5 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-xs font-mono focus:outline-none"
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
+                  dir="ltr"
                 />
-
-                {/* Preset image suggestions */}
-                <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="text-[10px] text-stone-400">نماذج سريعة:</span>
-                  {[
-                    { label: 'استشارات تقنية', url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=800&q=80' },
-                    { label: 'هندسة وعمليات', url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80' },
-                    { label: 'تطوير وبرمجة', url: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=800&q=80' },
-                    { label: 'أزياء وعبايات', url: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=800&q=80' },
-                  ].map((preset, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setProductForm({ ...productForm, imageUrl: preset.url })}
-                      className="text-[10px] px-2 py-0.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors"
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <div>
-                <label className="block font-bold text-stone-800 mb-1">
-                  وصف المنتج أو تفاصيل الخدمة
-                </label>
+                <label className="block font-bold text-stone-800 mb-1">وصف المنتج ومميزاته</label>
                 <textarea
                   rows={3}
                   value={productForm.description}
                   onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                  placeholder="اكتب مواصفات المنتج، طريقة التسليم، أو ما يشمله العرض..."
-                  className="w-full px-3.5 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-xs focus:outline-none"
+                  placeholder="اكتب وصفاً واضحاً للمنتج، الخامات، أو المميزات..."
+                  className="w-full px-3.5 py-2 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-stone-100">
+              <div className="flex items-center justify-between pt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={productForm.inStock}
+                    onChange={(e) => setProductForm({ ...productForm, inStock: e.target.checked })}
+                    className="rounded text-[#2563EB]"
+                  />
+                  <span className="font-bold text-stone-800">المنتج متوفر في المخزون وجاهز للطلب</span>
+                </label>
+              </div>
+
+              <div className="pt-4 border-t border-stone-200 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsProductModalOpen(false)}
-                  className="px-4 py-2 text-stone-600 hover:text-stone-900 font-bold"
+                  className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-bold cursor-pointer"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-[#0077FF] hover:bg-blue-600 text-white font-bold rounded-xl shadow-xs transition-transform active:scale-95"
+                  className="px-6 py-2.5 bg-[#2563EB] hover:bg-blue-600 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
-                  {editingProduct ? 'حفظ التعديلات' : 'نشر المنتج الآن'}
+                  <Check className="w-4 h-4" />
+                  <span>{editingProduct ? 'حفظ التعديلات' : 'إضافة المنتج للمتجر'}</span>
                 </button>
               </div>
             </form>

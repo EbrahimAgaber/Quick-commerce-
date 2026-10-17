@@ -117,7 +117,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
   };
 
   const curatedGoogleFonts = [
-    { id: 'Cairo', label: 'Cairo (خط سيمبلر الافتراضي)', preview: 'Simpler تصميم حديث ومتوازن للواجهات العربية' },
+    { id: 'Cairo', label: 'Cairo (الخط الافتراضي)', preview: 'تصميم حديث ومتوازن للواجهات العربية' },
     { id: 'Tajawal', label: 'Tajawal (تجوال)', preview: 'خط عربي هندسي نقي ومريح للقراءة في الهواتف' },
     { id: 'Almarai', label: 'Almarai (المراعي)', preview: 'خط عربي معاصر ومثالي للمتاجر الإلكترونية' },
     { id: 'Readex Pro', label: 'Readex Pro (ريدكس برو)', preview: 'خط عصري فائق الوضوح مخصص للمنصات الرقمية' },
@@ -238,10 +238,10 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
                 </div>
                 <div>
                   <div className="text-sm font-bold leading-tight" style={{ color: formData.brandTheme.primaryColor }}>
-                    {formData.storeName || 'سيمبلر للحلول'}
+                    {formData.storeName || 'متجر أورورا'}
                   </div>
                   <div className="text-xs opacity-75" style={{ color: formData.brandTheme.textColor }}>
-                    {formData.storeSubtitle || 'إبراهيم جابر'}
+                    {formData.storeSubtitle || 'تشكيلة مختارة بعناية'}
                   </div>
                 </div>
               </div>
@@ -263,7 +263,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
             </div>
 
             <p className="text-xs leading-relaxed mb-4" style={{ color: formData.brandTheme.textColor }}>
-              {formData.tagline || 'منصة المتاجر الذكية المتصلة بـ Google Sheets والواتساب المباشر'}
+              {formData.tagline || 'تجربة تسوق عصرية وطلب فوري عبر الواتساب المباشر'}
             </p>
 
             <div className="flex flex-wrap items-center gap-2 pt-1 border-t" style={{ borderColor: formData.brandTheme.neutralColor }}>
@@ -416,7 +416,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
                       className="flex-1 px-3 py-2 bg-white border border-stone-200 rounded-xl font-mono text-xs uppercase"
                     />
                   </div>
-                  <p className="text-[11px] text-stone-500">الافتراضي: #F8F3ED (أبيض كريمي دافئ خاص بـ Simpler)</p>
+                  <p className="text-[11px] text-stone-500">الافتراضي: #F8FAFC (أبيض نقي مريح للعين)</p>
                 </div>
 
                 {/* Neutral Borders & Card Border */}
@@ -594,7 +594,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
                     type="text"
                     value={formData.whatsappNumber}
                     onChange={(e) => setFormData({ ...formData, whatsappNumber: e.target.value })}
-                    placeholder="966532923509"
+                    placeholder="966500000000"
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl font-mono"
                     dir="ltr"
                   />
@@ -607,7 +607,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
                   type="text"
                   value={formData.tagline}
                   onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
-                  placeholder="منصة المتاجر الذكية المتصلة بـ Google Sheets والواتساب المباشر"
+                  placeholder="تجربة تسوق عصرية وطلب فوري عبر الواتساب"
                   className="w-full px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl"
                 />
               </div>

@@ -1,3 +1,5 @@
+import { getFirebaseIdToken } from './firebase';
+
 /**
  * Client-Side AI Service that connects exclusively to the secure serverless proxy (/api/generate).
  * Never injects or requires GEMINI_API_KEY into client-side environment variables.
@@ -14,11 +16,17 @@ export async function requestAIGeneration(
   systemInstruction?: string
 ): Promise<AIGenerationResponse> {
   try {
+    const idToken = await getFirebaseIdToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (idToken) {
+      headers['Authorization'] = `Bearer ${idToken}`;
+    }
+
     const response = await fetch('/api/generate', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ prompt, systemInstruction }),
     });
 

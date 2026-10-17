@@ -1,14 +1,13 @@
 import React from 'react';
 import { StoreSettings } from '../../types/store';
-import { MessageCircle, ExternalLink, Sparkles, Mail, Phone, LogIn } from 'lucide-react';
+import { MessageCircle, ExternalLink, Sparkles, Mail, Phone } from 'lucide-react';
 
 interface FooterProps {
   settings: StoreSettings;
   onOpenPolicies: () => void;
   onOpenTracker: () => void;
   onOpenBrandStudio?: () => void;
-  onOpenAuth?: () => void;
-  isMerchantLoggedIn?: boolean;
+  isStoreOwner?: boolean;
 }
 
 export const Footer: React.FC<FooterProps> = ({ 
@@ -16,8 +15,7 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenPolicies, 
   onOpenTracker, 
   onOpenBrandStudio,
-  onOpenAuth,
-  isMerchantLoggedIn = false
+  isStoreOwner = false
 }) => {
   const brand = settings.brandTheme || {
     primaryColor: '#0F172A',
@@ -29,7 +27,7 @@ export const Footer: React.FC<FooterProps> = ({
   };
 
   const cleanWhatsapp = (settings.whatsappNumber || '').replace(/\D/g, '');
-  const displayPhone = settings.supportPhone || `+${cleanWhatsapp}`;
+  const displayPhone = settings.supportPhone || (cleanWhatsapp ? `+${cleanWhatsapp}` : '');
 
   return (
     <footer 
@@ -56,18 +54,22 @@ export const Footer: React.FC<FooterProps> = ({
             </div>
 
             <p className="text-xs text-stone-300 max-w-sm leading-relaxed">
-              {settings.tagline}. متجر رقمي متكامل يوفر تجربة تسوق سريعة ومريحة مع دعم مباشر للطلب الفوري عبر الواتساب.
+              {settings.tagline}
             </p>
 
             <div className="text-xs text-stone-300 pt-1 space-y-1">
-              <div className="flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-stone-400" />
-                <span dir="ltr">{displayPhone}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="w-3.5 h-3.5 text-stone-400" />
-                <span>{settings.supportEmail || 'support@quick-ecommerce.app'}</span>
-              </div>
+              {displayPhone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="w-3.5 h-3.5 text-stone-400" />
+                  <span dir="ltr">{displayPhone}</span>
+                </div>
+              )}
+              {settings.supportEmail && (
+                <div className="flex items-center gap-2">
+                  <Mail className="w-3.5 h-3.5 text-stone-400" />
+                  <span>{settings.supportEmail}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -91,7 +93,7 @@ export const Footer: React.FC<FooterProps> = ({
                   السياسات والشحن والضمان
                 </button>
               </li>
-              {isMerchantLoggedIn && onOpenBrandStudio && (
+              {isStoreOwner && onOpenBrandStudio && (
                 <li>
                   <button
                     onClick={onOpenBrandStudio}
@@ -120,9 +122,9 @@ export const Footer: React.FC<FooterProps> = ({
 
           {/* Customer Service & WhatsApp */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider">خدمة العملاء والطلب الفوري</h4>
+            <h4 className="text-xs font-bold text-white uppercase tracking-wider">خدمة العملاء</h4>
             <p className="text-xs text-stone-300">
-              لأي استفسار أو متابعة خاصة لطلبك، فريق الدعم متواجد لخدمتك عبر الواتساب:
+              لأي استفسار أو متابعة خاصة لطلبك، يسعدنا تواصلك المباشر معنا:
             </p>
             {cleanWhatsapp && (
               <a
@@ -138,23 +140,10 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
         </div>
 
-        {/* Bottom Credits & Discreet Merchant Login */}
+        {/* Bottom Credits */}
         <div className="mt-12 pt-6 border-t border-white/10 text-[11px] text-stone-400 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>© {new Date().getFullYear()} {settings.storeName}. كافة الحقوق محفوظة.</p>
-          
-          <div className="flex items-center gap-4 text-stone-400">
-            {onOpenAuth && (
-              <button
-                onClick={onOpenAuth}
-                className="text-stone-400 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer text-xs"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>{isMerchantLoggedIn ? 'لوحة التاجر' : 'دخول التاجر'}</span>
-              </button>
-            )}
-            <span className="text-stone-600">•</span>
-            <span className="text-stone-500">منصة التجارة السريعة (Quick E-Commerce)</span>
-          </div>
+          <span className="text-stone-400/80">يعمل بواسطة منصة Quick E-Commerce</span>
         </div>
       </div>
     </footer>

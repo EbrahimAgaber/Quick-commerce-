@@ -10,13 +10,14 @@ import {
 } from './types/store';
 import { StoreStorage, DEFAULT_PRODUCTS, MODERN_RETAIL_THEME } from './services/storeStorage';
 import { StoreManager } from './services/storeManager';
-import { AuthService, DEFAULT_MERCHANT } from './services/authService';
+import { AuthService } from './services/authService';
 import { onFirebaseAuthStateChanged } from './services/firebase';
 import { injectBrandThemeStyles } from './utils/themeInjector';
 import { matchesSearch } from './utils/arabicSearch';
 
 // Layout & Components
 import { Navbar, AppViewMode, DevicePreviewMode } from './components/layout/Navbar';
+import { SaaSLandingPage } from './components/layout/SaaSLandingPage';
 import { AnnouncementBar } from './components/layout/AnnouncementBar';
 import { HeroBanner } from './components/storefront/HeroBanner';
 import { CategoryFilter } from './components/storefront/CategoryFilter';
@@ -30,14 +31,10 @@ import { StorePoliciesModal } from './components/storefront/StorePoliciesModal';
 import { BrandCustomizerModal } from './components/admin/BrandCustomizerModal';
 import { StoreOnboardingWizard } from './components/builder/StoreOnboardingWizard';
 import { StoreDashboard } from './components/builder/StoreDashboard';
-import { SheetSimulator } from './components/admin/SheetSimulator';
-import { AppsScriptHub } from './components/admin/AppsScriptHub';
 import { AuthModal } from './components/auth/AuthModal';
 import { MerchantAuthGate } from './components/auth/MerchantAuthGate';
 import { Footer } from './components/layout/Footer';
-import { QaReadinessDashboard } from './components/qa/QaReadinessDashboard';
-import { FreeHostingModal } from './components/admin/FreeHostingModal';
-import { Plus, Sparkles, RotateCcw, Eye, EyeOff } from 'lucide-react';
+import { Plus, Sparkles, RotateCcw, Eye, EyeOff, Package } from 'lucide-react';
 
 export default function App() {
   // Merchant User & Multi-Store Management
@@ -52,6 +49,15 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(() => activeStore.products || StoreStorage.getProducts());
   const [orders, setOrders] = useState<Order[]>(() => activeStore.orders || StoreStorage.getOrders());
   const [policies, setPolicies] = useState<StorePolicy[]>(() => activeStore.policies || StoreStorage.getPolicies());
+
+  // Only stores belonging to the currently logged-in merchant
+  const merchantStores = useMemo(
+    () => StoreManager.getMerchantStores(currentUser?.id),
+    [allStores, currentUser]
+  );
+
+  // Strict ownership check: merchant controls only appear if the logged-in user owns the active store
+  const isStoreOwner = Boolean(currentUser && activeStore.ownerId === currentUser.id);
 
   // Listen to local storage & cross-tab sync events
   useEffect(() => {
@@ -77,7 +83,7 @@ export default function App() {
       if (fbUser) {
         const merchant: MerchantUser = {
           id: fbUser.uid,
-          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'تاجر Quick E-Commerce',
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'تاجر',
           email: fbUser.email || '',
           avatarUrl: fbUser.photoURL || undefined,
           createdAt: new Date().toISOString()
@@ -102,6 +108,19 @@ export default function App() {
     };
   }, []);
 
+  // When a store owner opens their store, fetch private orders from Firestore subcollection
+  useEffect(() => {
+    if (isStoreOwner && activeStore.id) {
+      StoreManager.fetchStoreOrdersFromFirestore(activeStore.id)
+        .then((cloudOrders) => {
+          if (cloudOrders && cloudOrders.length > 0) {
+            setOrders(cloudOrders);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isStoreOwner, activeStore.id]);
+
   // Inject custom typography and brand colors whenever settings.brandTheme changes
   useEffect(() => {
     if (settings.brandTheme) {
@@ -109,7 +128,22 @@ export default function App() {
     }
   }, [settings.brandTheme]);
 
-  // Handle URL parameters: ?store=<slug_or_id> and ?view=storefront|dashboard|sheet
+  // UI View Modes:
+  // - If `?store=<slug>` is present in the URL, open the customer's pure `'storefront'` directly.
+  // - If visiting root `/` without `?store=`, show the SaaS platform `'landing'` page.
+  const [viewMode, setViewMode] = useState<AppViewMode>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const storeParam = params.get('store');
+      const urlView = params.get('view');
+      if (urlView === 'dashboard') return 'dashboard';
+      if (storeParam || urlView === 'storefront') return 'storefront';
+    } catch {}
+    return 'landing';
+  });
+  const [devicePreview, setDevicePreview] = useState<DevicePreviewMode>('desktop');
+
+  // Handle URL parameters: ?store=<slug_or_id>
   useEffect(() => {
     const resolveStoreFromUrl = async () => {
       try {
@@ -124,6 +158,7 @@ export default function App() {
           }
           if (found) {
             handleSelectStore(found.id);
+            setViewMode('storefront');
           }
         }
       } catch (e) {
@@ -133,19 +168,6 @@ export default function App() {
 
     resolveStoreFromUrl();
   }, []);
-
-  // UI View Modes - default to 'storefront' so anyone clicking the link sees the live e-commerce website
-  const [viewMode, setViewMode] = useState<AppViewMode>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const urlView = params.get('view') as AppViewMode;
-      if (urlView === 'dashboard' || urlView === 'sheet' || urlView === 'script' || urlView === 'storefront' || urlView === 'qa') {
-        return urlView;
-      }
-    } catch {}
-    return 'storefront';
-  });
-  const [devicePreview, setDevicePreview] = useState<DevicePreviewMode>('desktop');
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -180,7 +202,6 @@ export default function App() {
   const [isPoliciesOpen, setIsPoliciesOpen] = useState(false);
   const [isBrandStudioOpen, setIsBrandStudioOpen] = useState(false);
   const [isNewStoreWizardOpen, setIsNewStoreWizardOpen] = useState(false);
-  const [isFreeHostingOpen, setIsFreeHostingOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
 
@@ -275,8 +296,10 @@ export default function App() {
 
   // Checkout Success handler
   const handleOrderSuccess = (order: Order) => {
-    StoreStorage.addOrder(order);
+    StoreManager.submitOrderToStore(activeStore.id, order);
     setOrders(StoreStorage.getOrders());
+    setActiveStore(StoreManager.getActiveStore());
+    setAllStores(StoreManager.getAllStores());
     setCart([]);
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
@@ -319,6 +342,13 @@ export default function App() {
   };
 
   const handleUpdateOrders = (newOrders: Order[]) => {
+    // Sync any changed order status to Firestore private orders subcollection
+    newOrders.forEach((updatedOrder) => {
+      const prev = orders.find((o) => o.id === updatedOrder.id);
+      if (!prev || prev.status !== updatedOrder.status || prev.trackingNotes !== updatedOrder.trackingNotes) {
+        StoreManager.updateOrderInStore(activeStore.id, updatedOrder);
+      }
+    });
     StoreStorage.saveOrders(newOrders);
     setOrders(newOrders);
     const updatedStore: StoreInstance = { ...activeStore, orders: newOrders };
@@ -362,24 +392,6 @@ export default function App() {
     handleUpdateProducts(DEFAULT_PRODUCTS);
   };
 
-  // Sync from live Google Apps Script
-  const handleSyncLiveData = (liveData: {
-    settings?: Partial<StoreSettings>;
-    products?: Product[];
-    policies?: StorePolicy[];
-  }) => {
-    if (liveData.settings) {
-      const merged = { ...settings, ...liveData.settings };
-      handleUpdateSettings(merged);
-    }
-    if (liveData.products && liveData.products.length > 0) {
-      handleUpdateProducts(liveData.products);
-    }
-    if (liveData.policies && liveData.policies.length > 0) {
-      handleUpdatePolicies(liveData.policies);
-    }
-  };
-
   // Open Order Tracker with specific ID
   const handleOpenTrackerWithId = (orderId: string) => {
     setTrackerInitialId(orderId);
@@ -387,6 +399,78 @@ export default function App() {
   };
 
   const brand = settings.brandTheme || MODERN_RETAIL_THEME;
+
+  // VIEW MODE 0: SAAS LANDING PAGE (Root `/` when no `?store=` is specified)
+  if (viewMode === 'landing') {
+    return (
+      <>
+        <SaaSLandingPage
+          currentUser={currentUser}
+          merchantStores={merchantStores}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+          onStartCreateStore={() => {
+            if (!currentUser) {
+              setIsAuthModalOpen(true);
+            } else {
+              setIsNewStoreWizardOpen(true);
+            }
+          }}
+          onOpenDashboard={() => {
+            if (merchantStores.length > 0) {
+              handleSelectStore(merchantStores[0].id);
+            }
+            setViewMode('dashboard');
+          }}
+          onPreviewDemoStore={() => {
+            setViewMode('storefront');
+          }}
+        />
+
+        {/* Modals available from Landing Page */}
+        {isNewStoreWizardOpen && (
+          <StoreOnboardingWizard
+            isOpen={isNewStoreWizardOpen}
+            onClose={() => setIsNewStoreWizardOpen(false)}
+            currentSettings={settings}
+            onComplete={(newSettings, initialProds) => {
+              const newStore = StoreManager.createStore({
+                storeName: newSettings.storeName,
+                storeSubtitle: newSettings.storeSubtitle,
+                ownerId: currentUser?.id || 'guest',
+                tagline: newSettings.tagline,
+                whatsappNumber: newSettings.whatsappNumber,
+                currency: newSettings.currency,
+                primaryColor: newSettings.brandTheme?.primaryColor || '#0F172A',
+                accentColor: newSettings.brandTheme?.accentColor || '#2563EB',
+                backgroundColor: newSettings.brandTheme?.backgroundColor || '#F8FAFC',
+                logoLetter: newSettings.logoLetter || 'A',
+                initialProducts: initialProds && initialProds.length > 0 ? initialProds : products,
+              });
+              handleSelectStore(newStore.id);
+              setIsNewStoreWizardOpen(false);
+              setViewMode('dashboard');
+            }}
+          />
+        )}
+
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          onSuccess={(user) => {
+            setCurrentUser(user);
+            setIsAuthModalOpen(false);
+            const owned = StoreManager.getMerchantStores(user.id);
+            if (owned.length > 0) {
+              handleSelectStore(owned[0].id);
+              setViewMode('dashboard');
+            } else {
+              setIsNewStoreWizardOpen(true);
+            }
+          }}
+        />
+      </>
+    );
+  }
 
   return (
     <div 
@@ -397,31 +481,39 @@ export default function App() {
         fontFamily: brand.fontFamily ? `'${brand.fontFamily}', sans-serif` : 'Cairo, sans-serif',
       }}
     >
-      {/* Merchant Shopper Preview Toggle Toast (If merchant is in preview mode) */}
-      {currentUser && (
+      {/* Merchant Shopper Preview Toggle Toast (Strictly shown ONLY to the verified store owner) */}
+      {isStoreOwner && (
         <div className="bg-stone-900 text-white text-xs px-4 py-1.5 flex items-center justify-between z-50">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span>
-              {isShopperPreviewOnly ? 'وضع معاينة العميل (متجر نقي بدون أدوات الإدارة)' : 'وضع التاجر مفعّل'}
+              {isShopperPreviewOnly ? 'وضع معاينة المتسوق (كما يراه عملاؤك تماماً)' : 'وضع مالك المتجر مفعّل'}
             </span>
           </div>
-          <button
-            onClick={() => setIsShopperPreviewOnly(!isShopperPreviewOnly)}
-            className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold transition-colors cursor-pointer"
-          >
-            {isShopperPreviewOnly ? (
-              <>
-                <EyeOff className="w-3.5 h-3.5" />
-                <span>إظهار شريط التاجر</span>
-              </>
-            ) : (
-              <>
-                <Eye className="w-3.5 h-3.5" />
-                <span>معاينة كمتسوق</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setViewMode('landing')}
+              className="px-2.5 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 text-stone-200 text-[11px] font-medium transition-colors cursor-pointer"
+            >
+              الرئيسية للمنصة
+            </button>
+            <button
+              onClick={() => setIsShopperPreviewOnly(!isShopperPreviewOnly)}
+              className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold transition-colors cursor-pointer"
+            >
+              {isShopperPreviewOnly ? (
+                <>
+                  <EyeOff className="w-3.5 h-3.5" />
+                  <span>إظهار أدوات الإدارة</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>معاينة كمتسوق</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       )}
 
@@ -445,19 +537,20 @@ export default function App() {
         devicePreview={devicePreview}
         onDevicePreviewChange={setDevicePreview}
         currentUser={currentUser}
-        allStores={allStores}
+        isStoreOwner={isStoreOwner}
+        merchantStores={merchantStores}
         activeStoreId={activeStore.id}
         onSelectStore={handleSelectStore}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onLogout={() => {
           AuthService.logout();
           setCurrentUser(null);
+          setViewMode('landing');
         }}
         isShopperPreviewOnly={isShopperPreviewOnly}
-        onOpenFreeHosting={() => setIsFreeHostingOpen(true)}
       />
 
-      {/* VIEW MODE 1: BUSINESS OWNER DASHBOARD (QUICK E-COMMERCE HUB) */}
+      {/* VIEW MODE 1: BUSINESS OWNER DASHBOARD (SIMPLE MERCHANT HUB) */}
       {viewMode === 'dashboard' && (
         <main className="flex-1 w-full py-6">
           {!currentUser ? (
@@ -466,13 +559,10 @@ export default function App() {
               onOpenAuth={() => setIsAuthModalOpen(true)}
               onBackToStore={() => setViewMode('storefront')}
               targetViewName="لوحة تحكم المتجر"
-              onMockDevLogin={() => {
-                AuthService.setCurrentUser(DEFAULT_MERCHANT);
-                setCurrentUser(DEFAULT_MERCHANT);
-              }}
             />
           ) : (
             <StoreDashboard
+              storeSlug={activeStore.slug}
               settings={settings}
               products={products}
               orders={orders}
@@ -481,14 +571,10 @@ export default function App() {
               onUpdateProducts={handleUpdateProducts}
               onUpdateOrders={handleUpdateOrders}
               onUpdatePolicies={handleUpdatePolicies}
-              onResetDefault={handleResetDefault}
               onViewStorefront={() => setViewMode('storefront')}
               onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
               onOpenNewStoreWizard={() => setIsNewStoreWizardOpen(true)}
-              onSyncLiveData={handleSyncLiveData}
               currentUser={currentUser}
-              onOpenAuth={() => setIsAuthModalOpen(true)}
-              onOpenFreeHosting={() => setIsFreeHostingOpen(true)}
             />
           )}
         </main>
@@ -499,8 +585,8 @@ export default function App() {
         <>
           <AnnouncementBar settings={settings} />
 
-          {/* If mobile frame preview selected, wrap in simulated phone bezel */}
-          {devicePreview === 'mobile' ? (
+          {/* If mobile frame preview selected by owner, wrap in simulated phone bezel */}
+          {isStoreOwner && !isShopperPreviewOnly && devicePreview === 'mobile' ? (
             <div className="flex-1 py-8 px-4 flex justify-center bg-stone-300/60">
               <div 
                 className="w-[390px] min-h-[844px] rounded-[44px] shadow-2xl border-8 border-stone-800 overflow-hidden flex flex-col relative"
@@ -523,7 +609,7 @@ export default function App() {
                       setTrackerInitialId('');
                       setIsTrackerOpen(true);
                     }}
-                    isMerchantLoggedIn={currentUser !== null && !isShopperPreviewOnly}
+                    isMerchantLoggedIn={isStoreOwner && !isShopperPreviewOnly}
                   />
 
                   {categories.length > 0 && (
@@ -569,7 +655,7 @@ export default function App() {
                   setTrackerInitialId('');
                   setIsTrackerOpen(true);
                 }}
-                isMerchantLoggedIn={currentUser !== null && !isShopperPreviewOnly}
+                isMerchantLoggedIn={isStoreOwner && !isShopperPreviewOnly}
               />
 
               <div id="catalog-section">
@@ -583,41 +669,55 @@ export default function App() {
                   />
                 )}
 
-                {/* Empty Catalog Quick Starter State */}
+                {/* Empty Catalog State: strictly separated between Store Owner vs. Customer Visitor */}
                 {products.length === 0 ? (
-                  <div className="py-16 text-center space-y-4 bg-white rounded-3xl border p-8 max-w-lg mx-auto shadow-xs" style={{ borderColor: brand.neutralColor }}>
-                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto" style={{ backgroundColor: `${brand.accentColor}15`, color: brand.accentColor }}>
-                      <Sparkles className="w-7 h-7" />
+                  isStoreOwner && !isShopperPreviewOnly ? (
+                    <div className="py-16 text-center space-y-4 bg-white rounded-3xl border p-8 max-w-lg mx-auto shadow-xs" style={{ borderColor: brand.neutralColor }}>
+                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto" style={{ backgroundColor: `${brand.accentColor}15`, color: brand.accentColor }}>
+                        <Sparkles className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold" style={{ color: brand.primaryColor }}>
+                          متجرك جاهز لإضافة منتجاتك الأولى
+                        </h3>
+                        <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                          أضف منتجاتك وأسعارها وصورها بسهولة من لوحة تحكم المتجر أو قم بتحميل تشكيلة نموذجية للتجربة.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                        <button
+                          onClick={() => setViewMode('dashboard')}
+                          className="px-4 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition-transform active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                          style={{ backgroundColor: brand.accentColor }}
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>إضافة منتجات من لوحة التحكم</span>
+                        </button>
+
+                        <button
+                          onClick={handleLoadDefaultProducts}
+                          className="px-4 py-2.5 rounded-xl text-xs font-semibold border bg-white hover:bg-stone-50 text-stone-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                          style={{ borderColor: brand.neutralColor }}
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>تحميل تشكيلة نموذجية</span>
+                        </button>
+                      </div>
                     </div>
-                    <div>
+                  ) : (
+                    <div className="py-16 text-center space-y-3 bg-white rounded-3xl border p-8 max-w-md mx-auto shadow-xs" style={{ borderColor: brand.neutralColor }}>
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto" style={{ backgroundColor: `${brand.accentColor}15`, color: brand.accentColor }}>
+                        <Package className="w-6 h-6" />
+                      </div>
                       <h3 className="text-base font-bold" style={{ color: brand.primaryColor }}>
-                        المتجر فارغ وجاهز لإضافة منتجاتك الخاصة
+                        تشكيلة جديدة قريباً
                       </h3>
-                      <p className="text-xs text-stone-500 mt-1 max-w-sm mx-auto leading-relaxed">
-                        يمكنك إضافة منتجاتك المخصصة من خلال جدول بيانات Google Sheet أو استعادة التشكيلة الافتراضية النموذجية.
+                      <p className="text-xs text-stone-500 max-w-xs mx-auto leading-relaxed">
+                        يتم حالياً تجهيز وإضافة المنتجات الجديدة في {settings.storeName}. يرجى زيارة المتجر قريباً!
                       </p>
                     </div>
-
-                    <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-                      <button
-                        onClick={() => setViewMode('sheet')}
-                        className="px-4 py-2.5 text-white rounded-xl text-xs font-bold shadow-xs transition-transform active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                        style={{ backgroundColor: brand.accentColor }}
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>إضافة منتج من جدول البيانات</span>
-                      </button>
-
-                      <button
-                        onClick={handleLoadDefaultProducts}
-                        className="px-4 py-2.5 rounded-xl text-xs font-semibold border bg-white hover:bg-stone-50 text-stone-700 transition-colors flex items-center gap-1.5 cursor-pointer"
-                        style={{ borderColor: brand.neutralColor }}
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        <span>تحميل التشكيلة الافتراضية النموذجية</span>
-                      </button>
-                    </div>
-                  </div>
+                  )
                 ) : (
                   <ProductGrid
                     products={filteredProducts}
@@ -643,88 +743,8 @@ export default function App() {
               setTrackerInitialId('');
               setIsTrackerOpen(true);
             }}
-            onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
-            onOpenAuth={() => setIsAuthModalOpen(true)}
-            isMerchantLoggedIn={currentUser !== null}
           />
         </>
-      )}
-
-      {/* VIEW MODE 3: GOOGLE SHEET SIMULATOR (DATABASE TABS) */}
-      {viewMode === 'sheet' && (
-        <main className="flex-1 w-full bg-stone-100 py-6">
-          {!currentUser ? (
-            <MerchantAuthGate
-              settings={settings}
-              onOpenAuth={() => setIsAuthModalOpen(true)}
-              onBackToStore={() => setViewMode('storefront')}
-              targetViewName="جدول بيانات Google Sheet"
-              onMockDevLogin={() => {
-                AuthService.setCurrentUser(DEFAULT_MERCHANT);
-                setCurrentUser(DEFAULT_MERCHANT);
-              }}
-            />
-          ) : (
-            <SheetSimulator
-              settings={settings}
-              products={products}
-              orders={orders}
-              policies={policies}
-              onUpdateSettings={handleUpdateSettings}
-              onUpdateProducts={handleUpdateProducts}
-              onUpdateOrders={handleUpdateOrders}
-              onUpdatePolicies={handleUpdatePolicies}
-              onResetDefault={handleResetDefault}
-              onSwitchToStore={() => setViewMode('storefront')}
-              onOpenAppsScriptHub={() => setViewMode('script')}
-              onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
-            />
-          )}
-        </main>
-      )}
-
-      {/* VIEW MODE 4: GOOGLE APPS SCRIPT ENGINE & LIVE SYNC */}
-      {viewMode === 'script' && (
-        <main className="flex-1 w-full bg-stone-50 py-6">
-          {!currentUser ? (
-            <MerchantAuthGate
-              settings={settings}
-              onOpenAuth={() => setIsAuthModalOpen(true)}
-              onBackToStore={() => setViewMode('storefront')}
-              targetViewName="محرك وإعدادات Google Apps Script"
-              onMockDevLogin={() => {
-                AuthService.setCurrentUser(DEFAULT_MERCHANT);
-                setCurrentUser(DEFAULT_MERCHANT);
-              }}
-            />
-          ) : (
-            <AppsScriptHub
-              settings={settings}
-              onUpdateSettings={handleUpdateSettings}
-              onSyncLiveData={handleSyncLiveData}
-            />
-          )}
-        </main>
-      )}
-
-      {/* VIEW MODE 5: QA READINESS AUDIT & 210 USER JOURNEYS */}
-      {viewMode === 'qa' && (
-        <main className="flex-1 w-full bg-stone-100">
-          <QaReadinessDashboard
-            settings={settings}
-            onBackToStorefront={() => setViewMode('storefront')}
-            onBackToDashboard={() => setViewMode('dashboard')}
-            onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
-            onOpenNewStoreWizard={() => setIsNewStoreWizardOpen(true)}
-            onOpenCart={() => setIsCartOpen(true)}
-            onOpenCheckout={() => setIsCheckoutOpen(true)}
-            onOpenTracker={() => {
-              setTrackerInitialId('');
-              setIsTrackerOpen(true);
-            }}
-            onOpenPolicies={() => setIsPoliciesOpen(true)}
-          />
-        </main>
       )}
 
       {/* MODALS */}
@@ -746,7 +766,6 @@ export default function App() {
               accentColor: newSettings.brandTheme?.accentColor || '#2563EB',
               backgroundColor: newSettings.brandTheme?.backgroundColor || '#F8FAFC',
               logoLetter: newSettings.logoLetter || 'A',
-              googleSheetUrl: newSettings.googleWebAppUrl,
               initialProducts: initialProds && initialProds.length > 0 ? initialProds : products,
             });
             handleSelectStore(newStore.id);
@@ -756,8 +775,8 @@ export default function App() {
         />
       )}
 
-      {/* 2. Brand & Setup Studio Modal */}
-      {isBrandStudioOpen && (
+      {/* 2. Brand & Setup Studio Modal (Store Owner Only) */}
+      {isBrandStudioOpen && isStoreOwner && (
         <BrandCustomizerModal
           isOpen={isBrandStudioOpen}
           onClose={() => setIsBrandStudioOpen(false)}
@@ -817,7 +836,7 @@ export default function App() {
         />
       )}
 
-      {/* 7. Live Order Tracker Modal */}
+      {/* 7. Live Order Tracker Modal (Privacy-safe exact ID lookup) */}
       {isTrackerOpen && (
         <OrderTrackerModal
           isOpen={isTrackerOpen}
@@ -825,6 +844,7 @@ export default function App() {
             setIsTrackerOpen(false);
             setTrackerInitialId('');
           }}
+          storeId={activeStore.id}
           orders={orders}
           settings={settings}
           initialOrderId={trackerInitialId}
@@ -840,7 +860,7 @@ export default function App() {
         />
       )}
 
-      {/* 9. Merchant User Auth Modal (Login / Register / Switch Account) */}
+      {/* 9. Merchant User Auth Modal */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -848,13 +868,6 @@ export default function App() {
           setCurrentUser(user);
           setIsAuthModalOpen(false);
         }}
-      />
-
-      {/* 10. Free Hosting & Deployment Guide Modal */}
-      <FreeHostingModal
-        isOpen={isFreeHostingOpen}
-        onClose={() => setIsFreeHostingOpen(false)}
-        storeName={settings.storeName}
       />
     </div>
   );

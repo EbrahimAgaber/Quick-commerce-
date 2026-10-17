@@ -255,13 +255,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             </button>
 
             {/* Quick Ask on WhatsApp */}
-            <button
-              onClick={handleAskOnWhatsApp}
-              className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-colors border border-emerald-200/50"
-            >
-              <MessageCircle className="w-4 h-4 text-emerald-600" />
-              <span>استفسار مباشر عبر الواتساب (+966 53 292 3509)</span>
-            </button>
+            {settings.whatsappNumber && (
+              <button
+                onClick={handleAskOnWhatsApp}
+                className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-colors border border-emerald-200/50 cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                <span>استفسار مباشر عن المنتج عبر الواتساب</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

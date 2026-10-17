@@ -3,8 +3,6 @@ import { StoreSettings, MerchantUser, StoreInstance } from '../../types/store';
 import { 
   ShoppingBag, 
   Search, 
-  Table, 
-  Code2, 
   Smartphone, 
   Monitor, 
   Info, 
@@ -16,15 +14,11 @@ import {
   ChevronDown,
   LogOut,
   Store,
-  LogIn,
   Share2,
-  Check,
-  Eye,
-  ShieldCheck,
-  Globe
+  Check
 } from 'lucide-react';
 
-export type AppViewMode = 'dashboard' | 'storefront' | 'sheet' | 'script' | 'qa';
+export type AppViewMode = 'landing' | 'dashboard' | 'storefront';
 export type DevicePreviewMode = 'desktop' | 'mobile';
 
 interface NavbarProps {
@@ -43,13 +37,14 @@ interface NavbarProps {
   devicePreview: DevicePreviewMode;
   onDevicePreviewChange: (mode: DevicePreviewMode) => void;
   currentUser?: MerchantUser | null;
-  allStores?: StoreInstance[];
+  isStoreOwner?: boolean;
+  merchantStores?: StoreInstance[];
   activeStoreId?: string;
+  activeStoreSlug?: string;
   onSelectStore?: (storeId: string) => void;
   onOpenAuth?: () => void;
   onLogout?: () => void;
   isShopperPreviewOnly?: boolean;
-  onOpenFreeHosting?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -68,13 +63,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   devicePreview,
   onDevicePreviewChange,
   currentUser,
-  allStores = [],
+  isStoreOwner = false,
+  merchantStores = [],
   activeStoreId,
+  activeStoreSlug,
   onSelectStore,
   onOpenAuth,
   onLogout,
   isShopperPreviewOnly = false,
-  onOpenFreeHosting,
 }) => {
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -91,19 +87,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleCopyShareLink = () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const shareUrl = `${origin}/?store=${activeStoreId || 'aurora'}`;
+    const shareUrl = `${origin}/?store=${encodeURIComponent(activeStoreSlug || activeStoreId || 'aurora')}`;
     navigator.clipboard.writeText(shareUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  // Determine if merchant toolbar should be visible - strictly requires authenticated merchant
-  const showMerchantToolbar = !isShopperPreviewOnly && currentUser !== null;
+  // Strictly show Merchant Toolbar ONLY when the logged-in user owns this store (or is inside dashboard view) and is not in shopper preview mode
+  const showMerchantToolbar = !isShopperPreviewOnly && Boolean(currentUser && (isStoreOwner || viewMode === 'dashboard'));
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200">
-      {/* Top Merchant Control Bar - Shown ONLY to logged-in merchants or in admin view modes */}
-      {showMerchantToolbar && (
+      {/* Top Merchant Control Bar - Strictly isolated to the authenticated store owner */}
+      {showMerchantToolbar && currentUser && (
         <div 
           className="text-stone-200 px-4 py-1.5 text-xs flex flex-wrap items-center justify-between gap-2 border-b"
           style={{ backgroundColor: brand.primaryColor, borderColor: 'rgba(255,255,255,0.1)' }}
@@ -114,10 +110,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="inline-block w-2 h-2 rounded-full animate-pulse"
                 style={{ backgroundColor: brand.highlightColor || '#86EFAC' }}
               />
-              <span className="font-bold text-white text-xs">بوابة التاجر</span>
+              <span className="font-bold text-white text-xs">لوحة التاجر</span>
             </div>
 
-            {/* Store Switcher Dropdown */}
+            {/* Store Switcher Dropdown - Shows ONLY this merchant's own stores */}
             <div className="relative">
               <button
                 onClick={() => setIsStoreMenuOpen(!isStoreMenuOpen)}
@@ -133,10 +129,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className="absolute right-0 top-full mt-1.5 w-64 bg-white text-stone-900 rounded-2xl shadow-xl border border-stone-200 p-2 z-50 animate-in fade-in zoom-in-95"
                   onClick={() => setIsStoreMenuOpen(false)}
                 >
-                  <div className="text-[11px] font-bold text-stone-400 px-2 py-1">متاجرك الإلكترونية:</div>
+                  <div className="text-[11px] font-bold text-stone-400 px-2 py-1">متاجرك الخاصة:</div>
                   <div className="space-y-1">
-                    {allStores.length > 0 ? (
-                      allStores.map((st) => (
+                    {merchantStores.length > 0 ? (
+                      merchantStores.map((st) => (
                         <button
                           key={st.id}
                           onClick={() => onSelectStore && onSelectStore(st.id)}
@@ -152,7 +148,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </button>
                       ))
                     ) : (
-                      <div className="px-3 py-2 text-xs text-stone-500">{settings.storeName}</div>
+                      <div className="px-3 py-2 text-xs text-stone-500">لم تقم بإنشاء متجر بعد</div>
                     )}
                   </div>
 
@@ -164,7 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       className="w-full text-right px-3 py-2 rounded-xl text-xs font-bold text-[#2563EB] hover:bg-blue-50 flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>+ إنشاء متجر جديد لنشاط آخر</span>
+                      <span>+ إنشاء متجر جديد</span>
                     </button>
                   </div>
                 </div>
@@ -174,27 +170,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Quick Share Live Store URL */}
             <button
               onClick={handleCopyShareLink}
-              className="hidden lg:flex items-center gap-1 px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-xs font-medium cursor-pointer"
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-xs font-medium cursor-pointer"
               title="نسخ رابط المتجر للعملاء"
             >
               {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Share2 className="w-3 h-3" />}
-              <span>{copiedLink ? 'تم نسخ الرابط!' : 'مشاركة رابط المتجر'}</span>
+              <span>{copiedLink ? 'تم نسخ رابط المتجر!' : 'نسخ رابط المتجر للعملاء'}</span>
             </button>
-
-            {/* Free Hosting Portal Trigger */}
-            {onOpenFreeHosting && (
-              <button
-                onClick={onOpenFreeHosting}
-                className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 rounded-lg transition-colors text-xs font-bold cursor-pointer"
-                title="دليل وبوابة النشر والاستضافة المجانية لمتجرك"
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>استضافة مجانية 100%</span>
-              </button>
-            )}
           </div>
 
-          {/* Engine Views Switcher */}
+          {/* Simplified View Switcher: Dashboard vs Visitor Storefront ONLY */}
           <div className="flex items-center gap-1 bg-black/25 p-0.5 rounded-lg border border-white/10">
             <button
               onClick={() => onViewModeChange('dashboard')}
@@ -217,77 +201,29 @@ export const Navbar: React.FC<NavbarProps> = ({
               }`}
             >
               <ShoppingBag className="w-3.5 h-3.5 text-amber-500" />
-              <span>متجر الزائر</span>
-            </button>
-
-            <button
-              onClick={() => onViewModeChange('sheet')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all cursor-pointer ${
-                viewMode === 'sheet'
-                  ? 'bg-white text-stone-900 shadow-xs'
-                  : 'text-stone-300 hover:text-white'
-              }`}
-            >
-              <Table className="w-3.5 h-3.5 text-emerald-400" />
-              <span>جدول Google Sheet</span>
-            </button>
-
-            <button
-              onClick={() => onViewModeChange('script')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-all cursor-pointer ${
-                viewMode === 'script'
-                  ? 'bg-white text-stone-900 shadow-xs'
-                  : 'text-stone-300 hover:text-white'
-              }`}
-            >
-              <Code2 className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Apps Script</span>
-            </button>
-
-            <button
-              onClick={() => onViewModeChange('qa')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'qa'
-                  ? 'bg-emerald-500 text-slate-950 shadow-xs'
-                  : 'text-emerald-400 hover:text-white'
-              }`}
-              title="فحص الجودة (210 رحلة تفاعلية ومحرك الاختبارات)"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>مختبر QA</span>
+              <span>واجهة الزبون</span>
             </button>
           </div>
 
-          {/* User Account / Login & New Store */}
+          {/* Owner Profile & Device Preview */}
           <div className="flex items-center gap-2">
-            {/* User Profile dropdown */}
             <div className="relative">
-              {currentUser ? (
-                <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-xs font-medium cursor-pointer"
-                >
-                  {currentUser.avatarUrl ? (
-                    <img src={currentUser.avatarUrl} alt="" className="w-4 h-4 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-4 h-4 rounded-full bg-[#86EFAC] text-[#0F172A] flex items-center justify-center text-[10px] font-black">
-                      {currentUser.name.charAt(0) || 'U'}
-                    </div>
-                  )}
-                  <span className="hidden sm:inline max-w-[100px] truncate">{currentUser.name}</span>
-                  <ChevronDown className="w-3 h-3 text-stone-300" />
-                </button>
-              ) : (
-                <button
-                  onClick={onOpenAuth}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-[#2563EB] hover:bg-blue-600 text-white rounded-lg transition-colors text-xs font-bold shadow-xs cursor-pointer"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>دخول التاجر</span>
-                </button>
-              )}
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-xs font-medium cursor-pointer"
+              >
+                {currentUser.avatarUrl ? (
+                  <img src={currentUser.avatarUrl} alt="" className="w-4 h-4 rounded-full object-cover" />
+                ) : (
+                  <div className="w-4 h-4 rounded-full bg-[#86EFAC] text-[#0F172A] flex items-center justify-center text-[10px] font-black">
+                    {currentUser.name.charAt(0) || 'U'}
+                  </div>
+                )}
+                <span className="hidden sm:inline max-w-[100px] truncate">{currentUser.name}</span>
+                <ChevronDown className="w-3 h-3 text-stone-300" />
+              </button>
 
-              {isUserMenuOpen && currentUser && (
+              {isUserMenuOpen && (
                 <div 
                   className="absolute left-0 top-full mt-1.5 w-60 bg-white text-stone-900 rounded-2xl shadow-xl border border-stone-200 p-2 z-50 animate-in fade-in zoom-in-95"
                   onClick={() => setIsUserMenuOpen(false)}
@@ -312,7 +248,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       className="w-full text-right px-3 py-2 rounded-xl text-xs hover:bg-stone-50 text-stone-700 flex items-center gap-2 cursor-pointer"
                     >
                       <User className="w-3.5 h-3.5 text-stone-500" />
-                      <span>تبديل الحساب أو تسجيل جديد</span>
+                      <span>تبديل الحساب</span>
                     </button>
 
                     <button
@@ -336,7 +272,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className={`p-1 rounded transition-colors cursor-pointer ${
                     devicePreview === 'desktop' ? 'bg-white/20 text-white' : 'text-stone-400 hover:text-white'
                   }`}
-                  title="عرض شاشة عادية"
+                  title="عرض شاشة سطح المكتب"
                 >
                   <Monitor className="w-3.5 h-3.5" />
                 </button>
@@ -345,7 +281,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className={`p-1 rounded transition-colors cursor-pointer ${
                     devicePreview === 'mobile' ? 'bg-white/20 text-white' : 'text-stone-400 hover:text-white'
                   }`}
-                  title="عرض هاتف محمول"
+                  title="معاينة شاشة الجوال"
                 >
                   <Smartphone className="w-3.5 h-3.5" />
                 </button>
@@ -355,7 +291,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
-      {/* Main Storefront Nav Header */}
+      {/* Main Customer Storefront Header - 100% Pure Brand Experience */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
         {/* Brand Logo & Name */}
         <div className="flex items-center gap-3">
@@ -396,7 +332,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="ابحث عن منتج، فئة، أو ماركة..."
+              placeholder="ابحث عن منتج أو قسم..."
               className="w-full pr-10 pl-4 py-2 bg-stone-100 hover:bg-stone-50 focus:bg-white text-stone-900 text-sm rounded-xl border border-stone-200 focus:outline-none transition-all placeholder:text-stone-400"
               style={{ borderColor: brand.neutralColor }}
             />
@@ -412,10 +348,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* Storefront Action Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Brand Customizer Trigger (Shown to merchant) */}
-          {currentUser && (
+          {/* Brand Customizer Trigger - Strictly shown ONLY to the verified store owner when not in shopper preview */}
+          {showMerchantToolbar && isStoreOwner && (
             <button
               onClick={onOpenBrandStudio}
               className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer"
@@ -427,46 +363,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Discreet Merchant Login Trigger for visitors (when not logged in) */}
-          {!currentUser && (
-            <button
-              onClick={onOpenAuth}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-stone-500 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors cursor-pointer"
-              title="دخول صاحب المتجر"
-            >
-              <LogIn className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">دخول التاجر</span>
-            </button>
-          )}
-
           {/* Track Order Button */}
           <button
             onClick={onOpenTracker}
             className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors cursor-pointer"
           >
-            <PackageCheck className="w-4 h-4 text-[#2563EB]" />
+            <PackageCheck className="w-4 h-4" style={{ color: brand.accentColor }} />
             <span className="hidden sm:inline">تتبع طلبك</span>
           </button>
 
-          {/* QA Lab Access Button */}
-          <button
-            onClick={() => onViewModeChange('qa')}
-            className={`flex items-center gap-1.5 px-2.5 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
-              viewMode === 'qa' 
-                ? 'bg-blue-600 text-white shadow-xs' 
-                : 'text-stone-700 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80'
-            }`}
-            title="فتح لوحة فحص الجودة (210 رحلة تفاعلية ومحرك الاختبارات)"
-          >
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span className="hidden md:inline">مختبر الجودة (QA)</span>
-          </button>
-
-          {/* Sizing & Policies */}
+          {/* Store Policies */}
           <button
             onClick={onOpenPolicies}
             className="flex items-center gap-1 px-2.5 py-2 text-xs sm:text-sm font-medium text-stone-600 hover:text-stone-900 rounded-xl transition-colors cursor-pointer"
-            title="السياسات والضمان"
+            title="سياسات المتجر والضمان"
           >
             <Info className="w-4 h-4" />
           </button>
@@ -504,7 +414,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="ابحث عن المنتجات أو الفئات..."
+            placeholder="ابحث عن المنتجات أو الأقسام..."
             className="w-full pr-10 pl-4 py-2 bg-stone-100 text-stone-900 text-sm rounded-xl border border-stone-200 focus:outline-none placeholder:text-stone-400"
           />
           <Search className="absolute right-3 top-2.5 w-4 h-4 text-stone-400" />

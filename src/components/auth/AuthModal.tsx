@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AuthService } from '../../services/authService';
+import { isFirebaseConfigured } from '../../services/firebase';
 import { MerchantUser } from '../../types/store';
 import { LogIn, UserPlus, X, Mail, Lock, User, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
 
@@ -20,6 +21,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const formatAuthError = (err: unknown): string => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('FIREBASE_NOT_CONFIGURED') || msg.includes('api-key-not-valid')) {
+      return 'يرجى ربط مفاتيح Firebase (VITE_FIREBASE_API_KEY) في إعدادات البيئة لتفعيل المصادقة السحابية.';
+    }
+    if (msg.includes('popup-closed-by-user')) {
+      return 'تم إغلاق نافذة الدخول بحساب Google قبل إتمام العملية.';
+    }
+    if (msg.includes('popup-blocked')) {
+      return 'تم حظر النافذة المنبثقة من قبل المتصفح. يرجى السماح بالنوافذ المنبثقة.';
+    }
+    if (msg.includes('invalid-credential') || msg.includes('wrong-password') || msg.includes('user-not-found')) {
+      return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+    }
+    if (msg.includes('email-already-in-use')) {
+      return 'هذا البريد الإلكتروني مسجل مسبقاً. يرجى تسجيل الدخول بدلاً من ذلك.';
+    }
+    if (msg.includes('weak-password')) {
+      return 'كلمة المرور ضعيفة جداً. يرجى اختيار كلمة مرور من 6 أحرف على الأقل.';
+    }
+    if (msg.includes('too-many-requests')) {
+      return 'تم تجاوز عدد المحاولات المسموح بها. يرجى المحاولة بعد قليل.';
+    }
+    return msg || 'تعذر إتمام المصادقة. يرجى المحاولة مجدداً.';
+  };
+
   const handleGoogleSignIn = async () => {
     try {
       setError(null);
@@ -30,41 +57,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       onClose();
     } catch (err: unknown) {
       setGoogleLoading(false);
-      console.error('Google Sign-In Error:', err);
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('popup-closed-by-user')) {
-        setError('تم إغلاق نافذة الدخول بحساب Google قبل إتمام العملية.');
-      } else if (msg.includes('blocked')) {
-        setError('تم حظر النافذة المنبثقة من قبل المتصفح. يرجى السماح بالنوافذ المنبثقة.');
-      } else {
-        setError('تعذر تسجيل الدخول عبر Google. يرجى المحاولة مجددًا.');
-      }
+      setError(formatAuthError(err));
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!email.trim() || !password) return;
 
     setError(null);
     setLoading(true);
-    setTimeout(() => {
+    try {
       let user: MerchantUser;
       if (mode === 'register') {
-        user = AuthService.register(name || email.split('@')[0], email);
+        user = await AuthService.registerWithEmail(name || email.split('@')[0], email, password);
       } else {
-        user = AuthService.login(email, password);
+        user = await AuthService.loginWithEmail(email, password);
       }
       setLoading(false);
       onSuccess(user);
       onClose();
-    }, 400);
-  };
-
-  const handleQuickDemo = () => {
-    const user = AuthService.login('merchant.demo@quick-ecommerce.app');
-    onSuccess(user);
-    onClose();
+    } catch (err: unknown) {
+      setLoading(false);
+      setError(formatAuthError(err));
+    }
   };
 
   return (
@@ -94,6 +110,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </button>
         </div>
 
+        {!isFirebaseConfigured && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+            <span>
+              تنبيه إعداد السحابة: لم يتم العثور على مفتاح <code>VITE_FIREBASE_API_KEY</code> في ملف البيئة.
+            </span>
+          </div>
+        )}
+
         {/* Error notification */}
         {error && (
           <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center gap-2">
@@ -117,7 +142,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               </>
             ) : (
               <>
-                {/* Google Official Multi-Color 'G' SVG Logo */}
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
@@ -152,7 +176,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           {mode === 'register' && (
             <div>
-              <label className="block font-bold text-stone-800 mb-1">الاسم الكامل أو اسم المتجر</label>
+              <label className="block font-bold text-stone-800 mb-1">الاسم الكامل أو اسم النشاط</label>
               <div className="relative">
                 <input
                   type="text"
@@ -184,11 +208,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </div>
 
           <div>
-            <label className="block font-bold text-stone-800 mb-1">كلمة المرور</label>
+            <label className="block font-bold text-stone-800 mb-1">كلمة المرور (6 أحرف على الأقل)</label>
             <div className="relative">
               <input
                 type="password"
                 required
+                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -205,26 +230,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             className="w-full py-3 bg-[#2563EB] hover:bg-blue-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             {loading ? (
-              <span>جاري المصادقة...</span>
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>جاري التحقق والمصادقة...</span>
+              </>
             ) : mode === 'login' ? (
               <>
                 <LogIn className="w-4 h-4" />
-                <span>تسجيل الدخول للمتجر</span>
+                <span>تسجيل الدخول للوحة التحكم</span>
               </>
             ) : (
               <>
                 <UserPlus className="w-4 h-4" />
-                <span>إنشاء الحساب وبدء متجرك</span>
+                <span>إنشاء الحساب وإطلاق متجرك</span>
               </>
             )}
           </button>
         </form>
 
         {/* Toggle Mode */}
-        <div className="text-center text-xs text-stone-500 pt-1 border-t border-stone-100">
+        <div className="text-center text-xs text-stone-500 pt-2 border-t border-stone-100">
           {mode === 'login' ? (
             <span>
-              ليس لديك حساب بعد؟{' '}
+              ليس لديك حساب تاجر بعد؟{' '}
               <button
                 type="button"
                 onClick={() => {
@@ -233,7 +261,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 }}
                 className="font-bold text-[#2563EB] hover:underline cursor-pointer"
               >
-                إنشاء حساب جديد
+                إنشاء حساب جديد مجاناً
               </button>
             </span>
           ) : (
@@ -251,18 +279,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
               </button>
             </span>
           )}
-        </div>
-
-        {/* Quick Demo Login Button */}
-        <div className="pt-1">
-          <button
-            type="button"
-            onClick={handleQuickDemo}
-            className="w-full py-2.5 px-3 bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4 text-[#2563EB]" />
-            <span>تسجيل دخول تجريبي فوري (Demo Merchant)</span>
-          </button>
         </div>
       </div>
     </div>

@@ -1,18 +1,35 @@
 import { BrandTheme } from '../types/store';
 
+const SAFE_COLOR_REGEX = /^(#[0-9a-fA-F]{3,8}|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)|hsla?\([^)]+\)|[a-zA-Z]{3,20})$/;
+const SAFE_FONT_REGEX = /^[a-zA-Z0-9\s\-_]+$/;
+
+function sanitizeCssColor(value: string | undefined, fallback: string): string {
+  if (!value || typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return SAFE_COLOR_REGEX.test(trimmed) ? trimmed : fallback;
+}
+
+function sanitizeFontFamily(value: string | undefined, fallback = 'Cairo'): string {
+  if (!value || typeof value !== 'string') return fallback;
+  const trimmed = value.trim().slice(0, 60);
+  return SAFE_FONT_REGEX.test(trimmed) ? trimmed : fallback;
+}
+
 /**
  * Dynamically loads a Google Font by name into document <head>
  */
 export function loadGoogleFont(fontName: string): void {
   if (!fontName || typeof document === 'undefined') return;
+  const safeFont = sanitizeFontFamily(fontName, '');
+  if (!safeFont) return;
 
-  const fontId = `google-font-${fontName.toLowerCase().replace(/\s+/g, '-')}`;
+  const fontId = `google-font-${safeFont.toLowerCase().replace(/\s+/g, '-')}`;
   if (document.getElementById(fontId)) return;
 
   const link = document.createElement('link');
   link.id = fontId;
   link.rel = 'stylesheet';
-  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@300;400;500;600;700;800;900&display=swap`;
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(safeFont)}:wght@300;400;500;600;700;800;900&display=swap`;
   document.head.appendChild(link);
 }
 
@@ -23,9 +40,11 @@ export function loadGoogleFont(fontName: string): void {
 export function injectBrandThemeStyles(theme: BrandTheme): void {
   if (typeof document === 'undefined') return;
 
+  const safeFont = sanitizeFontFamily(theme.fontFamily, 'Cairo');
+
   // 1. Ensure the font is loaded
-  if (theme.fontFamily) {
-    loadGoogleFont(theme.fontFamily);
+  if (safeFont) {
+    loadGoogleFont(safeFont);
   }
 
   // 2. Inject or update CSS variables style tag
@@ -36,15 +55,15 @@ export function injectBrandThemeStyles(theme: BrandTheme): void {
     document.head.appendChild(styleEl);
   }
 
-  const primary = theme.primaryColor || '#0B253F';
-  const accent = theme.accentColor || '#0077FF';
-  const secondaryAccent = theme.secondaryAccentColor || accent;
-  const highlight = theme.highlightColor || '#A5F3B6';
-  const bg = theme.backgroundColor || '#F8F3ED';
-  const neutral = theme.neutralColor || '#E4E7EB';
-  const text = theme.textColor || primary;
-  const font = theme.fontFamily || 'Cairo';
-  const radius = theme.borderRadius ?? 12;
+  const primary = sanitizeCssColor(theme.primaryColor, '#0B253F');
+  const accent = sanitizeCssColor(theme.accentColor, '#0077FF');
+  const secondaryAccent = sanitizeCssColor(theme.secondaryAccentColor, accent);
+  const highlight = sanitizeCssColor(theme.highlightColor, '#A5F3B6');
+  const bg = sanitizeCssColor(theme.backgroundColor, '#F8FAFC');
+  const neutral = sanitizeCssColor(theme.neutralColor, '#E4E7EB');
+  const text = sanitizeCssColor(theme.textColor, primary);
+  const rawRadius = Number(theme.borderRadius ?? 12);
+  const radius = Number.isFinite(rawRadius) ? Math.min(Math.max(rawRadius, 0), 48) : 12;
 
   styleEl.textContent = `
     :root {
@@ -55,7 +74,7 @@ export function injectBrandThemeStyles(theme: BrandTheme): void {
       --brand-bg: ${bg};
       --brand-neutral: ${neutral};
       --brand-text: ${text};
-      --brand-font: '${font}', 'Cairo', system-ui, sans-serif;
+      --brand-font: '${safeFont}', 'Cairo', system-ui, sans-serif;
       --brand-radius: ${radius}px;
     }
 

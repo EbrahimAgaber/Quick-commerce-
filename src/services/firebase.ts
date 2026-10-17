@@ -1,43 +1,55 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, FirebaseApp } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut as fbSignOut, 
   onAuthStateChanged,
-  User as FirebaseUser
+  User as FirebaseUser,
+  Auth
 } from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
-  getDocFromServer,
   setDoc,
-  getDoc
+  Firestore
 } from 'firebase/firestore';
-import rawFirebaseConfig from '../../firebase-applet-config.json';
 import { MerchantUser } from '../types/store';
 
-// Resolved configuration prefers secure VITE_ environment variables (recommended for production)
+// Resolved configuration from secure VITE_ environment variables
 export const resolvedFirebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || rawFirebaseConfig.apiKey || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || rawFirebaseConfig.authDomain || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || rawFirebaseConfig.projectId || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || rawFirebaseConfig.storageBucket || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || rawFirebaseConfig.messagingSenderId || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || rawFirebaseConfig.appId || '',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'impressive-toolbox-3lcf1.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'impressive-toolbox-3lcf1',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'impressive-toolbox-3lcf1.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
 };
 
 export const firestoreDatabaseId = 
   import.meta.env.VITE_FIREBASE_DATABASE_ID || 
-  rawFirebaseConfig.firestoreDatabaseId || 
   '(default)';
 
-// Initialize Firebase
-const app = initializeApp(resolvedFirebaseConfig);
+export const isFirebaseConfigured = Boolean(
+  resolvedFirebaseConfig.apiKey && 
+  resolvedFirebaseConfig.apiKey !== 'your-firebase-api-key'
+);
 
-// CRITICAL: The app will break without specifying firestoreDatabaseId
-export const db = getFirestore(app, firestoreDatabaseId);
-export const auth = getAuth(app);
+// Initialize Firebase safely so missing env vars during initial setup never crash the app
+const app: FirebaseApp = initializeApp(
+  isFirebaseConfigured
+    ? resolvedFirebaseConfig
+    : {
+        ...resolvedFirebaseConfig,
+        apiKey: 'AIzaSyDummyKeyForBuildSafety00000000000',
+      }
+);
+
+export const db: Firestore = getFirestore(app, firestoreDatabaseId);
+export const auth: Auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -54,84 +66,13 @@ export function mapFirebaseUser(fbUser: FirebaseUser): MerchantUser {
   };
 }
 
-// Test connection on boot per Firebase skill guidelines
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn("Please check your Firebase configuration or network status.");
-    }
-  }
-}
-testConnection();
-
-// Structured Firestore error handling
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-export interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-    tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
-  };
-}
-
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || []
-    },
-    operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
 /**
- * Sign in with Google Popup and upsert merchant profile
+ * Syncs the authenticated merchant profile to Firestore /merchants/{uid}
  */
-export async function signInWithGoogle(): Promise<MerchantUser> {
-  const result = await signInWithPopup(auth, googleProvider);
-  const fbUser = result.user;
-
-  const merchant: MerchantUser = {
-    id: fbUser.uid,
-    name: fbUser.displayName || fbUser.email?.split('@')[0] || 'تاجر Quick E-Commerce',
-    email: fbUser.email || '',
-    avatarUrl: fbUser.photoURL || undefined,
-    createdAt: new Date().toISOString()
-  };
-
-  // Sync to Firestore merchants collection
+async function syncMerchantProfileToFirestore(merchant: MerchantUser): Promise<void> {
+  if (!isFirebaseConfigured) return;
   try {
-    const merchantRef = doc(db, 'merchants', fbUser.uid);
+    const merchantRef = doc(db, 'merchants', merchant.id);
     await setDoc(merchantRef, {
       id: merchant.id,
       name: merchant.name,
@@ -142,15 +83,76 @@ export async function signInWithGoogle(): Promise<MerchantUser> {
   } catch (err) {
     console.warn('Could not save merchant record to Firestore:', err);
   }
+}
 
+/**
+ * Sign in with Google Popup and upsert merchant profile
+ */
+export async function signInWithGoogle(): Promise<MerchantUser> {
+  if (!isFirebaseConfigured) {
+    throw new Error('FIREBASE_NOT_CONFIGURED');
+  }
+  const result = await signInWithPopup(auth, googleProvider);
+  const merchant = mapFirebaseUser(result.user);
+  await syncMerchantProfileToFirestore(merchant);
   return merchant;
+}
+
+/**
+ * Sign in with Email & Password via Firebase Auth
+ */
+export async function signInWithEmail(email: string, password: string): Promise<MerchantUser> {
+  if (!isFirebaseConfigured) {
+    throw new Error('FIREBASE_NOT_CONFIGURED');
+  }
+  const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+  const merchant = mapFirebaseUser(result.user);
+  await syncMerchantProfileToFirestore(merchant);
+  return merchant;
+}
+
+/**
+ * Register a new Merchant account with Email, Password & Display Name via Firebase Auth
+ */
+export async function registerWithEmail(name: string, email: string, password: string): Promise<MerchantUser> {
+  if (!isFirebaseConfigured) {
+    throw new Error('FIREBASE_NOT_CONFIGURED');
+  }
+  const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  if (name.trim()) {
+    await updateProfile(result.user, { displayName: name.trim() });
+  }
+  const merchant: MerchantUser = {
+    id: result.user.uid,
+    name: name.trim() || result.user.email?.split('@')[0] || 'تاجر',
+    email: result.user.email || email.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  await syncMerchantProfileToFirestore(merchant);
+  return merchant;
+}
+
+/**
+ * Retrieves the current user's Firebase ID Token for authenticated API calls
+ */
+export async function getFirebaseIdToken(): Promise<string | null> {
+  if (!auth.currentUser) return null;
+  try {
+    return await auth.currentUser.getIdToken();
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Sign out from Firebase Auth
  */
 export async function signOutFromFirebase(): Promise<void> {
-  await fbSignOut(auth);
+  try {
+    await fbSignOut(auth);
+  } catch (e) {
+    console.warn('Firebase signOut notice:', e);
+  }
 }
 
 /**

@@ -31,7 +31,7 @@
     },
     "store": {
       "title": "Store",
-      "description": "Merchant store record with settings, products, and configurations",
+      "description": "Public merchant store catalog, settings, and policies (never stores customer orders)",
       "type": "object",
       "properties": {
         "id": {
@@ -66,20 +66,48 @@
           "type": "array",
           "description": "Product catalog"
         },
-        "orders": {
-          "type": "array",
-          "description": "Store orders"
-        },
         "policies": {
           "type": "array",
           "description": "Store policies"
-        },
-        "googleSheetConfig": {
-          "type": "object",
-          "description": "Google Sheet connection settings"
         }
       },
       "required": ["id", "ownerId", "slug", "storeName"]
+    },
+    "order": {
+      "title": "Order",
+      "description": "Customer order record isolated inside /stores/{storeId}/orders/{orderId}",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "city": { "type": "string" },
+        "deliveryAddress": { "type": "string" },
+        "landmarkNotes": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "itemsSummary": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "shippingFee": { "type": "number" },
+        "grandTotal": { "type": "number" },
+        "status": { "type": "string" },
+        "trackingNotes": { "type": "string" }
+      },
+      "required": [
+        "id",
+        "timestamp",
+        "customerName",
+        "customerPhone",
+        "city",
+        "deliveryAddress",
+        "paymentMethod",
+        "items",
+        "subtotal",
+        "shippingFee",
+        "grandTotal",
+        "status"
+      ]
     }
   },
   "firestore": {
@@ -89,7 +117,11 @@
     },
     "/stores/{storeId}": {
       "schema": "store",
-      "description": "Collection of stores created by merchants"
+      "description": "Public store catalogs created by merchants"
+    },
+    "/stores/{storeId}/orders/{orderId}": {
+      "schema": "order",
+      "description": "Isolated customer orders per store"
     }
   }
 }

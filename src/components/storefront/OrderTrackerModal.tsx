@@ -1,24 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { Order, OrderStatus, StoreSettings } from '../../types/store';
+import { StoreManager } from '../../services/storeManager';
 import { 
   X, 
   Search, 
   PackageCheck, 
   Clock, 
-  Scissors, 
+  Package, 
   Truck, 
   CheckCircle2, 
   XCircle, 
   MessageCircle,
   MapPin,
   Calendar,
-  CreditCard
+  CreditCard,
+  Loader2
 } from 'lucide-react';
 import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
 
 interface OrderTrackerModalProps {
   isOpen: boolean;
   onClose: () => void;
+  storeId: string;
   orders: Order[];
   settings: StoreSettings;
   initialOrderId?: string;
@@ -33,9 +36,9 @@ const STEPS: { status: OrderStatus; label: string; desc: string; icon: any }[] =
   },
   {
     status: 'In Progress',
-    label: 'قيد التجهيز والتفصيل',
-    desc: 'الطلب في المشغل للخياطة، الكي، والتغليف المعطر',
-    icon: Scissors,
+    label: 'قيد التجهيز',
+    desc: 'جاري تجهيز وتغليف المنتجات المطلوبة',
+    icon: Package,
   },
   {
     status: 'Out for Delivery',
@@ -54,6 +57,7 @@ const STEPS: { status: OrderStatus; label: string; desc: string; icon: any }[] =
 export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
   isOpen,
   onClose,
+  storeId,
   orders,
   settings,
   initialOrderId = '',
@@ -63,26 +67,32 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
   const [searchId, setSearchId] = useState(initialOrderId);
   const [searchedOrder, setSearchedOrder] = useState<Order | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
+    // Only auto-search if the customer just completed an order and clicked "Track This Order"
     if (initialOrderId) {
       setSearchId(initialOrderId);
       handleSearch(initialOrderId);
-    } else if (orders.length > 0) {
-      // Default to the first order for instant preview demo
-      setSearchId(orders[0].id);
-      setSearchedOrder(orders[0]);
-      setHasSearched(true);
+    } else {
+      setSearchId('');
+      setSearchedOrder(null);
+      setHasSearched(false);
     }
-  }, [initialOrderId, orders]);
+  }, [initialOrderId]);
 
-  const handleSearch = (idToSearch: string) => {
+  const handleSearch = async (idToSearch: string) => {
     const cleanId = idToSearch.toUpperCase().trim().replace('#', '');
     if (!cleanId) return;
 
-    const found = orders.find((o) => o.id.toUpperCase().trim() === cleanId);
-    setSearchedOrder(found || null);
-    setHasSearched(true);
+    setIsSearching(true);
+    try {
+      const found = await StoreManager.lookupOrderById(storeId, cleanId, orders);
+      setSearchedOrder(found || null);
+      setHasSearched(true);
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const getStepIndex = (status: OrderStatus): number => {
@@ -105,7 +115,7 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
   const currentStepIdx = searchedOrder ? getStepIndex(searchedOrder.status) : 0;
 
   const handleInquireWhatsApp = (order: Order) => {
-    const text = `مرحباً متجر ${settings.storeName}، أود الاستفسار عن حالة طلبي رقم #${order.id} باسم ${order.customerName}.`;
+    const text = `مرحباً متجر ${settings.storeName}، أود الاستفسار عن حالة طلبي رقم #${order.id}.`;
     const url = createWhatsAppUrl(settings.whatsappNumber, text);
     window.open(url, '_blank');
   };
@@ -118,7 +128,7 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-stone-200 bg-stone-50 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
               <PackageCheck className="w-5 h-5" />
             </div>
             <div>
@@ -126,14 +136,14 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                 تتبع حالة الطلب والشحنة
               </h3>
               <p className="text-xs text-stone-500">
-                مربوط مباشرة بجدول بيانات Google Sheet ويُحدّث في الوقت الفعلي
+                أدخل رقم الطلب المرفق في فاتورتك لمتابعة حالة التجهيز والتوصيل
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-stone-200 text-stone-600 hover:text-stone-900 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full bg-stone-200 text-stone-600 hover:text-stone-900 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -144,7 +154,7 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
           {/* Search Box */}
           <div className="space-y-2">
             <label className="block text-xs font-bold text-stone-700">
-              أدخلي رقم الطلب الخاص بكِ (مثال: BA-4821 أو BA-3209):
+              أدخل رقم الطلب الخاص بك (مثال: BA-4821):
             </label>
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -154,37 +164,20 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                   onChange={(e) => setSearchId(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch(searchId)}
                   placeholder="رقم الطلب (BA-XXXX)"
-                  className="w-full pr-10 pl-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-600"
+                  className="w-full pr-10 pl-4 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-600"
                 />
                 <Search className="absolute right-3 top-3 w-4 h-4 text-stone-400" />
               </div>
 
               <button
                 onClick={() => handleSearch(searchId)}
-                className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs sm:text-sm font-bold transition-all"
+                disabled={isSearching || !searchId.trim()}
+                className="px-5 py-2.5 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                بحث
+                {isSearching && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>بحث</span>
               </button>
             </div>
-
-            {/* Quick Demo Pill Links */}
-            {orders.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-stone-500 pt-1">
-                <span>طلبات سريعة للتجربة:</span>
-                {orders.slice(0, 4).map((o) => (
-                  <button
-                    key={o.id}
-                    onClick={() => {
-                      setSearchId(o.id);
-                      handleSearch(o.id);
-                    }}
-                    className="font-mono text-amber-700 hover:underline bg-stone-100 px-2 py-0.5 rounded"
-                  >
-                    #{o.id}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Searched Order Result */}
@@ -233,7 +226,7 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                       : searchedOrder.status === 'Out for Delivery'
                       ? 'جاري التوصيل'
                       : searchedOrder.status === 'In Progress'
-                      ? 'قيد التجهيز والتفصيل'
+                      ? 'قيد التجهيز'
                       : searchedOrder.status === 'Cancelled'
                       ? 'ملغي'
                       : 'تم الاستلام'}
@@ -247,7 +240,6 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                   <h4 className="text-xs font-bold text-stone-700 mb-4">مسار تجهيز وشحن الطلب:</h4>
 
                   <div className="relative">
-                    {/* Stepper items */}
                     <div className="space-y-6 sm:space-y-0 sm:grid sm:grid-cols-4 gap-2">
                       {STEPS.map((step, idx) => {
                         const Icon = step.icon;
@@ -258,21 +250,19 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                           <div
                             key={step.status}
                             className={`flex sm:flex-col items-center sm:items-center text-right sm:text-center gap-3 sm:gap-2 p-2 rounded-xl transition-all ${
-                              isCurrent ? 'bg-amber-50/80 ring-1 ring-amber-300' : ''
+                              isCurrent ? 'bg-blue-50/80 ring-1 ring-blue-300' : ''
                             }`}
                           >
-                            {/* Icon bubble */}
                             <div
                               className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold transition-all ${
                                 isDone
-                                  ? 'bg-stone-900 text-amber-400 ring-4 ring-amber-100'
+                                  ? 'bg-stone-900 text-white ring-4 ring-blue-100'
                                   : 'bg-stone-100 text-stone-400 border border-stone-200'
                               }`}
                             >
                               <Icon className="w-5 h-5" />
                             </div>
 
-                            {/* Label & Description */}
                             <div className="flex-1 sm:flex-initial">
                               <h5
                                 className={`text-xs font-bold leading-tight ${
@@ -303,12 +293,12 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                 </div>
               )}
 
-              {/* Courier Tracking Notes (Synced from Sheet) */}
+              {/* Courier Tracking Notes */}
               {searchedOrder.trackingNotes && (
-                <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/70 text-xs space-y-1">
-                  <span className="font-bold text-amber-900 flex items-center gap-1.5">
-                    <Truck className="w-4 h-4 text-amber-700" />
-                    ملاحظات التتبع وبوليصة الشحن (تحديث مباشر من الجدول):
+                <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-200/70 text-xs space-y-1">
+                  <span className="font-bold text-blue-900 flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-blue-700" />
+                    ملاحظات التتبع والشحن:
                   </span>
                   <p className="text-stone-700 font-medium leading-relaxed">
                     {searchedOrder.trackingNotes}
@@ -316,17 +306,16 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                 </div>
               )}
 
-              {/* Customer & Delivery Summary */}
+              {/* Privacy-Safe Summary */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-1">
                   <span className="font-bold text-stone-800 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-stone-500" />
-                    وجهة التوصيل:
+                    مدينة التوصيل:
                   </span>
-                  <p className="text-stone-700">
-                    {searchedOrder.customerName} - {searchedOrder.city}
+                  <p className="text-stone-700 font-semibold">
+                    {searchedOrder.city}
                   </p>
-                  <p className="text-stone-500 text-[11px]">{searchedOrder.deliveryAddress}</p>
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-1">
@@ -335,7 +324,7 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                     طريقة الدفع والمبلغ:
                   </span>
                   <p className="text-stone-700">{searchedOrder.paymentMethod}</p>
-                  <p className="text-amber-800 font-bold text-sm">
+                  <p className="text-stone-900 font-bold text-sm">
                     {searchedOrder.grandTotal.toLocaleString('ar-SA')} {settings.currency}
                   </p>
                 </div>
@@ -350,13 +339,15 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
               </div>
 
               {/* Inquire on WhatsApp */}
-              <button
-                onClick={() => handleInquireWhatsApp(searchedOrder)}
-                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-colors"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>مراسلة المتجر عبر واتساب بخصوص هذا الطلب</span>
-              </button>
+              {settings.whatsappNumber && (
+                <button
+                  onClick={() => handleInquireWhatsApp(searchedOrder)}
+                  className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>مراسلة المتجر عبر واتساب بخصوص هذا الطلب</span>
+                </button>
+              )}
             </div>
           ) : hasSearched ? (
             <div className="py-12 text-center space-y-2">
