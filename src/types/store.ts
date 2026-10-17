@@ -15,18 +15,27 @@ export interface BrandTheme {
   primaryColor: string; // e.g. #0B253F (Main brand headers & high contrast)
   accentColor: string; // e.g. #0077FF (Primary CTA & buttons)
   highlightColor: string; // e.g. #A5F3B6 (Badges & discounts)
-  backgroundColor: string; // e.g. #F8F3ED (Page background)
+  backgroundColor: string; // e.g. #F8FAFC (Page background)
   neutralColor: string; // e.g. #E4E7EB (Borders & cards)
   textColor: string; // e.g. #0B253F (Body text & labels)
-  secondaryAccentColor?: string; // Brand-specific secondary accent (e.g. #FF6B35, #8B5CF6)
+  secondaryAccentColor?: string; // Brand-specific secondary accent
   fontFamily: string; // Google Font family name
   customGoogleFont?: string; // Custom Google Font user input
   borderRadius: number; // e.g. 12
 }
 
+export interface PromoCode {
+  code: string; // e.g. 'EID20'
+  type: 'percentage' | 'fixed';
+  value: number; // e.g. 20 (%) or 50 (currency)
+  minOrderAmount?: number;
+  active: boolean;
+}
+
 export interface StoreSettings {
   storeName: string;
   storeSubtitle?: string;
+  businessType?: string;
   logoLetter?: string;
   logoUrl?: string;
   tagline: string;
@@ -53,6 +62,7 @@ export interface StoreSettings {
   heroSubtitle?: string;
   announcementText: string;
   deliveryEstimationDays: string;
+  promoCodes?: PromoCode[];
   googleWebAppUrl?: string;
 }
 
@@ -68,6 +78,7 @@ export interface Product {
   description: string;
   featured: boolean;
   inStock: boolean;
+  stockQuantity?: number;
   fabricComposition?: string;
   colorName?: string;
 }
@@ -95,6 +106,8 @@ export interface Order {
   itemsSummary: string;
   items: OrderItem[];
   subtotal: number;
+  discountCode?: string;
+  discountAmount?: number;
   shippingFee: number;
   grandTotal: number;
   status: OrderStatus;
@@ -139,5 +152,5 @@ export interface StoreInstance {
   products: Product[];
   orders: Order[];
   policies: StorePolicy[];
-  googleSheetConfig: GoogleSheetConfig;
+  googleSheetConfig?: GoogleSheetConfig;
 }

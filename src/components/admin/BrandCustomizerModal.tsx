@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StoreSettings, BrandTheme } from '../../types/store';
 import { BRAND_PRESETS, MODERN_RETAIL_THEME } from '../../services/storeStorage';
 import { injectBrandThemeStyles, loadGoogleFont } from '../../utils/themeInjector';
+import { compressImageFile } from '../../utils/imageUploader';
 import { 
   Palette, 
   X, 
@@ -11,10 +12,10 @@ import {
   Paintbrush, 
   RotateCcw, 
   Layout, 
-  Plus,
-  Sliders,
   SlidersHorizontal,
-  Download
+  Download,
+  Upload,
+  Trash2
 } from 'lucide-react';
 
 interface BrandCustomizerModalProps {
@@ -31,7 +32,6 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
   onClose,
   settings,
   onSaveSettings,
-  onResetToDefault,
   onClearAllProducts,
 }) => {
   if (!isOpen) return null;
@@ -50,6 +50,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
   );
   const [fontTestMessage, setFontTestMessage] = useState<string | null>(null);
   const [showSavedNotification, setShowSavedNotification] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // Live injection whenever brandTheme changes
   useEffect(() => {
@@ -57,6 +58,28 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
       injectBrandThemeStyles(formData.brandTheme);
     }
   }, [formData.brandTheme]);
+
+  const handleCloseWithoutSaving = () => {
+    // Revert live-injected CSS variables back to the saved settings
+    if (settings.brandTheme) {
+      injectBrandThemeStyles(settings.brandTheme);
+    }
+    onClose();
+  };
+
+  const handleLogoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    try {
+      const dataUrl = await compressImageFile(file, 300, 0.85);
+      setFormData((prev) => ({ ...prev, logoUrl: dataUrl }));
+    } catch {
+      // Ignore error
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const handleThemeChange = (key: keyof BrandTheme, value: any) => {
     setFormData((prev) => {
@@ -131,7 +154,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/70 backdrop-blur-xs">
-      <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0" onClick={handleCloseWithoutSaving} aria-hidden="true" />
 
       <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl overflow-hidden z-10 border border-stone-200 my-auto flex flex-col max-h-[92vh]">
         {/* Header */}
@@ -154,7 +177,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
           </div>
 
           <button
-            onClick={onClose}
+            onClick={handleCloseWithoutSaving}
             className="w-8 h-8 rounded-full bg-stone-200 text-stone-600 hover:text-stone-900 flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -564,9 +587,51 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
                 </div>
               </div>
 
+              {/* Store Logo Uploader */}
+              <div className="p-3.5 bg-stone-50 border border-stone-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-base text-white shadow-xs overflow-hidden shrink-0"
+                    style={{ backgroundColor: formData.brandTheme.primaryColor }}
+                  >
+                    {formData.logoUrl ? (
+                      <img src={formData.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{formData.logoLetter || 'S'}</span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-bold text-stone-800">شعار المتجر المصور (Logo Image)</div>
+                    <p className="text-[11px] text-stone-500">ارفع شعار نشاطك التجاري من جهازك أو اترك حرف الشعار</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="px-3 py-2 bg-white hover:bg-stone-100 border border-stone-200 rounded-xl text-xs font-bold text-stone-700 flex items-center gap-1.5 cursor-pointer">
+                    <Upload className="w-3.5 h-3.5 text-[#2563EB]" />
+                    <span>{uploadingLogo ? 'جاري الضغط...' : 'رفع صورة الشعار'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  {formData.logoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, logoUrl: '' })}
+                      className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl cursor-pointer"
+                      title="حذف الشعار المصور"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold text-stone-800 mb-1">حرف الشعار (Monogram)</label>
+                  <label className="block font-bold text-stone-800 mb-1">حرف الشعار البديل (Monogram)</label>
                   <input
                     type="text"
                     maxLength={3}
@@ -639,7 +704,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
           {activeTab === 'presets' && (
             <div className="space-y-4">
               <p className="text-xs text-stone-600">
-                اختاري أحد النماذج الجاهزة لتطبيق هويتها اللونية ونمطها فورياً بضغطة زر واحدة:
+                اختر أحد النماذج الجاهزة لتطبيق هويتها اللونية ونمطها فورياً بضغطة زر واحدة:
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -698,34 +763,24 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
                 })}
               </div>
 
-              {/* Reset to Default Modern Retail */}
+              {/* Reset Theme Colors ONLY (Preserves Store Name & Contact Details) */}
               <div className="pt-4 border-t border-stone-200 flex flex-wrap items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     handleApplyPreset(MODERN_RETAIL_THEME);
-                    setFormData({
-                      ...formData,
-                      storeName: 'أورورا ريتيل | Aurora Store',
-                      storeSubtitle: 'تشكيلة حصرية منتقاة بعناية',
-                      logoLetter: 'A',
-                      websiteUrl: '',
-                      whatsappNumber: '966500000000',
-                      supportPhone: '+966 50 000 0000',
-                      brandTheme: MODERN_RETAIL_THEME,
-                    });
                   }}
                   className="px-3.5 py-2 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>استعادة هوية المتجر العصرية الافتراضية (Aurora Modern)</span>
+                  <span>استعادة ألوان وخطوط النمط الافتراضي (مع الحفاظ على بيانات متجرك)</span>
                 </button>
 
                 {onClearAllProducts && (
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm('هل ترغبين في تفريغ المتجر للبدء بمتجر فارغ تماماً وإضافة منتجاتك الخاصة؟')) {
+                      if (confirm('هل ترغب في تفريغ المتجر للبدء بمتجر فارغ تماماً وإضافة منتجاتك الخاصة؟')) {
                         onClearAllProducts();
                         onClose();
                       }
@@ -742,13 +797,13 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
           {/* Footer Submit */}
           <div className="pt-4 border-t border-stone-200 flex items-center justify-between">
             <span className="text-xs text-stone-500">
-              💡 التعديلات تُحقن فورياً في أنماط Tailwind وتنعكس على المتجر المباشر.
+              💡 التعديلات تُحقن فورياً في أنماط المتجر للمعاينة المباشرة.
             </span>
 
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleCloseWithoutSaving}
                 className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 إلغاء

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Product, StoreSettings } from '../../types/store';
 import { ProductCard } from './ProductCard';
-import { ArrowDownAZ, ArrowUpZA, Sparkles, SearchX } from 'lucide-react';
+import { SearchX } from 'lucide-react';
 
 interface ProductGridProps {
   products: Product[];
@@ -22,19 +22,38 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   onResetFilters,
   isFiltered,
 }) => {
-  const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc'>('default');
+  const [sortBy, setSortBy] = useState<'default' | 'newest' | 'discount' | 'price-asc' | 'price-desc'>('default');
 
-  const sortedProducts = [...products].sort((a, b) => {
-    const priceA = a.salePrice ?? a.price;
-    const priceB = b.salePrice ?? b.price;
+  const brand = settings.brandTheme || {
+    primaryColor: '#0B253F',
+    accentColor: '#0077FF',
+  };
 
-    if (sortBy === 'price-asc') return priceA - priceB;
-    if (sortBy === 'price-desc') return priceB - priceA;
-    // Default: featured first, then keep original order
-    if (a.featured && !b.featured) return -1;
-    if (!a.featured && b.featured) return 1;
-    return 0;
-  });
+  const sortedProducts = useMemo(() => {
+    return [...products].sort((a, b) => {
+      const priceA = (a.salePrice && a.salePrice > 0 && a.salePrice < a.price) ? a.salePrice : a.price;
+      const priceB = (b.salePrice && b.salePrice > 0 && b.salePrice < b.price) ? b.salePrice : b.price;
+
+      if (sortBy === 'price-asc') return priceA - priceB;
+      if (sortBy === 'price-desc') return priceB - priceA;
+      if (sortBy === 'discount') {
+        const discA = (a.salePrice && a.salePrice > 0 && a.price > 0 && a.salePrice < a.price)
+          ? (a.price - a.salePrice) / a.price
+          : 0;
+        const discB = (b.salePrice && b.salePrice > 0 && b.price > 0 && b.salePrice < b.price)
+          ? (b.price - b.salePrice) / b.price
+          : 0;
+        return discB - discA;
+      }
+      if (sortBy === 'newest') {
+        return b.id.localeCompare(a.id);
+      }
+      // Default: featured first, then keep original order
+      if (a.featured && !b.featured) return -1;
+      if (!a.featured && b.featured) return 1;
+      return 0;
+    });
+  }, [products, sortBy]);
 
   return (
     <div className="space-y-4">
@@ -48,7 +67,8 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
           {isFiltered && (
             <button
               onClick={onResetFilters}
-              className="text-amber-600 hover:text-amber-700 underline text-xs mr-2"
+              className="underline text-xs mr-2 font-semibold cursor-pointer"
+              style={{ color: brand.accentColor }}
             >
               إلغاء التصفية
             </button>
@@ -60,9 +80,11 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="bg-white border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            className="bg-white border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-800 focus:outline-none"
           >
-            <option value="default">المميز والأحدث</option>
+            <option value="default">المميز والأكثر طلباً</option>
+            <option value="newest">الأحدث إضافة</option>
+            <option value="discount">العروض والخصومات</option>
             <option value="price-asc">السعر: من الأقل للأعلى</option>
             <option value="price-desc">السعر: من الأعلى للأقل</option>
           </select>
@@ -90,11 +112,12 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
           </div>
           <h3 className="text-base font-bold text-stone-800">لم يتم العثور على أي منتج</h3>
           <p className="text-xs text-stone-500">
-            جربي البحث بكلمات أخرى أو تصفح جميع الأقسام لإيجاد ما يناسبكِ.
+            جرب البحث بكلمات أخرى أو تصفح جميع الأقسام لإيجاد ما يناسبك.
           </p>
           <button
             onClick={onResetFilters}
-            className="px-4 py-2 bg-stone-900 text-white text-xs font-semibold rounded-xl hover:bg-stone-800 transition-colors"
+            className="px-4 py-2 text-white text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
+            style={{ backgroundColor: brand.primaryColor }}
           >
             عرض كافة المنتجات
           </button>

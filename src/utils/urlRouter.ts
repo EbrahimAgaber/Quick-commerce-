@@ -1,0 +1,128 @@
+/**
+ * URL Router & Arabic Transliteration Helper
+ * Supports both clean URLs (`/s/<slug>`) and query strings (`/?store=<slug>&product=<id>`),
+ * and converts Arabic store names into clean, readable Latin slugs (e.g. "متجر رونق" -> "mtjr-rwnq" or "rawnaq").
+ */
+
+const ARABIC_TO_LATIN_MAP: Record<string, string> = {
+  'ا': 'a', 'أ': 'a', 'إ': 'e', 'آ': 'a', 'ٱ': 'a',
+  'ب': 'b', 'ت': 't', 'ث': 'th', 'ج': 'j', 'ح': 'h',
+  'خ': 'kh', 'د': 'd', 'ذ': 'dh', 'ر': 'r', 'ز': 'z',
+  'س': 's', 'ش': 'sh', 'ص': 's', 'ض': 'd', 'ط': 't',
+  'ظ': 'z', 'ع': 'a', 'غ': 'gh', 'ف': 'f', 'ق': 'q',
+  'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n', 'ه': 'h',
+  'ة': 'a', 'و': 'w', 'ؤ': 'o', 'ي': 'y', 'ى': 'a',
+  'ئ': 'e', 'ء': '',
+  '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+  '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+};
+
+const COMMON_ARABIC_WORDS: Record<string, string> = {
+  'متجر': 'store',
+  'بوتيك': 'boutique',
+  'عطور': 'perfumes',
+  'العطور': 'perfumes',
+  'قهوة': 'coffee',
+  'كافيه': 'cafe',
+  'ازياء': 'fashion',
+  'أزياء': 'fashion',
+  'عبايات': 'abayas',
+  'مجوهرات': 'jewelry',
+  'ساعات': 'watches',
+  'الكترونيات': 'tech',
+  'إلكترونيات': 'tech',
+  'تمور': 'dates',
+  'حلويات': 'sweets',
+  'ورود': 'flowers',
+  'زهور': 'flowers',
+  'دار': 'dar',
+  'بيت': 'bait',
+  'مؤسسة': 'est',
+  'شركة': 'co',
+};
+
+/**
+ * Generates a clean URL slug from an Arabic or English store name
+ */
+export function generateCleanStoreSlug(input: string, fallbackPrefix = 'shop'): string {
+  if (!input || !input.trim()) {
+    return `${fallbackPrefix}-${Math.floor(100 + Math.random() * 900)}`;
+  }
+
+  // Replace common whole Arabic words first for cleaner English slugs
+  let processed = input.trim().toLowerCase();
+  const words = processed.split(/\s+/);
+  const translatedWords = words.map((w) => {
+    const stripped = w.replace(/[^\u0600-\u06FFa-z0-9]/g, '');
+    if (COMMON_ARABIC_WORDS[stripped]) {
+      return COMMON_ARABIC_WORDS[stripped];
+    }
+    let out = '';
+    for (const ch of stripped) {
+      if (ARABIC_TO_LATIN_MAP[ch] !== undefined) {
+        out += ARABIC_TO_LATIN_MAP[ch];
+      } else if (/[a-z0-9-_]/.test(ch)) {
+        out += ch;
+      }
+    }
+    return out;
+  });
+
+  const slug = translatedWords
+    .filter(Boolean)
+    .join('-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 40);
+
+  return slug || `${fallbackPrefix}-${Math.floor(100 + Math.random() * 900)}`;
+}
+
+export interface ParsedStoreRoute {
+  storeSlug: string | null;
+  productId: string | null;
+  viewParam: string | null;
+}
+
+/**
+ * Extracts store slug, product ID, and view mode from either `/s/:slug` pathname or `?store=:slug&product=:id`
+ */
+export function parseStoreRouteFromLocation(loc: Location = window.location): ParsedStoreRoute {
+  try {
+    const params = new URLSearchParams(loc.search);
+    const queryStore = params.get('store')?.trim() || null;
+    const productId = params.get('product')?.trim() || null;
+    const viewParam = params.get('view')?.trim() || null;
+
+    if (queryStore) {
+      return { storeSlug: queryStore, productId, viewParam };
+    }
+
+    // Check clean path `/s/:slug`
+    const pathSegments = loc.pathname.split('/').filter(Boolean);
+    if (pathSegments.length >= 2 && pathSegments[0].toLowerCase() === 's') {
+      return {
+        storeSlug: decodeURIComponent(pathSegments[1]),
+        productId,
+        viewParam,
+      };
+    }
+
+    return { storeSlug: null, productId, viewParam };
+  } catch {
+    return { storeSlug: null, productId: null, viewParam: null };
+  }
+}
+
+/**
+ * Builds the shareable customer storefront URL for a store (and optional product deep link)
+ */
+export function buildShareableStoreUrl(storeSlug: string, productId?: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const cleanSlug = encodeURIComponent((storeSlug || '').trim());
+  if (productId) {
+    return `${origin}/?store=${cleanSlug}&product=${encodeURIComponent(productId)}`;
+  }
+  return `${origin}/?store=${cleanSlug}`;
+}

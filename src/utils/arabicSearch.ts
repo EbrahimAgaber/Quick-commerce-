@@ -1,6 +1,7 @@
 /**
  * Normalizes Arabic text for lightning-fast, diacritic-tolerant fuzzy search.
  * Handles Hamza variants (أ, إ, آ -> ا), Taa Marbuta (ة -> ه), Yaa/Alef Maqsura (ى -> ي),
+ * Persian/Urdu Kaf and Yeh (ک -> ك, ی/ے -> ي), Eastern Arabic numerals (٠-٩ -> 0-9),
  * strips Tashkeel (harakat/diacritics), and removes Tatweel/Kashida.
  */
 export function normalizeArabicText(text: string): string {
@@ -19,9 +20,11 @@ export function normalizeArabicText(text: string): string {
     .replace(/ة/g, 'ه')
     // Normalize Alef Maqsura to Yaa
     .replace(/ى/g, 'ي')
-    // Normalize Persian/Urdu Kaf and Yeh if entered
-    .replace(/ك/g, 'ك')
-    .replace(/ي/g, 'ي');
+    // Normalize Persian/Urdu Kaf (\u06A9) and Yeh (\u06CC, \u06D2)
+    .replace(/\u06A9/g, 'ك')
+    .replace(/[\u06CC\u06D2]/g, 'ي')
+    // Normalize Eastern Arabic numerals (٠-٩) to Western digits (0-9)
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
 }
 
 /**

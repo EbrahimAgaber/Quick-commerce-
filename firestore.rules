@@ -65,7 +65,8 @@ service cloud.firestore {
 
     // Stores collection (Public catalog read, strict owner-only write, no customer PII stored here)
     match /stores/{storeId} {
-      allow get, list: if true;
+      allow get: if true;
+      allow list: if request.query.limit <= 20;
       allow create: if isSignedIn() && isValidId(storeId) && isValidStore(request.resource.data);
       allow update: if isSignedIn() && isValidId(storeId) && resource.data.ownerId == request.auth.uid && isValidStore(request.resource.data);
       allow delete: if isSignedIn() && isValidId(storeId) && resource.data.ownerId == request.auth.uid;

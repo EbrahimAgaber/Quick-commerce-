@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Product, StoreSettings } from '../../types/store';
-import { Plus, Eye, Check } from 'lucide-react';
+import { Plus, Eye, Check, Flame, Package } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -10,27 +10,42 @@ interface ProductCardProps {
   isAddedJustNow?: boolean;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({
+const ProductCardComponent: React.FC<ProductCardProps> = ({
   product,
   settings,
   onSelectProduct,
   onQuickAdd,
   isAddedJustNow,
 }) => {
+  const [imgError, setImgError] = useState(false);
+
   const brand = settings.brandTheme || {
     primaryColor: '#0B253F',
     accentColor: '#0077FF',
     highlightColor: '#A5F3B6',
-    backgroundColor: '#F8F3ED',
+    backgroundColor: '#F8FAFC',
     neutralColor: '#E4E7EB',
     textColor: '#0B253F',
   };
 
-  const currentPrice = product.salePrice ?? product.price;
-  const hasDiscount = product.salePrice && product.salePrice < product.price;
+  const hasDiscount = Boolean(
+    typeof product.salePrice === 'number' &&
+      product.salePrice > 0 &&
+      product.price > 0 &&
+      product.salePrice < product.price
+  );
+  const currentPrice = hasDiscount ? product.salePrice! : product.price;
   const discountPercent = hasDiscount
     ? Math.round(((product.price - product.salePrice!) / product.price) * 100)
     : 0;
+
+  const isOutOfStock =
+    !product.inStock || (typeof product.stockQuantity === 'number' && product.stockQuantity <= 0);
+  const isLowStock =
+    !isOutOfStock &&
+    typeof product.stockQuantity === 'number' &&
+    product.stockQuantity > 0 &&
+    product.stockQuantity <= 5;
 
   return (
     <div
@@ -43,12 +58,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     >
       {/* Product Image Frame */}
       <div className="relative aspect-4/3 w-full overflow-hidden bg-stone-100">
-        <img
-          src={product.imageUrl}
-          alt={product.name}
-          loading="lazy"
-          className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
-        />
+        {!imgError && product.imageUrl ? (
+          <img
+            src={product.imageUrl}
+            alt={product.name}
+            loading="lazy"
+            decoding="async"
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-stone-100 text-stone-400 gap-1.5">
+            <Package className="w-8 h-8 opacity-60" />
+            <span className="text-[11px] font-medium">{product.name}</span>
+          </div>
+        )}
 
         {/* Top Badges */}
         <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 z-10">
@@ -68,13 +92,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               مميز ★
             </span>
           )}
+          {isLowStock && (
+            <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
+              <Flame className="w-3 h-3" />
+              <span>متبقي {product.stockQuantity} فقط</span>
+            </span>
+          )}
         </div>
 
         {/* Stock status overlay */}
-        {!product.inStock && (
+        {isOutOfStock && (
           <div className="absolute inset-0 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center">
             <span className="bg-white text-stone-900 text-xs font-bold px-3 py-1.5 rounded-lg border border-stone-200">
-              غير متوفر حالياً
+              نفدت الكمية
             </span>
           </div>
         )}
@@ -136,16 +166,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Quick add button */}
           <button
             onClick={(e) => onQuickAdd(product, e)}
-            disabled={!product.inStock}
-            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+            disabled={isOutOfStock}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               isAddedJustNow
                 ? 'bg-emerald-600 text-white'
-                : product.inStock
+                : !isOutOfStock
                 ? 'text-white hover:opacity-90 active:scale-95 shadow-xs'
                 : 'bg-stone-200 text-stone-400 cursor-not-allowed'
             }`}
-            style={{ backgroundColor: isAddedJustNow ? '#059669' : product.inStock ? brand.accentColor : '#E5E7EB' }}
-            title={product.inStock ? 'إضافة سريعة للسلة' : 'غير متوفر'}
+            style={{ backgroundColor: isAddedJustNow ? '#059669' : !isOutOfStock ? brand.accentColor : '#E5E7EB' }}
+            title={!isOutOfStock ? (product.variants?.length > 1 ? 'اختيار الخيار والإضافة' : 'إضافة سريعة للسلة') : 'غير متوفر'}
           >
             {isAddedJustNow ? (
               <Check className="w-4 h-4 animate-in zoom-in" />
@@ -158,3 +188,5 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     </div>
   );
 };
+
+export const ProductCard = React.memo(ProductCardComponent);

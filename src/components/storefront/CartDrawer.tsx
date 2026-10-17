@@ -1,6 +1,6 @@
-import React from 'react';
-import { CartItem, StoreSettings } from '../../types/store';
-import { X, Trash2, ShoppingBag, ArrowLeft, Sparkles, Truck } from 'lucide-react';
+import React, { useState } from 'react';
+import { CartItem, PromoCode, StoreSettings } from '../../types/store';
+import { X, Trash2, ShoppingBag, ArrowLeft, Sparkles, Truck, Tag, Check, Package } from 'lucide-react';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -12,6 +12,8 @@ interface CartDrawerProps {
   settings: StoreSettings;
   orderNotes: string;
   onOrderNotesChange: (notes: string) => void;
+  appliedPromo: PromoCode | null;
+  onApplyPromo: (promo: PromoCode | null) => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -24,29 +26,90 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   settings,
   orderNotes,
   onOrderNotesChange,
+  appliedPromo,
+  onApplyPromo,
 }) => {
   if (!isOpen) return null;
+
+  const [couponInput, setCouponInput] = useState(appliedPromo?.code || '');
+  const [couponError, setCouponError] = useState<string | null>(null);
 
   const brand = settings.brandTheme || {
     primaryColor: '#0B253F',
     accentColor: '#0077FF',
     highlightColor: '#A5F3B6',
-    backgroundColor: '#F8F3ED',
+    backgroundColor: '#F8FAFC',
     neutralColor: '#E4E7EB',
     textColor: '#0B253F',
   };
 
   const subtotal = items.reduce((sum, item) => {
-    const price = item.product.salePrice ?? item.product.price;
+    const hasSale =
+      typeof item.product.salePrice === 'number' &&
+      item.product.salePrice > 0 &&
+      item.product.salePrice < item.product.price;
+    const price = hasSale ? item.product.salePrice! : item.product.price;
     return sum + price * item.quantity;
   }, 0);
 
-  const qualifiesForFreeShipping = subtotal >= settings.freeShippingThreshold;
-  const shippingFee = items.length === 0 ? 0 : qualifiesForFreeShipping ? 0 : settings.standardShippingRate;
-  const grandTotal = subtotal + shippingFee;
+  // Calculate discount from appliedPromo
+  let discountAmount = 0;
+  if (appliedPromo && appliedPromo.active && subtotal > 0) {
+    if (!appliedPromo.minOrderAmount || subtotal >= appliedPromo.minOrderAmount) {
+      if (appliedPromo.type === 'percentage') {
+        discountAmount = Math.round((subtotal * Math.min(100, Math.max(0, appliedPromo.value))) / 100);
+      } else {
+        discountAmount = Math.min(subtotal, Math.max(0, appliedPromo.value));
+      }
+    }
+  }
 
-  const freeShippingDelta = Math.max(0, settings.freeShippingThreshold - subtotal);
-  const freeShippingProgress = Math.min(100, Math.round((subtotal / settings.freeShippingThreshold) * 100));
+  const discountedSubtotal = Math.max(0, subtotal - discountAmount);
+  const hasFreeShippingPromo = settings.freeShippingThreshold > 0;
+  const qualifiesForFreeShipping = hasFreeShippingPromo
+    ? discountedSubtotal >= settings.freeShippingThreshold
+    : settings.standardShippingRate === 0;
+  const shippingFee =
+    items.length === 0 ? 0 : qualifiesForFreeShipping ? 0 : settings.standardShippingRate;
+  const grandTotal = discountedSubtotal + shippingFee;
+
+  const freeShippingDelta = hasFreeShippingPromo
+    ? Math.max(0, settings.freeShippingThreshold - discountedSubtotal)
+    : 0;
+  const freeShippingProgress = hasFreeShippingPromo
+    ? Math.min(100, Math.round((discountedSubtotal / settings.freeShippingThreshold) * 100))
+    : 100;
+
+  const handleApplyCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCouponError(null);
+    const code = couponInput.trim().toUpperCase();
+    if (!code) {
+      onApplyPromo(null);
+      return;
+    }
+
+    const availableCodes = settings.promoCodes || [];
+    const matched = availableCodes.find(
+      (c) => c.active && c.code.trim().toUpperCase() === code
+    );
+
+    if (!matched) {
+      setCouponError('كود الخصم غير صحيح أو منتهي الصلاحية.');
+      onApplyPromo(null);
+      return;
+    }
+
+    if (matched.minOrderAmount && subtotal < matched.minOrderAmount) {
+      setCouponError(
+        `الحد الأدنى لتفعيل هذا الكوبون هو ${matched.minOrderAmount} ${settings.currency}`
+      );
+      onApplyPromo(null);
+      return;
+    }
+
+    onApplyPromo(matched);
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-stone-950/70 backdrop-blur-xs flex justify-end">
@@ -54,7 +117,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
       {/* Drawer Surface */}
-      <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between z-10 animate-in slide-in-from-right duration-300">
+      <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between z-10 animate-in slide-in-from-left duration-300">
         {/* Header */}
         <div className="p-4 border-b flex items-center justify-between bg-stone-50" style={{ borderColor: brand.neutralColor }}>
           <div className="flex items-center gap-2">
@@ -70,47 +133,49 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-stone-200 text-stone-600 hover:text-stone-900 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-full bg-stone-200 text-stone-600 hover:text-stone-900 flex items-center justify-center transition-colors cursor-pointer"
             aria-label="إغلاق السلة"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Milestone Free Shipping Progress Bar */}
-        <div className="p-4 bg-stone-50/80 border-b" style={{ borderColor: brand.neutralColor }}>
-          <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
-            <div className="flex items-center gap-1.5 text-stone-800">
-              <Truck className="w-4 h-4" style={{ color: brand.accentColor }} />
-              {qualifiesForFreeShipping ? (
-                <span className="text-emerald-700 font-bold flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  مبروك! طلبيتك مؤهلة للشحن والتسليم المجاني
-                </span>
-              ) : (
-                <span>
-                  أضيفي بـ{' '}
-                  <strong className="font-bold" style={{ color: brand.accentColor }}>
-                    {freeShippingDelta.toLocaleString('en-US')} {settings.currency}
-                  </strong>{' '}
-                  للحصول على شحن مجاني!
-                </span>
-              )}
+        {/* Milestone Free Shipping Progress Bar (Only shown when threshold > 0 and cart has items) */}
+        {hasFreeShippingPromo && items.length > 0 && (
+          <div className="p-4 bg-stone-50/80 border-b" style={{ borderColor: brand.neutralColor }}>
+            <div className="flex items-center justify-between text-xs mb-1.5 font-medium">
+              <div className="flex items-center gap-1.5 text-stone-800">
+                <Truck className="w-4 h-4" style={{ color: brand.accentColor }} />
+                {qualifiesForFreeShipping ? (
+                  <span className="text-emerald-700 font-bold flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    مبروك! طلبك مؤهل للشحن والتوصيل المجاني
+                  </span>
+                ) : (
+                  <span>
+                    أضف بـ{' '}
+                    <strong className="font-bold" style={{ color: brand.accentColor }}>
+                      {freeShippingDelta.toLocaleString('en-US')} {settings.currency}
+                    </strong>{' '}
+                    للحصول على شحن مجاني!
+                  </span>
+                )}
+              </div>
+              <span className="text-stone-500 font-mono text-[11px]">{freeShippingProgress}%</span>
             </div>
-            <span className="text-stone-500 font-mono text-[11px]">{freeShippingProgress}%</span>
-          </div>
 
-          {/* Progress bar line */}
-          <div className="w-full h-2 rounded-full bg-stone-200 overflow-hidden">
-            <div
-              className="h-full transition-all duration-500 rounded-full"
-              style={{
-                width: `${freeShippingProgress}%`,
-                backgroundColor: qualifiesForFreeShipping ? '#059669' : brand.accentColor,
-              }}
-            />
+            {/* Progress bar line */}
+            <div className="w-full h-2 rounded-full bg-stone-200 overflow-hidden">
+              <div
+                className="h-full transition-all duration-500 rounded-full"
+                style={{
+                  width: `${freeShippingProgress}%`,
+                  backgroundColor: qualifiesForFreeShipping ? '#059669' : brand.accentColor,
+                }}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Items List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 divide-y divide-stone-100">
@@ -121,23 +186,42 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
               <h3 className="text-sm font-bold text-stone-800">سلة التسوق فارغة حالياً</h3>
               <p className="text-xs text-stone-500 max-w-xs mx-auto">
-                تصفحي الخدمات والمنتجات المتاحة وأضيفي ما يعجبك بضغطة زر.
+                تصفح المنتجات المتاحة وأضف ما يعجبك بضغطة زر.
               </p>
             </div>
           ) : (
             items.map((item, index) => {
-              const unitPrice = item.product.salePrice ?? item.product.price;
+              const hasSale =
+                typeof item.product.salePrice === 'number' &&
+                item.product.salePrice > 0 &&
+                item.product.salePrice < item.product.price;
+              const unitPrice = hasSale ? item.product.salePrice! : item.product.price;
               const itemTotal = unitPrice * item.quantity;
+              const maxStock =
+                typeof item.product.stockQuantity === 'number'
+                  ? item.product.stockQuantity
+                  : undefined;
 
               return (
                 <div key={`${item.product.id}-${item.selectedVariant}-${index}`} className="pt-3 first:pt-0 flex gap-3">
                   {/* Image */}
-                  <img
-                    src={item.product.imageUrl}
-                    alt={item.product.name}
-                    className="w-18 h-20 object-cover rounded-xl bg-stone-100 shrink-0 border"
-                    style={{ borderColor: brand.neutralColor }}
-                  />
+                  {item.product.imageUrl ? (
+                    <img
+                      src={item.product.imageUrl}
+                      alt={item.product.name}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-18 h-20 object-cover rounded-xl bg-stone-100 shrink-0 border"
+                      style={{ borderColor: brand.neutralColor }}
+                    />
+                  ) : (
+                    <div
+                      className="w-18 h-20 rounded-xl bg-stone-100 shrink-0 border flex items-center justify-center text-stone-400"
+                      style={{ borderColor: brand.neutralColor }}
+                    >
+                      <Package className="w-6 h-6" />
+                    </div>
+                  )}
 
                   {/* Info */}
                   <div className="flex-1 flex flex-col justify-between">
@@ -148,7 +232,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         </h4>
                         <button
                           onClick={() => onRemoveItem(index)}
-                          className="text-stone-400 hover:text-red-500 transition-colors p-1"
+                          className="text-stone-400 hover:text-red-500 transition-colors p-1 cursor-pointer"
                           title="حذف المنتج"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -168,7 +252,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       <div className="flex items-center gap-2 bg-stone-100 rounded-lg p-0.5 border border-stone-200">
                         <button
                           onClick={() => onUpdateQuantity(index, item.quantity - 1)}
-                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center text-xs"
+                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center text-xs cursor-pointer"
                         >
                           -
                         </button>
@@ -176,8 +260,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           {item.quantity}
                         </span>
                         <button
-                          onClick={() => onUpdateQuantity(index, item.quantity + 1)}
-                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center text-xs"
+                          onClick={() =>
+                            onUpdateQuantity(
+                              index,
+                              maxStock !== undefined
+                                ? Math.min(maxStock, item.quantity + 1)
+                                : item.quantity + 1
+                            )
+                          }
+                          disabled={maxStock !== undefined && item.quantity >= maxStock}
+                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center text-xs cursor-pointer"
                         >
                           +
                         </button>
@@ -198,6 +290,51 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         {/* Footer with breakdown & checkout button */}
         {items.length > 0 && (
           <div className="p-4 border-t bg-stone-50 space-y-3" style={{ borderColor: brand.neutralColor }}>
+            {/* Promo / Coupon Code Input */}
+            <form onSubmit={handleApplyCoupon} className="flex gap-2">
+              <div className="relative flex-1">
+                <Tag className="w-3.5 h-3.5 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  placeholder="كود الخصم (مثال: EID20)"
+                  className="w-full pr-8 pl-3 py-2 text-xs bg-white border rounded-xl text-stone-800 font-mono uppercase placeholder:font-sans focus:outline-none"
+                  style={{ borderColor: brand.neutralColor }}
+                />
+              </div>
+              {appliedPromo ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCouponInput('');
+                    onApplyPromo(null);
+                  }}
+                  className="px-3 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  إلغاء الكوبون
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  className="px-3.5 py-2 bg-stone-900 text-white rounded-xl text-xs font-bold hover:bg-stone-800 transition-colors cursor-pointer"
+                >
+                  تطبيق
+                </button>
+              )}
+            </form>
+
+            {couponError && <p className="text-[11px] text-red-600 font-medium">{couponError}</p>}
+            {appliedPromo && discountAmount > 0 && (
+              <div className="flex items-center justify-between text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold">
+                <span className="flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  تم تفعيل كوبون ({appliedPromo.code})
+                </span>
+                <span>-{discountAmount.toLocaleString('en-US')} {settings.currency}</span>
+              </div>
+            )}
+
             {/* Merchant order notes */}
             <div>
               <input
@@ -218,11 +355,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   {subtotal.toLocaleString('en-US')} {settings.currency}
                 </span>
               </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-emerald-700 font-bold">
+                  <span>خصم الكوبون ({appliedPromo?.code}):</span>
+                  <span>-{discountAmount.toLocaleString('en-US')} {settings.currency}</span>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span>رسوم التوصيل / التسليم:</span>
+                <span>رسوم التوصيل:</span>
                 <span>
                   {shippingFee === 0 ? (
-                    <strong className="text-emerald-700">مجاني (عرض المتجر)</strong>
+                    <strong className="text-emerald-700">مجاني</strong>
                   ) : (
                     `${shippingFee.toLocaleString('en-US')} ${settings.currency}`
                   )}
@@ -239,7 +382,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             {/* Checkout Action Button */}
             <button
               onClick={onProceedToCheckout}
-              className="w-full py-3.5 px-4 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98"
+              className="w-full py-3.5 px-4 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 cursor-pointer"
               style={{ backgroundColor: brand.primaryColor }}
             >
               <span>متابعة إتمام الطلب</span>

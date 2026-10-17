@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import { 
   StoreSettings, 
   Product, 
@@ -6,35 +6,55 @@ import {
   StorePolicy, 
   CartItem,
   MerchantUser,
-  StoreInstance
+  StoreInstance,
+  PromoCode
 } from './types/store';
-import { StoreStorage, DEFAULT_PRODUCTS, MODERN_RETAIL_THEME } from './services/storeStorage';
+import { StoreStorage, DEFAULT_PRODUCTS, MODERN_RETAIL_THEME, safeSetLocalStorage } from './services/storeStorage';
 import { StoreManager } from './services/storeManager';
 import { AuthService } from './services/authService';
 import { onFirebaseAuthStateChanged } from './services/firebase';
 import { injectBrandThemeStyles } from './utils/themeInjector';
 import { matchesSearch } from './utils/arabicSearch';
+import { parseStoreRouteFromLocation } from './utils/urlRouter';
 
-// Layout & Components
+// Core Storefront Layout & Components (Eagerly loaded for instant First Contentful Paint)
 import { Navbar, AppViewMode, DevicePreviewMode } from './components/layout/Navbar';
-import { SaaSLandingPage } from './components/layout/SaaSLandingPage';
 import { AnnouncementBar } from './components/layout/AnnouncementBar';
 import { HeroBanner } from './components/storefront/HeroBanner';
 import { CategoryFilter } from './components/storefront/CategoryFilter';
 import { ProductGrid } from './components/storefront/ProductGrid';
 import { ProductModal } from './components/storefront/ProductModal';
 import { CartDrawer } from './components/storefront/CartDrawer';
-import { CheckoutModal } from './components/storefront/CheckoutModal';
 import { OrderSuccessModal } from './components/storefront/OrderSuccessModal';
-import { OrderTrackerModal } from './components/storefront/OrderTrackerModal';
-import { StorePoliciesModal } from './components/storefront/StorePoliciesModal';
-import { BrandCustomizerModal } from './components/admin/BrandCustomizerModal';
-import { StoreOnboardingWizard } from './components/builder/StoreOnboardingWizard';
-import { StoreDashboard } from './components/builder/StoreDashboard';
-import { AuthModal } from './components/auth/AuthModal';
 import { MerchantAuthGate } from './components/auth/MerchantAuthGate';
 import { Footer } from './components/layout/Footer';
-import { Plus, Sparkles, RotateCcw, Eye, EyeOff, Package } from 'lucide-react';
+import { Plus, Sparkles, RotateCcw, Eye, EyeOff, Package, ShoppingBag, Store, Loader2 } from 'lucide-react';
+
+// Code-Split Heavy Merchant & Secondary Modals via React.lazy
+const SaaSLandingPage = lazy(() =>
+  import('./components/layout/SaaSLandingPage').then((m) => ({ default: m.SaaSLandingPage }))
+);
+const StoreDashboard = lazy(() =>
+  import('./components/builder/StoreDashboard').then((m) => ({ default: m.StoreDashboard }))
+);
+const StoreOnboardingWizard = lazy(() =>
+  import('./components/builder/StoreOnboardingWizard').then((m) => ({ default: m.StoreOnboardingWizard }))
+);
+const BrandCustomizerModal = lazy(() =>
+  import('./components/admin/BrandCustomizerModal').then((m) => ({ default: m.BrandCustomizerModal }))
+);
+const AuthModal = lazy(() =>
+  import('./components/auth/AuthModal').then((m) => ({ default: m.AuthModal }))
+);
+const CheckoutModal = lazy(() =>
+  import('./components/storefront/CheckoutModal').then((m) => ({ default: m.CheckoutModal }))
+);
+const OrderTrackerModal = lazy(() =>
+  import('./components/storefront/OrderTrackerModal').then((m) => ({ default: m.OrderTrackerModal }))
+);
+const StorePoliciesModal = lazy(() =>
+  import('./components/storefront/StorePoliciesModal').then((m) => ({ default: m.StorePoliciesModal }))
+);
 
 export default function App() {
   // Merchant User & Multi-Store Management
@@ -42,7 +62,19 @@ export default function App() {
   const [allStores, setAllStores] = useState<StoreInstance[]>(() => StoreManager.getAllStores());
   const [activeStore, setActiveStore] = useState<StoreInstance>(() => StoreManager.getActiveStore());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
   const [isShopperPreviewOnly, setIsShopperPreviewOnly] = useState(false);
+
+  // Storefront Cloud Resolution States (Prevents flash of default demo store)
+  const initialRoute = useMemo(() => parseStoreRouteFromLocation(), []);
+  const [isResolvingStore, setIsResolvingStore] = useState<boolean>(() => {
+    if (!initialRoute.storeSlug) return false;
+    const cached =
+      StoreManager.getStoreBySlug(initialRoute.storeSlug) ||
+      StoreManager.getStoreById(initialRoute.storeSlug);
+    return !cached;
+  });
+  const [storeNotFound, setStoreNotFound] = useState(false);
 
   // Active Store Database States
   const [settings, setSettings] = useState<StoreSettings>(() => activeStore.settings || StoreStorage.getSettings());
@@ -108,17 +140,20 @@ export default function App() {
     };
   }, []);
 
-  // When a store owner opens their store, fetch private orders from Firestore subcollection
+  // Real-time Orders Subscription for Store Owners
   useEffect(() => {
-    if (isStoreOwner && activeStore.id) {
-      StoreManager.fetchStoreOrdersFromFirestore(activeStore.id)
-        .then((cloudOrders) => {
-          if (cloudOrders && cloudOrders.length > 0) {
-            setOrders(cloudOrders);
-          }
-        })
-        .catch(() => {});
-    }
+    if (!isStoreOwner || !activeStore.id) return;
+
+    const unsubscribeOrders = StoreManager.subscribeToStoreOrders(
+      activeStore.id,
+      (liveOrders) => {
+        setOrders(liveOrders);
+      }
+    );
+
+    return () => {
+      if (unsubscribeOrders) unsubscribeOrders();
+    };
   }, [isStoreOwner, activeStore.id]);
 
   // Inject custom typography and brand colors whenever settings.brandTheme changes
@@ -129,39 +164,96 @@ export default function App() {
   }, [settings.brandTheme]);
 
   // UI View Modes:
-  // - If `?store=<slug>` is present in the URL, open the customer's pure `'storefront'` directly.
+  // - If `?store=<slug>` or `/s/<slug>` is present in the URL, open the customer's pure `'storefront'` directly.
   // - If visiting root `/` without `?store=`, show the SaaS platform `'landing'` page.
   const [viewMode, setViewMode] = useState<AppViewMode>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const storeParam = params.get('store');
-      const urlView = params.get('view');
-      if (urlView === 'dashboard') return 'dashboard';
-      if (storeParam || urlView === 'storefront') return 'storefront';
-    } catch {}
+    if (initialRoute.viewParam === 'dashboard') return 'dashboard';
+    if (initialRoute.storeSlug || initialRoute.viewParam === 'storefront') return 'storefront';
     return 'landing';
   });
   const [devicePreview, setDevicePreview] = useState<DevicePreviewMode>('desktop');
 
-  // Handle URL parameters: ?store=<slug_or_id>
+  // Modals State
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isTrackerOpen, setIsTrackerOpen] = useState(false);
+  const [trackerInitialId, setTrackerInitialId] = useState('');
+  const [isPoliciesOpen, setIsPoliciesOpen] = useState(false);
+  const [isBrandStudioOpen, setIsBrandStudioOpen] = useState(false);
+  const [isNewStoreWizardOpen, setIsNewStoreWizardOpen] = useState(false);
+  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+
+  const handleSelectStore = (storeId: string) => {
+    StoreManager.setActiveStoreId(storeId);
+    const store = StoreManager.getStoreById(storeId);
+    if (store) {
+      setActiveStore(store);
+      setSettings(store.settings);
+      setProducts(store.products);
+      setOrders(store.orders);
+      setPolicies(store.policies);
+      StoreStorage.hydrateStore({
+        settings: store.settings,
+        products: store.products,
+        orders: store.orders,
+        policies: store.policies,
+      });
+    }
+  };
+
+  // Handle URL parameters: ?store=<slug_or_id>&product=<product_id> or /s/<slug>
   useEffect(() => {
     const resolveStoreFromUrl = async () => {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const storeParam = params.get('store');
-        if (storeParam) {
-          // 1. Try local memory
-          let found = StoreManager.getStoreBySlug(storeParam) || StoreManager.getStoreById(storeParam);
-          if (!found) {
-            // 2. Fetch from Cloud Firestore across all devices
-            found = await StoreManager.fetchStoreFromFirestore(storeParam);
+        const { storeSlug, productId } = parseStoreRouteFromLocation();
+        if (!storeSlug) return;
+
+        // 1. Check local cache for instant render
+        const localMatch =
+          StoreManager.getStoreBySlug(storeSlug) || StoreManager.getStoreById(storeSlug);
+
+        if (localMatch) {
+          handleSelectStore(localMatch.id);
+          setViewMode('storefront');
+          if (productId) {
+            const p = localMatch.products.find((item) => item.id === productId);
+            if (p) setSelectedProduct(p);
           }
-          if (found) {
-            handleSelectStore(found.id);
-            setViewMode('storefront');
+          // Refresh catalog from Cloud Firestore in background so returning shoppers get latest prices/products
+          StoreManager.fetchStoreFromFirestore(storeSlug)
+            .then((freshStore) => {
+              if (freshStore) {
+                handleSelectStore(freshStore.id);
+                if (productId) {
+                  const freshP = freshStore.products.find((item) => item.id === productId);
+                  if (freshP) setSelectedProduct(freshP);
+                }
+              }
+            })
+            .catch(() => {});
+          return;
+        }
+
+        // 2. First visit on this device -> Fetch from Cloud Firestore with skeleton loader
+        setIsResolvingStore(true);
+        setStoreNotFound(false);
+        const cloudStore = await StoreManager.fetchStoreFromFirestore(storeSlug);
+        setIsResolvingStore(false);
+
+        if (cloudStore) {
+          handleSelectStore(cloudStore.id);
+          setViewMode('storefront');
+          if (productId) {
+            const p = cloudStore.products.find((item) => item.id === productId);
+            if (p) setSelectedProduct(p);
           }
+        } else {
+          setStoreNotFound(true);
         }
       } catch (e) {
+        setIsResolvingStore(false);
         console.warn('URL routing notice:', e);
       }
     };
@@ -173,37 +265,34 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
 
-  // Cart State (Persisted in session/local)
+  // Store-Scoped Cart State (Prevents cart items from Store A leaking into Store B)
+  const cartStorageKey = `storelink_cart_${activeStore.id}`;
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
-      const saved = localStorage.getItem('storelink_cart');
+      const saved = localStorage.getItem(`storelink_cart_${activeStore.id}`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
-
+  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(null);
   const [orderNotes, setOrderNotes] = useState('');
 
+  // Reload store-scoped cart when switching activeStore.id
   useEffect(() => {
     try {
-      localStorage.setItem('storelink_cart', JSON.stringify(cart));
-    } catch (e) {
-      console.warn('Cart persistence failed', e);
+      const saved = localStorage.getItem(`storelink_cart_${activeStore.id}`);
+      setCart(saved ? JSON.parse(saved) : []);
+      setAppliedPromo(null);
+    } catch {
+      setCart([]);
     }
-  }, [cart]);
+  }, [activeStore.id]);
 
-  // Modals
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [isTrackerOpen, setIsTrackerOpen] = useState(false);
-  const [trackerInitialId, setTrackerInitialId] = useState('');
-  const [isPoliciesOpen, setIsPoliciesOpen] = useState(false);
-  const [isBrandStudioOpen, setIsBrandStudioOpen] = useState(false);
-  const [isNewStoreWizardOpen, setIsNewStoreWizardOpen] = useState(false);
-  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
-  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  // Persist cart to store-scoped localStorage key
+  useEffect(() => {
+    safeSetLocalStorage(cartStorageKey, JSON.stringify(cart));
+  }, [cart, cartStorageKey]);
 
   // Derived Category Lists & Counts
   const categories = useMemo(() => {
@@ -222,11 +311,9 @@ export default function App() {
   // Filtered Products using Arabic diacritic-tolerant fuzzy normalization
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
-      // Category match
       if (activeCategory !== 'all' && p.category !== activeCategory) {
         return false;
       }
-      // Search query match
       if (searchQuery.trim()) {
         const matches = matchesSearch(searchQuery, [
           p.name,
@@ -260,19 +347,28 @@ export default function App() {
       const existingIdx = prev.findIndex(
         (item) => item.product.id === product.id && item.selectedVariant === variant
       );
+      const maxAllowed =
+        product.stockQuantity !== undefined && product.stockQuantity > 0
+          ? product.stockQuantity
+          : 99;
       if (existingIdx >= 0) {
         const updated = [...prev];
-        updated[existingIdx].quantity += quantity;
+        updated[existingIdx].quantity = Math.min(maxAllowed, updated[existingIdx].quantity + quantity);
         return updated;
       }
-      return [...prev, { product, selectedVariant: variant, quantity }];
+      return [...prev, { product, selectedVariant: variant, quantity: Math.min(maxAllowed, quantity) }];
     });
   };
 
+  // Smart Quick Add: If product has multiple variants, open ProductModal so buyer picks their option
   const handleQuickAdd = (product: Product, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!product.inStock) return;
-    const defaultVariant = product.variants && product.variants.length > 0 ? product.variants[0] : '';
+    if (product.variants && product.variants.length > 1) {
+      setSelectedProduct(product);
+      return;
+    }
+    const defaultVariant = product.variants && product.variants.length > 0 ? product.variants[0] : 'الخيار الافتراضي';
     handleAddToCart(product, defaultVariant, 1);
     setJustAddedId(product.id);
     setTimeout(() => setJustAddedId(null), 1200);
@@ -284,7 +380,8 @@ export default function App() {
     } else {
       setCart((prev) => {
         const updated = [...prev];
-        updated[index].quantity = newQty;
+        const maxStock = updated[index].product.stockQuantity;
+        updated[index].quantity = maxStock !== undefined ? Math.min(maxStock, newQty) : newQty;
         return updated;
       });
     }
@@ -298,28 +395,14 @@ export default function App() {
   const handleOrderSuccess = (order: Order) => {
     StoreManager.submitOrderToStore(activeStore.id, order);
     setOrders(StoreStorage.getOrders());
+    setProducts(StoreStorage.getProducts());
     setActiveStore(StoreManager.getActiveStore());
     setAllStores(StoreManager.getAllStores());
     setCart([]);
+    setAppliedPromo(null);
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
     setCompletedOrder(order);
-  };
-
-  const handleSelectStore = (storeId: string) => {
-    StoreManager.setActiveStoreId(storeId);
-    const store = StoreManager.getStoreById(storeId);
-    if (store) {
-      setActiveStore(store);
-      setSettings(store.settings);
-      setProducts(store.products);
-      setOrders(store.orders);
-      setPolicies(store.policies);
-      StoreStorage.saveSettings(store.settings);
-      StoreStorage.saveProducts(store.products);
-      StoreStorage.saveOrders(store.orders);
-      StoreStorage.savePolicies(store.policies);
-    }
   };
 
   // Admin DB Updaters
@@ -342,7 +425,6 @@ export default function App() {
   };
 
   const handleUpdateOrders = (newOrders: Order[]) => {
-    // Sync any changed order status to Firestore private orders subcollection
     newOrders.forEach((updatedOrder) => {
       const prev = orders.find((o) => o.id === updatedOrder.id);
       if (!prev || prev.status !== updatedOrder.status || prev.trackingNotes !== updatedOrder.trackingNotes) {
@@ -392,24 +474,127 @@ export default function App() {
     handleUpdateProducts(DEFAULT_PRODUCTS);
   };
 
-  // Open Order Tracker with specific ID
   const handleOpenTrackerWithId = (orderId: string) => {
     setTrackerInitialId(orderId);
     setIsTrackerOpen(true);
   };
 
+  // Wizard completion handler (respects empty vs sample catalog choice & custom slug)
+  const handleWizardComplete = (
+    newSettings: StoreSettings,
+    initialProds?: Product[],
+    customSlug?: string
+  ) => {
+    const newStore = StoreManager.createStore({
+      storeName: newSettings.storeName,
+      storeSubtitle: newSettings.storeSubtitle,
+      slug: customSlug,
+      businessType: newSettings.businessType,
+      ownerId: currentUser?.id || 'guest',
+      tagline: newSettings.tagline,
+      whatsappNumber: newSettings.whatsappNumber,
+      currency: newSettings.currency,
+      primaryColor: newSettings.brandTheme?.primaryColor || '#0F172A',
+      accentColor: newSettings.brandTheme?.accentColor || '#2563EB',
+      backgroundColor: newSettings.brandTheme?.backgroundColor || '#F8FAFC',
+      logoLetter: newSettings.logoLetter || 'S',
+      freeShippingThreshold: newSettings.freeShippingThreshold,
+      standardShippingRate: newSettings.standardShippingRate,
+      initialProducts: initialProds ?? [],
+    });
+    handleSelectStore(newStore.id);
+    setIsNewStoreWizardOpen(false);
+    setViewMode('dashboard');
+  };
+
+  // Auth Success handler (awaits Firestore stores before deciding whether to open Wizard or Dashboard)
+  const handleAuthSuccess = async (user: MerchantUser) => {
+    setCurrentUser(user);
+    setIsAuthModalOpen(false);
+    try {
+      const cloudStores = await StoreManager.fetchUserStoresFromFirestore(user.id);
+      const owned = cloudStores.length > 0 ? cloudStores : StoreManager.getMerchantStores(user.id);
+      if (owned.length > 0) {
+        handleSelectStore(owned[0].id);
+        setViewMode('dashboard');
+      } else {
+        setIsNewStoreWizardOpen(true);
+      }
+    } catch {
+      const owned = StoreManager.getMerchantStores(user.id);
+      if (owned.length > 0) {
+        handleSelectStore(owned[0].id);
+        setViewMode('dashboard');
+      } else {
+        setIsNewStoreWizardOpen(true);
+      }
+    }
+  };
+
   const brand = settings.brandTheme || MODERN_RETAIL_THEME;
+
+  // STORE LOADING SKELETON (When resolving a cloud store on first visit)
+  if (isResolvingStore) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-[#0F172A] text-white flex items-center justify-center shadow-lg mb-4 animate-pulse">
+          <Loader2 className="w-7 h-7 animate-spin text-[#86EFAC]" />
+        </div>
+        <h2 className="text-base sm:text-lg font-bold text-stone-900">جاري تحميل المتجر...</h2>
+        <p className="text-xs text-stone-500 mt-1">يرجى الانتظار لحظات لتجهيز قائمة المنتجات</p>
+      </div>
+    );
+  }
+
+  // STORE NOT FOUND SCREEN (When an invalid `?store=` slug is visited)
+  if (storeNotFound) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full bg-white rounded-3xl border border-stone-200 p-8 shadow-sm space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+            <Store className="w-7 h-7" />
+          </div>
+          <h2 className="text-lg font-black text-stone-900">عذراً، هذا المتجر غير موجود</h2>
+          <p className="text-xs text-stone-500 leading-relaxed">
+            الرابط الذي قمت بزيارته غير مرتبط بأي متجر نشط حالياً. تأكد من صحة الرابط أو أنشئ متجرك الإلكتروني مجاناً.
+          </p>
+          <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
+            <button
+              onClick={() => {
+                setStoreNotFound(false);
+                window.history.replaceState({}, '', '/');
+                setViewMode('landing');
+              }}
+              className="px-5 py-2.5 bg-[#0F172A] hover:bg-stone-800 text-white rounded-xl text-xs font-bold cursor-pointer"
+            >
+              العودة للصفحة الرئيسية للمنصة
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // VIEW MODE 0: SAAS LANDING PAGE (Root `/` when no `?store=` is specified)
   if (viewMode === 'landing') {
     return (
-      <>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-[#0F172A] flex items-center justify-center text-white">
+            <Loader2 className="w-6 h-6 animate-spin text-[#86EFAC]" />
+          </div>
+        }
+      >
         <SaaSLandingPage
           currentUser={currentUser}
           merchantStores={merchantStores}
-          onOpenAuth={() => setIsAuthModalOpen(true)}
+          onOpenAuth={() => {
+            setAuthInitialMode('login');
+            setIsAuthModalOpen(true);
+          }}
           onStartCreateStore={() => {
             if (!currentUser) {
+              setAuthInitialMode('register');
               setIsAuthModalOpen(true);
             } else {
               setIsNewStoreWizardOpen(true);
@@ -426,49 +611,24 @@ export default function App() {
           }}
         />
 
-        {/* Modals available from Landing Page */}
         {isNewStoreWizardOpen && (
           <StoreOnboardingWizard
             isOpen={isNewStoreWizardOpen}
             onClose={() => setIsNewStoreWizardOpen(false)}
             currentSettings={settings}
-            onComplete={(newSettings, initialProds) => {
-              const newStore = StoreManager.createStore({
-                storeName: newSettings.storeName,
-                storeSubtitle: newSettings.storeSubtitle,
-                ownerId: currentUser?.id || 'guest',
-                tagline: newSettings.tagline,
-                whatsappNumber: newSettings.whatsappNumber,
-                currency: newSettings.currency,
-                primaryColor: newSettings.brandTheme?.primaryColor || '#0F172A',
-                accentColor: newSettings.brandTheme?.accentColor || '#2563EB',
-                backgroundColor: newSettings.brandTheme?.backgroundColor || '#F8FAFC',
-                logoLetter: newSettings.logoLetter || 'A',
-                initialProducts: initialProds && initialProds.length > 0 ? initialProds : products,
-              });
-              handleSelectStore(newStore.id);
-              setIsNewStoreWizardOpen(false);
-              setViewMode('dashboard');
-            }}
+            onComplete={handleWizardComplete}
           />
         )}
 
-        <AuthModal
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-          onSuccess={(user) => {
-            setCurrentUser(user);
-            setIsAuthModalOpen(false);
-            const owned = StoreManager.getMerchantStores(user.id);
-            if (owned.length > 0) {
-              handleSelectStore(owned[0].id);
-              setViewMode('dashboard');
-            } else {
-              setIsNewStoreWizardOpen(true);
-            }
-          }}
-        />
-      </>
+        {isAuthModalOpen && (
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            initialMode={authInitialMode}
+            onClose={() => setIsAuthModalOpen(false)}
+            onSuccess={handleAuthSuccess}
+          />
+        )}
+      </Suspense>
     );
   }
 
@@ -540,8 +700,12 @@ export default function App() {
         isStoreOwner={isStoreOwner}
         merchantStores={merchantStores}
         activeStoreId={activeStore.id}
+        activeStoreSlug={activeStore.slug}
         onSelectStore={handleSelectStore}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenAuth={() => {
+          setAuthInitialMode('login');
+          setIsAuthModalOpen(true);
+        }}
         onLogout={() => {
           AuthService.logout();
           setCurrentUser(null);
@@ -552,30 +716,41 @@ export default function App() {
 
       {/* VIEW MODE 1: BUSINESS OWNER DASHBOARD (SIMPLE MERCHANT HUB) */}
       {viewMode === 'dashboard' && (
-        <main className="flex-1 w-full py-6">
+        <main className="flex-1 w-full py-4 sm:py-6">
           {!currentUser ? (
             <MerchantAuthGate
               settings={settings}
-              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onOpenAuth={() => {
+                setAuthInitialMode('login');
+                setIsAuthModalOpen(true);
+              }}
               onBackToStore={() => setViewMode('storefront')}
               targetViewName="لوحة تحكم المتجر"
             />
           ) : (
-            <StoreDashboard
-              storeSlug={activeStore.slug}
-              settings={settings}
-              products={products}
-              orders={orders}
-              policies={policies}
-              onUpdateSettings={handleUpdateSettings}
-              onUpdateProducts={handleUpdateProducts}
-              onUpdateOrders={handleUpdateOrders}
-              onUpdatePolicies={handleUpdatePolicies}
-              onViewStorefront={() => setViewMode('storefront')}
-              onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
-              onOpenNewStoreWizard={() => setIsNewStoreWizardOpen(true)}
-              currentUser={currentUser}
-            />
+            <Suspense
+              fallback={
+                <div className="py-20 flex justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#2563EB]" />
+                </div>
+              }
+            >
+              <StoreDashboard
+                storeSlug={activeStore.slug}
+                settings={settings}
+                products={products}
+                orders={orders}
+                policies={policies}
+                onUpdateSettings={handleUpdateSettings}
+                onUpdateProducts={handleUpdateProducts}
+                onUpdateOrders={handleUpdateOrders}
+                onUpdatePolicies={handleUpdatePolicies}
+                onViewStorefront={() => setViewMode('storefront')}
+                onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
+                onOpenNewStoreWizard={() => setIsNewStoreWizardOpen(true)}
+                currentUser={currentUser}
+              />
+            </Suspense>
           )}
         </main>
       )}
@@ -643,7 +818,7 @@ export default function App() {
               </div>
             </div>
           ) : (
-            <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full">
+            <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full pb-24 sm:pb-8">
               <HeroBanner
                 settings={settings}
                 onExploreClick={() => {
@@ -736,6 +911,32 @@ export default function App() {
             </main>
           )}
 
+          {/* Sticky Mobile Bottom Cart Bar for High Mobile Conversion */}
+          {cartCount > 0 && !isCartOpen && !isCheckoutOpen && (
+            <div className="fixed bottom-4 inset-x-4 z-40 sm:hidden animate-in fade-in">
+              <button
+                onClick={() => setIsCartOpen(true)}
+                className="w-full py-3.5 px-5 rounded-2xl text-white shadow-xl flex items-center justify-between font-bold text-sm active:scale-95 transition-transform cursor-pointer"
+                style={{ backgroundColor: brand.primaryColor }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="w-6 h-6 rounded-full text-xs font-black flex items-center justify-center"
+                    style={{ backgroundColor: brand.accentColor, color: '#ffffff' }}
+                  >
+                    {cartCount}
+                  </span>
+                  <span>عرض السلة وإتمام الطلب</span>
+                </div>
+                <div className="flex items-center gap-1.5 font-mono">
+                  <span>{cartTotal.toLocaleString('en-US')}</span>
+                  <span>{settings.currency}</span>
+                  <ShoppingBag className="w-4 h-4 mr-1" style={{ color: brand.highlightColor || '#86EFAC' }} />
+                </div>
+              </button>
+            </div>
+          )}
+
           <Footer
             settings={settings}
             onOpenPolicies={() => setIsPoliciesOpen(true)}
@@ -748,53 +949,85 @@ export default function App() {
       )}
 
       {/* MODALS */}
-      {/* 1. New Store Onboarding Wizard */}
-      {isNewStoreWizardOpen && (
-        <StoreOnboardingWizard
-          isOpen={isNewStoreWizardOpen}
-          onClose={() => setIsNewStoreWizardOpen(false)}
-          currentSettings={settings}
-          onComplete={(newSettings, initialProds) => {
-            const newStore = StoreManager.createStore({
-              storeName: newSettings.storeName,
-              storeSubtitle: newSettings.storeSubtitle,
-              ownerId: currentUser?.id || 'guest',
-              tagline: newSettings.tagline,
-              whatsappNumber: newSettings.whatsappNumber,
-              currency: newSettings.currency,
-              primaryColor: newSettings.brandTheme?.primaryColor || '#0F172A',
-              accentColor: newSettings.brandTheme?.accentColor || '#2563EB',
-              backgroundColor: newSettings.brandTheme?.backgroundColor || '#F8FAFC',
-              logoLetter: newSettings.logoLetter || 'A',
-              initialProducts: initialProds && initialProds.length > 0 ? initialProds : products,
-            });
-            handleSelectStore(newStore.id);
-            setIsNewStoreWizardOpen(false);
-            setViewMode('dashboard');
-          }}
-        />
-      )}
+      <Suspense fallback={null}>
+        {/* 1. New Store Onboarding Wizard */}
+        {isNewStoreWizardOpen && (
+          <StoreOnboardingWizard
+            isOpen={isNewStoreWizardOpen}
+            onClose={() => setIsNewStoreWizardOpen(false)}
+            currentSettings={settings}
+            onComplete={handleWizardComplete}
+          />
+        )}
 
-      {/* 2. Brand & Setup Studio Modal (Store Owner Only) */}
-      {isBrandStudioOpen && isStoreOwner && (
-        <BrandCustomizerModal
-          isOpen={isBrandStudioOpen}
-          onClose={() => setIsBrandStudioOpen(false)}
-          settings={settings}
-          onSaveSettings={handleUpdateSettings}
-          onResetToDefault={handleResetDefault}
-          onClearAllProducts={handleClearAllProducts}
-        />
-      )}
+        {/* 2. Brand & Setup Studio Modal (Store Owner Only) */}
+        {isBrandStudioOpen && isStoreOwner && (
+          <BrandCustomizerModal
+            isOpen={isBrandStudioOpen}
+            onClose={() => setIsBrandStudioOpen(false)}
+            settings={settings}
+            onSaveSettings={handleUpdateSettings}
+            onResetToDefault={handleResetDefault}
+            onClearAllProducts={handleClearAllProducts}
+          />
+        )}
+
+        {/* 5. Checkout Modal */}
+        {isCheckoutOpen && (
+          <CheckoutModal
+            isOpen={isCheckoutOpen}
+            onClose={() => setIsCheckoutOpen(false)}
+            items={cart}
+            settings={settings}
+            orderNotes={orderNotes}
+            appliedPromo={appliedPromo}
+            onOrderSuccess={handleOrderSuccess}
+          />
+        )}
+
+        {/* 7. Live Order Tracker Modal */}
+        {isTrackerOpen && (
+          <OrderTrackerModal
+            isOpen={isTrackerOpen}
+            onClose={() => {
+              setIsTrackerOpen(false);
+              setTrackerInitialId('');
+            }}
+            storeId={activeStore.id}
+            orders={orders}
+            settings={settings}
+            initialOrderId={trackerInitialId}
+          />
+        )}
+
+        {/* 8. Store Policies & Specs Modal */}
+        {isPoliciesOpen && (
+          <StorePoliciesModal
+            isOpen={isPoliciesOpen}
+            onClose={() => setIsPoliciesOpen(false)}
+            policies={policies}
+          />
+        )}
+
+        {/* 9. Merchant User Auth Modal */}
+        {isAuthModalOpen && (
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            initialMode={authInitialMode}
+            onClose={() => setIsAuthModalOpen(false)}
+            onSuccess={handleAuthSuccess}
+          />
+        )}
+      </Suspense>
 
       {/* 3. Product Detail Modal */}
       {selectedProduct && (
         <ProductModal
           product={selectedProduct}
           settings={settings}
+          storeSlug={activeStore.slug}
           onClose={() => setSelectedProduct(null)}
           onAddToCart={handleAddToCart}
-          onOpenSizeGuide={() => setIsPoliciesOpen(true)}
         />
       )}
 
@@ -812,19 +1045,9 @@ export default function App() {
         settings={settings}
         orderNotes={orderNotes}
         onOrderNotesChange={setOrderNotes}
+        appliedPromo={appliedPromo}
+        onApplyPromo={setAppliedPromo}
       />
-
-      {/* 5. Checkout Modal */}
-      {isCheckoutOpen && (
-        <CheckoutModal
-          isOpen={isCheckoutOpen}
-          onClose={() => setIsCheckoutOpen(false)}
-          items={cart}
-          settings={settings}
-          orderNotes={orderNotes}
-          onOrderSuccess={handleOrderSuccess}
-        />
-      )}
 
       {/* 6. Order Success Celebration Modal */}
       {completedOrder && (
@@ -835,40 +1058,6 @@ export default function App() {
           onTrackOrder={handleOpenTrackerWithId}
         />
       )}
-
-      {/* 7. Live Order Tracker Modal (Privacy-safe exact ID lookup) */}
-      {isTrackerOpen && (
-        <OrderTrackerModal
-          isOpen={isTrackerOpen}
-          onClose={() => {
-            setIsTrackerOpen(false);
-            setTrackerInitialId('');
-          }}
-          storeId={activeStore.id}
-          orders={orders}
-          settings={settings}
-          initialOrderId={trackerInitialId}
-        />
-      )}
-
-      {/* 8. Store Policies & Specs Modal */}
-      {isPoliciesOpen && (
-        <StorePoliciesModal
-          isOpen={isPoliciesOpen}
-          onClose={() => setIsPoliciesOpen(false)}
-          policies={policies}
-        />
-      )}
-
-      {/* 9. Merchant User Auth Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={(user) => {
-          setCurrentUser(user);
-          setIsAuthModalOpen(false);
-        }}
-      />
     </div>
   );
 }

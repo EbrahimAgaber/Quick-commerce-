@@ -1,22 +1,27 @@
 import React, { useState } from 'react';
 import { StoreSettings, Product } from '../../types/store';
 import { DEFAULT_PRODUCTS } from '../../services/storeStorage';
+import { generateCleanStoreSlug } from '../../utils/urlRouter';
+import { requestAIGeneration } from '../../services/aiService';
 import { 
   Store, 
   ArrowLeft, 
   ArrowRight, 
-  Check, 
   Phone, 
   CheckCircle2,
   Truck,
   Sparkles,
-  ShoppingBag
+  ShoppingBag,
+  Globe,
+  AlertCircle,
+  Loader2,
+  Wand2
 } from 'lucide-react';
 
 interface StoreOnboardingWizardProps {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (settings: StoreSettings, initialProducts?: Product[]) => void;
+  onComplete: (settings: StoreSettings, initialProducts?: Product[], customSlug?: string) => void;
   currentSettings: StoreSettings;
 }
 
@@ -29,9 +34,13 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
   if (!isOpen) return null;
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [stepError, setStepError] = useState<string | null>(null);
+  const [generatingTagline, setGeneratingTagline] = useState(false);
 
   // Step 1: Business Details
   const [storeName, setStoreName] = useState('');
+  const [customSlug, setCustomSlug] = useState('');
+  const [slugTouched, setSlugTouched] = useState(false);
   const [storeSubtitle, setStoreSubtitle] = useState('');
   const [businessType, setBusinessType] = useState('أزياء وإكسسوارات');
   const [whatsappNumber, setWhatsappNumber] = useState('');
@@ -59,19 +68,57 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
     'نشاط تجاري عام',
   ];
 
+  const handleGenerateAITagline = async () => {
+    setGeneratingTagline(true);
+    try {
+      const prompt = `اكتب شعاراً تسويقياً جذاباً ومختصراً (Tagline) لمتجر إلكتروني اسمه: ${
+        storeName.trim() || 'متجري'
+      }، في مجال: ${businessType}`;
+      const res = await requestAIGeneration(prompt);
+      if (res.text) {
+        setTagline(res.text);
+      }
+    } catch {
+      // Fallback already handled inside requestAIGeneration
+    } finally {
+      setGeneratingTagline(false);
+    }
+  };
+
+  const handleNextStep = () => {
+    if (step === 1) {
+      if (!storeName.trim()) {
+        setStepError('يرجى إدخال اسم المتجر أولاً للمتابعة.');
+        return;
+      }
+      const cleanPhone = whatsappNumber.trim().replace(/\D/g, '');
+      if (!cleanPhone || cleanPhone.length < 8) {
+        setStepError('يرجى إدخال رقم واتساب صحيح (مع رمز الدولة مثل 9665XXXXXXXX) لاستقبال طلبات العملاء.');
+        return;
+      }
+    }
+    setStepError(null);
+    setStep((s) => (s + 1) as 1 | 2 | 3);
+  };
+
   const handleFinish = () => {
     const cleanPhone = whatsappNumber.trim().replace(/\D/g, '');
+    const finalSlug = (customSlug.trim() || generateCleanStoreSlug(storeName.trim() || 'store'))
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]/g, '');
+
     const updatedSettings: StoreSettings = {
       ...currentSettings,
       storeName: storeName.trim() || 'متجري الجديد',
       storeSubtitle: storeSubtitle.trim(),
+      businessType,
       logoLetter: (logoLetter.trim() || storeName.trim().charAt(0) || 'S').toUpperCase(),
       tagline: tagline.trim(),
       whatsappNumber: cleanPhone,
       supportPhone: cleanPhone ? `+${cleanPhone}` : '',
       currency: currency.trim() || 'ر.س',
-      freeShippingThreshold: Number(freeShippingThreshold) || 0,
-      standardShippingRate: Number(standardShippingRate) || 0,
+      freeShippingThreshold: Number(freeShippingThreshold) >= 0 ? Number(freeShippingThreshold) : 250,
+      standardShippingRate: Number(standardShippingRate) >= 0 ? Number(standardShippingRate) : 25,
       googleWebAppUrl: '',
       brandTheme: {
         primaryColor,
@@ -88,9 +135,13 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
     };
 
     const initialProds = starterCatalogMode === 'sample' ? DEFAULT_PRODUCTS : [];
-    onComplete(updatedSettings, initialProds);
+    onComplete(updatedSettings, initialProds, finalSlug);
     onClose();
   };
+
+  const previewSlug = (customSlug.trim() || generateCleanStoreSlug(storeName.trim() || 'my-store'))
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]/g, '');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/70 backdrop-blur-xs">
@@ -145,6 +196,13 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
 
         {/* Form Body */}
         <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-4">
+          {stepError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+              <span>{stepError}</span>
+            </div>
+          )}
+
           {/* STEP 1: BUSINESS INFORMATION */}
           {step === 1 && (
             <div className="space-y-4 text-xs animate-in fade-in duration-200">
@@ -158,14 +216,59 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
                     required
                     value={storeName}
                     onChange={(e) => {
-                      setStoreName(e.target.value);
-                      if (e.target.value.trim()) {
-                        setLogoLetter(e.target.value.trim().charAt(0).toUpperCase());
+                      const val = e.target.value;
+                      setStoreName(val);
+                      if (stepError) setStepError(null);
+                      if (val.trim()) {
+                        setLogoLetter(val.trim().charAt(0).toUpperCase());
+                        if (!slugTouched) {
+                          setCustomSlug(generateCleanStoreSlug(val));
+                        }
                       }
                     }}
                     placeholder="مثال: متجر رونق، قهوة المختص، بوتيك النخبة..."
                     className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                   />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-800 mb-1">
+                    الرابط المختصر للمتجر (Store Link Slug)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={customSlug}
+                      onChange={(e) => {
+                        setSlugTouched(true);
+                        setCustomSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, ''));
+                      }}
+                      placeholder="rawaq-store"
+                      className="w-full pl-3.5 pr-9 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
+                      dir="ltr"
+                    />
+                    <Globe className="w-4 h-4 text-stone-400 absolute right-3 top-3 pointer-events-none" />
+                  </div>
+                  <span className="text-[10px] text-[#2563EB] font-mono mt-1 block" dir="ltr">
+                    /?store={previewSlug || 'store'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-stone-800 mb-1">نوع النشاط التجاري</label>
+                  <select
+                    value={businessType}
+                    onChange={(e) => setBusinessType(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
+                  >
+                    {businessCategories.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -182,21 +285,6 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-stone-800 mb-1">نوع النشاط التجاري</label>
-                <select
-                  value={businessType}
-                  onChange={(e) => setBusinessType(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-xs focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
-                >
-                  {businessCategories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-bold text-stone-800 mb-1">
@@ -207,7 +295,10 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
                       type="tel"
                       required
                       value={whatsappNumber}
-                      onChange={(e) => setWhatsappNumber(e.target.value)}
+                      onChange={(e) => {
+                        setWhatsappNumber(e.target.value);
+                        if (stepError) setStepError(null);
+                      }}
                       placeholder="9665XXXXXXXX"
                       className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                       dir="ltr"
@@ -239,9 +330,24 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold text-stone-800 mb-1">
-                  الوصف التعريفي للمتجر (Tagline)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-stone-800">
+                    الوصف التعريفي للمتجر (Tagline)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAITagline}
+                    disabled={generatingTagline}
+                    className="text-[11px] font-bold text-[#2563EB] hover:bg-blue-50 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    {generatingTagline ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Wand2 className="w-3.5 h-3.5" />
+                    )}
+                    <span>توليد وصف احترافي بالذكاء الاصطناعي ✨</span>
+                  </button>
+                </div>
                 <textarea
                   rows={2}
                   value={tagline}
@@ -354,7 +460,7 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
                     className="w-20 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-center font-bold text-base"
                   />
                   <span className="text-[11px] text-stone-400">
-                    يظهر كأيقونة لمتجرك في شريط التصفح العلوي
+                    يظهر كأيقونة لمتجرك في شريط التصفح العلوي (ويمكنك رفع شعار مصور لاحقاً)
                   </span>
                 </div>
               </div>
@@ -459,7 +565,10 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
           {step > 1 ? (
             <button
               type="button"
-              onClick={() => setStep((s) => (s - 1) as any)}
+              onClick={() => {
+                setStepError(null);
+                setStep((s) => (s - 1) as 1 | 2 | 3);
+              }}
               className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <ArrowRight className="w-4 h-4" />
@@ -478,13 +587,7 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
           {step < 3 ? (
             <button
               type="button"
-              onClick={() => {
-                if (step === 1 && !storeName.trim()) {
-                  alert('يرجى إدخال اسم المتجر أولاً');
-                  return;
-                }
-                setStep((s) => (s + 1) as any);
-              }}
+              onClick={handleNextStep}
               className="px-6 py-2.5 bg-[#2563EB] hover:bg-blue-600 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-sm transition-transform active:scale-95 cursor-pointer"
             >
               <span>التالي</span>

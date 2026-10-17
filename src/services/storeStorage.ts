@@ -302,13 +302,35 @@ const STORAGE_KEYS = {
   POLICIES: 'storelink_policies',
 };
 
+export function safeSetLocalStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn(`LocalStorage quota notice for key "${key}":`, e);
+    try {
+      // Evict old cached orders first to free space
+      if (key !== STORAGE_KEYS.ORDERS) {
+        const rawOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
+        if (rawOrders) {
+          const parsed = JSON.parse(rawOrders);
+          if (Array.isArray(parsed) && parsed.length > 30) {
+            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(parsed.slice(0, 30)));
+          }
+        }
+      }
+      localStorage.setItem(key, value);
+    } catch (retryErr) {
+      console.warn('Could not persist to localStorage after eviction:', retryErr);
+    }
+  }
+}
+
 export class StoreStorage {
   static getSettings(): StoreSettings {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (data) {
         const parsed = JSON.parse(data);
-        // Clean out legacy hardcoded references from old test sessions
         if (
           parsed.tagline?.includes('Chemical') || 
           parsed.tagline?.includes('Engineering Process Design') || 
@@ -319,7 +341,7 @@ export class StoreStorage {
           parsed.websiteUrl?.includes('simpler-ebrahim') ||
           !parsed.brandTheme
         ) {
-          localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
+          safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
           return DEFAULT_SETTINGS;
         }
         return parsed;
@@ -331,7 +353,7 @@ export class StoreStorage {
   }
 
   static saveSettings(settings: StoreSettings): void {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
     this.dispatchUpdate();
   }
 
@@ -350,7 +372,7 @@ export class StoreStorage {
             parsed[0].name?.includes('باقة الحلول التقنية')
           )
         ) {
-          localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(DEFAULT_PRODUCTS));
+          safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(DEFAULT_PRODUCTS));
           return DEFAULT_PRODUCTS;
         }
         return parsed;
@@ -362,7 +384,7 @@ export class StoreStorage {
   }
 
   static saveProducts(products: Product[]): void {
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
     this.dispatchUpdate();
   }
 
@@ -377,7 +399,7 @@ export class StoreStorage {
   }
 
   static saveOrders(orders: Order[]): void {
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(orders.slice(0, 150)));
     this.dispatchUpdate();
   }
 
@@ -408,7 +430,7 @@ export class StoreStorage {
       if (data) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed) && parsed.some(p => p.content?.includes('إبراهيم جابر'))) {
-          localStorage.setItem(STORAGE_KEYS.POLICIES, JSON.stringify(DEFAULT_POLICIES));
+          safeSetLocalStorage(STORAGE_KEYS.POLICIES, JSON.stringify(DEFAULT_POLICIES));
           return DEFAULT_POLICIES;
         }
         return parsed;
@@ -420,15 +442,31 @@ export class StoreStorage {
   }
 
   static savePolicies(policies: StorePolicy[]): void {
-    localStorage.setItem(STORAGE_KEYS.POLICIES, JSON.stringify(policies));
+    safeSetLocalStorage(STORAGE_KEYS.POLICIES, JSON.stringify(policies));
+    this.dispatchUpdate();
+  }
+
+  /**
+   * Batches hydrating all 4 active store slices in a single event dispatch
+   */
+  static hydrateStore(data: {
+    settings: StoreSettings;
+    products: Product[];
+    orders: Order[];
+    policies: StorePolicy[];
+  }): void {
+    safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(data.settings));
+    safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(data.products));
+    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify((data.orders || []).slice(0, 150)));
+    safeSetLocalStorage(STORAGE_KEYS.POLICIES, JSON.stringify(data.policies));
     this.dispatchUpdate();
   }
 
   static resetToDefault(): void {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(DEFAULT_PRODUCTS));
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(DEFAULT_ORDERS));
-    localStorage.setItem(STORAGE_KEYS.POLICIES, JSON.stringify(DEFAULT_POLICIES));
+    safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
+    safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(DEFAULT_PRODUCTS));
+    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(DEFAULT_ORDERS));
+    safeSetLocalStorage(STORAGE_KEYS.POLICIES, JSON.stringify(DEFAULT_POLICIES));
     this.dispatchUpdate();
   }
 

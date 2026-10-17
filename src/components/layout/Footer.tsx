@@ -29,6 +29,9 @@ export const Footer: React.FC<FooterProps> = ({
   const cleanWhatsapp = (settings.whatsappNumber || '').replace(/\D/g, '');
   const displayPhone = settings.supportPhone || (cleanWhatsapp ? `+${cleanWhatsapp}` : '');
 
+  const cleanInstagram = (settings.instagramHandle || '').trim().replace(/^@/, '');
+  const cleanTiktok = (settings.tiktokHandle || '').trim().replace(/^@/, '');
+
   return (
     <footer 
       className="mt-20 text-white transition-colors"
@@ -39,12 +42,20 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Brand Col */}
           <div className="space-y-3 md:col-span-2">
             <div className="flex items-center gap-2.5">
-              <div 
-                className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-base shadow-sm border border-white/20"
-                style={{ backgroundColor: brand.accentColor }}
-              >
-                {settings.logoLetter || 'A'}
-              </div>
+              {settings.logoUrl ? (
+                <img
+                  src={settings.logoUrl}
+                  alt={settings.storeName}
+                  className="w-10 h-10 rounded-xl object-cover border border-white/20 bg-white"
+                />
+              ) : (
+                <div 
+                  className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-base shadow-sm border border-white/20"
+                  style={{ backgroundColor: brand.accentColor }}
+                >
+                  {settings.logoLetter || settings.storeName?.charAt(0) || 'S'}
+                </div>
+              )}
               <div>
                 <h3 className="text-base font-bold text-white tracking-tight">{settings.storeName}</h3>
                 {settings.storeSubtitle && (
@@ -57,7 +68,7 @@ export const Footer: React.FC<FooterProps> = ({
               {settings.tagline}
             </p>
 
-            <div className="text-xs text-stone-300 pt-1 space-y-1">
+            <div className="text-xs text-stone-300 pt-1 space-y-1.5">
               {displayPhone && (
                 <div className="flex items-center gap-2">
                   <Phone className="w-3.5 h-3.5 text-stone-400" />
@@ -68,6 +79,32 @@ export const Footer: React.FC<FooterProps> = ({
                 <div className="flex items-center gap-2">
                   <Mail className="w-3.5 h-3.5 text-stone-400" />
                   <span>{settings.supportEmail}</span>
+                </div>
+              )}
+              {(cleanInstagram || cleanTiktok) && (
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  {cleanInstagram && (
+                    <a
+                      href={`https://instagram.com/${cleanInstagram}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[11px] font-medium transition-colors"
+                      dir="ltr"
+                    >
+                      Instagram: @{cleanInstagram}
+                    </a>
+                  )}
+                  {cleanTiktok && (
+                    <a
+                      href={`https://tiktok.com/@${cleanTiktok}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[11px] font-medium transition-colors"
+                      dir="ltr"
+                    >
+                      TikTok: @{cleanTiktok}
+                    </a>
+                  )}
                 </div>
               )}
             </div>
