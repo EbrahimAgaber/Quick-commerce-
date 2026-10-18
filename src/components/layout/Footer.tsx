@@ -46,7 +46,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <img
                   src={settings.logoUrl}
                   alt={settings.storeName}
-                  className="w-10 h-10 rounded-xl object-cover border border-white/20 bg-white"
+                  className="w-10 h-10 rounded-xl object-contain p-1 border border-white/20 bg-white"
                 />
               ) : (
                 <div 

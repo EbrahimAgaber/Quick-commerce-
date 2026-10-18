@@ -3,6 +3,7 @@ import { StoreSettings, Product } from '../../types/store';
 import { DEFAULT_PRODUCTS } from '../../services/storeStorage';
 import { generateCleanStoreSlug } from '../../utils/urlRouter';
 import { requestAIGeneration } from '../../services/aiService';
+import { compressImageFile } from '../../utils/imageUploader';
 import { 
   Store, 
   ArrowLeft, 
@@ -15,7 +16,9 @@ import {
   Globe,
   AlertCircle,
   Loader2,
-  Wand2
+  Wand2,
+  Upload,
+  Trash2
 } from 'lucide-react';
 
 interface StoreOnboardingWizardProps {
@@ -52,6 +55,8 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
   const [accentColor, setAccentColor] = useState('#2563EB');
   const [backgroundColor, setBackgroundColor] = useState('#F8FAFC');
   const [logoLetter, setLogoLetter] = useState('S');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // Step 3: Shipping & Starter Catalog
   const [freeShippingThreshold, setFreeShippingThreshold] = useState<number>(250);
@@ -101,6 +106,20 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
     setStep((s) => (s + 1) as 1 | 2 | 3);
   };
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    try {
+      const dataUrl = await compressImageFile(file, 400, 400, 0.9);
+      setLogoUrl(dataUrl);
+    } catch {
+      // Ignore
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   const handleFinish = () => {
     const cleanPhone = whatsappNumber.trim().replace(/\D/g, '');
     const finalSlug = (customSlug.trim() || generateCleanStoreSlug(storeName.trim() || 'store'))
@@ -113,6 +132,7 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
       storeSubtitle: storeSubtitle.trim(),
       businessType,
       logoLetter: (logoLetter.trim() || storeName.trim().charAt(0) || 'S').toUpperCase(),
+      logoUrl: logoUrl.trim() || undefined,
       tagline: tagline.trim(),
       whatsappNumber: cleanPhone,
       supportPhone: cleanPhone ? `+${cleanPhone}` : '',
@@ -439,29 +459,59 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
                 </div>
               </div>
 
-              {/* Logo Letter */}
-              <div>
-                <label className="block font-bold text-stone-800 mb-1">
-                  حرف أو رمز أيقونة الشعار
-                </label>
-                <div className="flex items-center gap-3">
+              {/* Logo & Brand Icon */}
+              <div className="p-3.5 bg-stone-50 border border-stone-200 rounded-2xl space-y-3">
+                <div>
+                  <label className="block font-bold text-stone-800">
+                    شعار المتجر أو رمز الأيقونة
+                  </label>
+                  <p className="text-[11px] text-stone-500">
+                    ارفع صورة شعار متجرك (PNG شفاف أو JPG) أو اختر حرفاً يمثل متجرك
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-xl text-white shadow-sm"
-                    style={{ backgroundColor: primaryColor }}
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center font-bold text-xl text-white shadow-xs overflow-hidden shrink-0 border border-stone-200"
+                    style={{ backgroundColor: logoUrl ? '#FFFFFF' : primaryColor }}
                   >
-                    {logoLetter}
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
+                    ) : (
+                      <span>{logoLetter}</span>
+                    )}
                   </div>
-                  <input
-                    type="text"
-                    maxLength={2}
-                    value={logoLetter}
-                    onChange={(e) => setLogoLetter(e.target.value.toUpperCase())}
-                    placeholder="S"
-                    className="w-20 px-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-center font-bold text-base"
-                  />
-                  <span className="text-[11px] text-stone-400">
-                    يظهر كأيقونة لمتجرك في شريط التصفح العلوي (ويمكنك رفع شعار مصور لاحقاً)
-                  </span>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="px-3 py-2 bg-white hover:bg-stone-100 border border-stone-200 rounded-xl font-bold text-stone-700 flex items-center gap-1.5 cursor-pointer text-xs">
+                      <Upload className="w-3.5 h-3.5 text-[#2563EB]" />
+                      <span>{uploadingLogo ? 'جاري المعالجة...' : 'رفع صورة الشعار'}</span>
+                      <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+                    </label>
+
+                    {logoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setLogoUrl('')}
+                        className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl cursor-pointer"
+                        title="إزالة الشعار والعودة للحرف"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-stone-500 font-medium">أو الحرف:</span>
+                      <input
+                        type="text"
+                        maxLength={2}
+                        value={logoLetter}
+                        onChange={(e) => setLogoLetter(e.target.value.toUpperCase())}
+                        placeholder="S"
+                        className="w-12 px-2 py-1.5 bg-white border border-stone-200 rounded-xl text-center font-bold text-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

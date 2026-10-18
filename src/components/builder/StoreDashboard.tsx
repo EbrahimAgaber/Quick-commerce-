@@ -481,7 +481,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     setUploadingProductImg(true);
     setProductFormError(null);
     try {
-      const compressedDataUrl = await compressImageFile(file, 720, 0.8);
+      const compressedDataUrl = await compressImageFile(file, 800, 800, 0.85);
       if (isGallery) {
         setProductForm((prev) => ({
           ...prev,
@@ -620,7 +620,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     if (!file) return;
     setUploadingStoreLogo(true);
     try {
-      const dataUrl = await compressImageFile(file, 300, 0.85);
+      const dataUrl = await compressImageFile(file, 400, 400, 0.9);
       setEditableSettings((prev) => ({ ...prev, logoUrl: dataUrl }));
     } catch {
       // Ignore
@@ -718,11 +718,11 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
         <div className="space-y-2 w-full md:w-auto">
           <div className="flex items-center gap-3">
             <div 
-              className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white text-lg shadow-sm overflow-hidden shrink-0"
-              style={{ backgroundColor: brand.primaryColor }}
+              className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white text-lg shadow-sm overflow-hidden shrink-0 border border-stone-200"
+              style={{ backgroundColor: settings.logoUrl ? '#FFFFFF' : brand.primaryColor }}
             >
               {settings.logoUrl ? (
-                <img src={settings.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                <img src={settings.logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
               ) : (
                 <span>{settings.logoLetter || 'S'}</span>
               )}
@@ -1495,11 +1495,11 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                 <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-base text-white shadow-xs overflow-hidden shrink-0"
-                      style={{ backgroundColor: brand.primaryColor }}
+                      className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-base text-white shadow-xs overflow-hidden shrink-0 border border-stone-200"
+                      style={{ backgroundColor: editableSettings.logoUrl ? '#FFFFFF' : brand.primaryColor }}
                     >
                       {editableSettings.logoUrl ? (
-                        <img src={editableSettings.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                        <img src={editableSettings.logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
                       ) : (
                         <span>{editableSettings.logoLetter || 'S'}</span>
                       )}

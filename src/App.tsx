@@ -82,9 +82,9 @@ export default function App() {
 
   // Active Store Database States
   const [settings, setSettings] = useState<StoreSettings>(() => activeStore.settings || StoreStorage.getSettings());
-  const [products, setProducts] = useState<Product[]>(() => activeStore.products || StoreStorage.getProducts());
-  const [orders, setOrders] = useState<Order[]>(() => activeStore.orders || StoreStorage.getOrders());
-  const [policies, setPolicies] = useState<StorePolicy[]>(() => activeStore.policies || StoreStorage.getPolicies());
+  const [products, setProducts] = useState<Product[]>(() => Array.isArray(activeStore.products) ? activeStore.products : StoreStorage.getProducts());
+  const [orders, setOrders] = useState<Order[]>(() => Array.isArray(activeStore.orders) ? activeStore.orders : StoreStorage.getOrders());
+  const [policies, setPolicies] = useState<StorePolicy[]>(() => Array.isArray(activeStore.policies) ? activeStore.policies : StoreStorage.getPolicies());
 
   // Only stores belonging to the currently logged-in merchant
   const merchantStores = useMemo(
@@ -113,6 +113,10 @@ export default function App() {
       setAllStores(stores);
       const curr = StoreManager.getActiveStore();
       setActiveStore(curr);
+      setSettings(curr.settings);
+      setProducts(curr.products || []);
+      setOrders(curr.orders || []);
+      setPolicies(curr.policies || []);
     };
 
     const unsubscribeFb = onFirebaseAuthStateChanged((fbUser) => {

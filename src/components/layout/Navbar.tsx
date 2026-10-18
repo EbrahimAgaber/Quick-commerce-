@@ -300,10 +300,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="flex items-center gap-3">
               <div 
                 className="w-10 h-10 rounded-2xl text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0 border border-black/10 overflow-hidden"
-                style={{ backgroundColor: brand.primaryColor }}
+                style={{ backgroundColor: settings.logoUrl ? '#FFFFFF' : brand.primaryColor }}
               >
                 {settings.logoUrl ? (
-                  <img src={settings.logoUrl} alt="Logo" className="w-full h-full object-cover rounded-2xl" />
+                  <img src={settings.logoUrl} alt="Logo" className="w-full h-full object-contain p-0.5 rounded-2xl" />
                 ) : (
                   <span>{settings.logoLetter || 'A'}</span>
                 )}

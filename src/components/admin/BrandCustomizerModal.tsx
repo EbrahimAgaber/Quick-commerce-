@@ -72,7 +72,7 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
     if (!file) return;
     setUploadingLogo(true);
     try {
-      const dataUrl = await compressImageFile(file, 300, 0.85);
+      const dataUrl = await compressImageFile(file, 400, 400, 0.9);
       setFormData((prev) => ({ ...prev, logoUrl: dataUrl }));
     } catch {
       // Ignore error
@@ -591,11 +591,11 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
               <div className="p-3.5 bg-stone-50 border border-stone-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div
-                    className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-base text-white shadow-xs overflow-hidden shrink-0"
-                    style={{ backgroundColor: formData.brandTheme.primaryColor }}
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-base text-white shadow-xs overflow-hidden shrink-0 border border-stone-200"
+                    style={{ backgroundColor: formData.logoUrl ? '#FFFFFF' : formData.brandTheme.primaryColor }}
                   >
                     {formData.logoUrl ? (
-                      <img src={formData.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                      <img src={formData.logoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
                     ) : (
                       <span>{formData.logoLetter || 'S'}</span>
                     )}
