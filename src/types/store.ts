@@ -64,6 +64,12 @@ export interface StoreSettings {
   deliveryEstimationDays: string;
   promoCodes?: PromoCode[];
   googleWebAppUrl?: string;
+  legalName?: string;
+  commercialRegister?: string;
+  vatNumber?: string;
+  pricesIncludeVat?: boolean;
+  vatRate?: number;
+  city?: string;
 }
 
 export interface Product {
@@ -97,6 +103,7 @@ export interface OrderItem {
 export interface Order {
   id: string;
   timestamp: string;
+  createdAt?: string;
   customerName: string;
   customerPhone: string;
   city: string;
@@ -116,6 +123,10 @@ export interface Order {
   courierPhone?: string;
   trackingNumber?: string;
   trackingUrl?: string;
+  vatAmount?: number;
+  vatRate?: number;
+  paymentId?: string;
+  paidAt?: string;
 }
 
 export interface StorePolicy {

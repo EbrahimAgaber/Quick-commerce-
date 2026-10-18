@@ -179,6 +179,13 @@ export class AuthService {
     return isCurrentEmailVerified();
   }
 
+  static async getIdToken(): Promise<string | null> {
+    if (auth.currentUser) {
+      return await auth.currentUser.getIdToken();
+    }
+    return null;
+  }
+
   static async logout(): Promise<void> {
     try {
       await signOutFromFirebase();

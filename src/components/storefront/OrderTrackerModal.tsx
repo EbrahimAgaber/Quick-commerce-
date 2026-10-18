@@ -14,9 +14,11 @@ import {
   MapPin,
   Calendar,
   CreditCard,
-  Loader2
+  Loader2,
+  FileText
 } from 'lucide-react';
 import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
+import { InvoiceModal } from './InvoiceModal';
 
 interface OrderTrackerModalProps {
   isOpen: boolean;
@@ -66,6 +68,7 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
   const [searchedOrder, setSearchedOrder] = useState<Order | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   useEffect(() => {
     // Only auto-search if the customer just completed an order and clicked "Track This Order"
@@ -338,6 +341,16 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                 </p>
               </div>
 
+              {/* View Tax Invoice Button */}
+              <button
+                type="button"
+                onClick={() => setShowInvoiceModal(true)}
+                className="w-full py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <FileText className="w-4 h-4 text-emerald-400" />
+                <span>عرض وطباعة الفاتورة الضريبية (ZATCA)</span>
+              </button>
+
               {/* Inquire on WhatsApp */}
               {settings.whatsappNumber && (
                 <button
@@ -364,6 +377,14 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
           ) : null}
         </div>
       </div>
+
+      {/* ZATCA Tax Invoice Modal */}
+      <InvoiceModal
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        order={searchedOrder}
+        settings={settings}
+      />
     </div>
   );
 };

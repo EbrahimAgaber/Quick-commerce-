@@ -736,6 +736,7 @@ export default function App() {
               }
             >
               <StoreDashboard
+                storeId={activeStore.id}
                 storeSlug={activeStore.slug}
                 settings={settings}
                 products={products}

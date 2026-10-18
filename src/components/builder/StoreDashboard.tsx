@@ -1,8 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StoreSettings, Product, Order, StorePolicy, OrderStatus, MerchantUser, PromoCode } from '../../types/store';
 import { compressImageFile } from '../../utils/imageUploader';
 import { requestAIGeneration } from '../../services/aiService';
 import { CloudSyncStatus } from '../../services/storeManager';
+import { AuthService } from '../../services/authService';
+import { InvoiceModal } from '../storefront/InvoiceModal';
+import { playOrderNotificationSound } from '../../services/notificationService';
 import { 
   Copy, 
   Check, 
@@ -31,10 +34,15 @@ import {
   Wand2,
   Percent,
   Star,
-  AlertCircle
+  AlertCircle,
+  Truck,
+  RotateCcw,
+  FileText,
+  Bell
 } from 'lucide-react';
 
 interface StoreDashboardProps {
+  storeId?: string;
   storeSlug: string;
   settings: StoreSettings;
   products: Product[];
@@ -51,6 +59,7 @@ interface StoreDashboardProps {
 }
 
 export const StoreDashboard: React.FC<StoreDashboardProps> = ({
+  storeId,
   storeSlug,
   settings,
   products,
@@ -101,6 +110,39 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<Order | null>(null);
   const [localTrackingNotes, setLocalTrackingNotes] = useState<Record<string, string>>({});
+  const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
+  const [isRefunding, setIsRefunding] = useState(false);
+  const [courierForm, setCourierForm] = useState({
+    courierName: '',
+    courierPhone: '',
+    trackingNumber: '',
+    trackingUrl: '',
+  });
+  const [newOrderBanner, setNewOrderBanner] = useState<string | null>(null);
+
+  // Sync courierForm when an order is selected
+  useEffect(() => {
+    if (selectedOrderDetail) {
+      setCourierForm({
+        courierName: selectedOrderDetail.courierName || '',
+        courierPhone: selectedOrderDetail.courierPhone || '',
+        trackingNumber: selectedOrderDetail.trackingNumber || '',
+        trackingUrl: selectedOrderDetail.trackingUrl || '',
+      });
+    }
+  }, [selectedOrderDetail]);
+
+  // Real-time audio chime when new orders arrive
+  const prevOrdersCountRef = useRef<number>(orders.length);
+  useEffect(() => {
+    if (orders.length > prevOrdersCountRef.current) {
+      playOrderNotificationSound();
+      const latest = orders[0];
+      setNewOrderBanner(`وصل طلب جديد #${latest?.id || ''} بقيمة ${latest?.grandTotal || 0} ${editableSettings.currency}`);
+      setTimeout(() => setNewOrderBanner(null), 6000);
+    }
+    prevOrdersCountRef.current = orders.length;
+  }, [orders.length, editableSettings.currency]);
 
   // Promo Code Creation Form State
   const [newPromoCode, setNewPromoCode] = useState('');
@@ -189,6 +231,66 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     onUpdateOrders(updated);
     setSyncMessage('📝 تم حفظ ملاحظات الشحن / البوليصة');
     setTimeout(() => setSyncMessage(null), 2000);
+  };
+
+  const handleSaveCourierDetails = (orderId: string) => {
+    const updated = orders.map((o) => (o.id === orderId ? {
+      ...o,
+      courierName: courierForm.courierName,
+      courierPhone: courierForm.courierPhone,
+      trackingNumber: courierForm.trackingNumber,
+      trackingUrl: courierForm.trackingUrl,
+    } : o));
+    onUpdateOrders(updated);
+    if (selectedOrderDetail && selectedOrderDetail.id === orderId) {
+      setSelectedOrderDetail({
+        ...selectedOrderDetail,
+        courierName: courierForm.courierName,
+        courierPhone: courierForm.courierPhone,
+        trackingNumber: courierForm.trackingNumber,
+        trackingUrl: courierForm.trackingUrl,
+      });
+    }
+    setSyncMessage('🚚 تم حفظ وتحديث بيانات الشحن والتوصيل بنجاح');
+    setTimeout(() => setSyncMessage(null), 2500);
+  };
+
+  const handleRefundOrder = async (order: Order) => {
+    if (!window.confirm(`هل أنت متأكد من رغبتك في استرجاع مبلغ ${order.grandTotal} ${editableSettings.currency} للطلب #${order.id} عبر ميسر؟`)) {
+      return;
+    }
+    setIsRefunding(true);
+    try {
+      const token = await AuthService.getIdToken();
+      const res = await fetch('/api/refundOrder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          storeId: storeId || storeSlug,
+          orderId: order.id,
+          amount: order.grandTotal,
+          reason: 'طلب استرجاع من التاجر عبر لوحة التحكم',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`فشل الاسترجاع: ${data.error || 'حدث خطأ أثناء معالجة الاسترجاع'}`);
+        return;
+      }
+      const updated = orders.map((o) => (o.id === order.id ? { ...o, status: 'Cancelled' as OrderStatus } : o));
+      onUpdateOrders(updated);
+      if (selectedOrderDetail && selectedOrderDetail.id === order.id) {
+        setSelectedOrderDetail({ ...selectedOrderDetail, status: 'Cancelled' });
+      }
+      alert('تم استرجاع المبلغ بنجاح عبر ميسر وتحديث حالة الطلب إلى ملغي.');
+    } catch (err: any) {
+      alert(`فشل الاسترجاع: ${err?.message || 'خطأ في الاتصال بالسيرفر'}`);
+    } finally {
+      setIsRefunding(false);
+    }
   };
 
   const handleExportOrdersCSV = () => {
@@ -522,6 +624,14 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#0F172A] text-white text-xs sm:text-sm font-bold py-2.5 px-5 rounded-2xl shadow-xl flex items-center gap-2 animate-in zoom-in-95">
           <Sparkles className="w-4 h-4 text-[#86EFAC]" />
           <span>{syncMessage}</span>
+        </div>
+      )}
+
+      {/* Real-time New Order Banner */}
+      {newOrderBanner && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white text-xs sm:text-sm font-bold py-3 px-6 rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce">
+          <Bell className="w-4 h-4 text-emerald-100" />
+          <span>{newOrderBanner}</span>
         </div>
       )}
 
@@ -902,6 +1012,14 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                         <Eye className="w-3.5 h-3.5" />
                         <span>التفاصيل</span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setInvoiceOrder(ord)}
+                        className="p-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold flex items-center justify-center cursor-pointer"
+                        title="الفاتورة الضريبية ZATCA"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1000,9 +1118,17 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                               type="button"
                               onClick={() => setSelectedOrderDetail(ord)}
                               className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition-colors cursor-pointer"
-                              title="عرض تفاصيل الفاتورة والمنتجات"
+                              title="عرض تفاصيل الطلب والمنتجات"
                             >
                               <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setInvoiceOrder(ord)}
+                              className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition-colors cursor-pointer"
+                              title="عرض وطباعة الفاتورة الضريبية ZATCA"
+                            >
+                              <FileText className="w-4 h-4 text-emerald-600" />
                             </button>
                           </div>
                         </td>
@@ -1682,26 +1808,120 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
+            {/* Courier & Delivery Assignment */}
+            <div className="space-y-2.5 text-xs bg-stone-50 p-4 rounded-2xl border border-stone-200">
+              <div className="font-bold text-stone-800 flex items-center gap-1.5">
+                <Truck className="w-4 h-4 text-blue-600" />
+                <span>بيانات الشحن والتوصيل (المندوب / شركة الشحن):</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-stone-500 block mb-0.5">شركة الشحن / اسم المندوب</label>
+                  <input
+                    type="text"
+                    value={courierForm.courierName}
+                    onChange={(e) => setCourierForm((prev) => ({ ...prev, courierName: e.target.value }))}
+                    placeholder="مثال: أرامكس / سمسا"
+                    className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-stone-500 block mb-0.5">رقم جوال المندوب</label>
+                  <input
+                    type="text"
+                    value={courierForm.courierPhone}
+                    onChange={(e) => setCourierForm((prev) => ({ ...prev, courierPhone: e.target.value }))}
+                    placeholder="05XXXXXXXX"
+                    className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-mono"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-stone-500 block mb-0.5">رقم البوليصة / الشحنة</label>
+                  <input
+                    type="text"
+                    value={courierForm.trackingNumber}
+                    onChange={(e) => setCourierForm((prev) => ({ ...prev, trackingNumber: e.target.value }))}
+                    placeholder="Tracking #"
+                    className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-stone-500 block mb-0.5">رابط التتبع (اختياري)</label>
+                  <input
+                    type="url"
+                    value={courierForm.trackingUrl}
+                    onChange={(e) => setCourierForm((prev) => ({ ...prev, trackingUrl: e.target.value }))}
+                    placeholder="https://..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-stone-200 rounded-lg text-xs font-mono"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => handleContactCustomerWhatsApp(selectedOrderDetail)}
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => handleSaveCourierDetails(selectedOrderDetail.id)}
+                className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
               >
-                <MessageCircle className="w-4 h-4" />
-                <span>إرسال تحديث للعميل عبر واتساب</span>
+                تحديث وحفظ بيانات الشحن
               </button>
-              <button
-                type="button"
-                onClick={() => setSelectedOrderDetail(null)}
-                className="px-4 py-2.5 bg-stone-100 text-stone-700 rounded-xl text-xs font-bold cursor-pointer"
-              >
-                إغلاق
-              </button>
+            </div>
+
+            {/* Actions Bar */}
+            <div className="space-y-2 pt-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInvoiceOrder(selectedOrderDetail)}
+                  className="flex-1 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  <FileText className="w-4 h-4 text-emerald-400" />
+                  <span>عرض وطباعة الفاتورة (ZATCA)</span>
+                </button>
+
+                {selectedOrderDetail.paymentMethod === 'Moyasar' && selectedOrderDetail.status !== 'Cancelled' && (
+                  <button
+                    type="button"
+                    disabled={isRefunding}
+                    onClick={() => handleRefundOrder(selectedOrderDetail)}
+                    className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors border border-rose-200"
+                    title="استرجاع المبلغ للعميل عبر بوابة ميسر"
+                  >
+                    {isRefunding ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                    <span>استرجاع (ميسر)</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleContactCustomerWhatsApp(selectedOrderDetail)}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>مراسلة العميل عبر واتساب</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderDetail(null)}
+                  className="px-4 py-2.5 bg-stone-100 text-stone-700 rounded-xl text-xs font-bold cursor-pointer"
+                >
+                  إغلاق
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* ZATCA Tax Invoice Modal */}
+      <InvoiceModal
+        isOpen={Boolean(invoiceOrder)}
+        onClose={() => setInvoiceOrder(null)}
+        order={invoiceOrder}
+        settings={editableSettings}
+      />
 
       {/* MODAL: ADD / EDIT PRODUCT */}
       {isProductModalOpen && (

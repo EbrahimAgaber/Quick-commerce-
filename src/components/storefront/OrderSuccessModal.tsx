@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Order, StoreSettings } from '../../types/store';
-import { CheckCircle2, MessageCircle, Copy, Check, PackageCheck, Sparkles, X } from 'lucide-react';
+import { CheckCircle2, MessageCircle, Copy, Check, PackageCheck, Sparkles, X, FileText } from 'lucide-react';
 import { buildWhatsAppInvoiceMessage, createWhatsAppUrl } from '../../utils/whatsappInvoice';
+import { InvoiceModal } from './InvoiceModal';
 
 interface OrderSuccessModalProps {
   order: Order | null;
@@ -18,6 +19,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
   const brand = settings.brandTheme || {
     primaryColor: '#0B253F',
@@ -141,6 +143,15 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
             )}
           </button>
 
+          {/* View ZATCA Tax Invoice */}
+          <button
+            onClick={() => setShowInvoiceModal(true)}
+            className="w-full py-2.5 px-4 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>عرض وطباعة الفاتورة الضريبية (ZATCA)</span>
+          </button>
+
           {/* Track Order Now */}
           <button
             onClick={() => {
@@ -163,6 +174,14 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* ZATCA Tax Invoice Modal */}
+      <InvoiceModal
+        isOpen={showInvoiceModal}
+        onClose={() => setShowInvoiceModal(false)}
+        order={order}
+        settings={settings}
+      />
     </div>
   );
 };
