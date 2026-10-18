@@ -13,6 +13,8 @@ interface CustomerInput {
   city: string;
   address: string;
   landmark?: string;
+  googleMapsUrl?: string;
+  deliveryType?: 'delivery' | 'pickup';
 }
 
 export type PaymentMethodType = 'cod' | 'bank_transfer' | 'card' | 'apple_pay' | 'stc_pay';
@@ -312,6 +314,8 @@ export default async function handler(req: any, res: any) {
         grandTotal,
         status: initialStatus,
         trackingNotes: isOnlinePayment ? 'في انتظار استكمال الدفع الإلكتروني' : 'تم استلام الطلب وتأكيده بنجاح.',
+        googleMapsUrl: customer.googleMapsUrl?.trim() || '',
+        deliveryType: customer.deliveryType === 'pickup' ? 'pickup' : 'delivery',
         utm: utm || {},
         createdAt: timestamp,
       };

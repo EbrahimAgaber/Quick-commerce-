@@ -44,6 +44,9 @@ const StoreOnboardingWizard = lazy(() =>
 const BrandCustomizerModal = lazy(() =>
   import('./components/admin/BrandCustomizerModal').then((m) => ({ default: m.BrandCustomizerModal }))
 );
+const DriverDispatchView = lazy(() =>
+  import('./components/driver/DriverDispatchView').then((m) => ({ default: m.DriverDispatchView }))
+);
 const AuthModal = lazy(() =>
   import('./components/auth/AuthModal').then((m) => ({ default: m.AuthModal }))
 );
@@ -636,6 +639,15 @@ export default function App() {
             onSuccess={handleAuthSuccess}
           />
         )}
+      </Suspense>
+    );
+  }
+
+  // Driver 1-Tap Mobile View Route (?driver=<orderId>)
+  if (initialRoute.driverOrderId) {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-stone-950 text-white flex items-center justify-center p-4"><Loader2 className="w-8 h-8 animate-spin text-emerald-400" /></div>}>
+        <DriverDispatchView orderId={initialRoute.driverOrderId} storeId={activeStore.id} />
       </Suspense>
     );
   }

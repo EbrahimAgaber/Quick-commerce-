@@ -83,10 +83,11 @@ export interface ParsedStoreRoute {
   storeSlug: string | null;
   productId: string | null;
   viewParam: string | null;
+  driverOrderId: string | null;
 }
 
 /**
- * Extracts store slug, product ID, and view mode from either `/s/:slug` pathname or `?store=:slug&product=:id`
+ * Extracts store slug, product ID, view mode, and driver order ID from URL
  */
 export function parseStoreRouteFromLocation(loc: Location = window.location): ParsedStoreRoute {
   try {
@@ -94,9 +95,10 @@ export function parseStoreRouteFromLocation(loc: Location = window.location): Pa
     const queryStore = params.get('store')?.trim() || null;
     const productId = params.get('product')?.trim() || null;
     const viewParam = params.get('view')?.trim() || null;
+    const driverOrderId = params.get('driver')?.trim() || null;
 
     if (queryStore) {
-      return { storeSlug: queryStore, productId, viewParam };
+      return { storeSlug: queryStore, productId, viewParam, driverOrderId };
     }
 
     // Check clean path `/s/:slug`
@@ -106,12 +108,13 @@ export function parseStoreRouteFromLocation(loc: Location = window.location): Pa
         storeSlug: decodeURIComponent(pathSegments[1]),
         productId,
         viewParam,
+        driverOrderId,
       };
     }
 
-    return { storeSlug: null, productId, viewParam };
+    return { storeSlug: null, productId, viewParam, driverOrderId };
   } catch {
-    return { storeSlug: null, productId: null, viewParam: null };
+    return { storeSlug: null, productId: null, viewParam: null, driverOrderId: null };
   }
 }
 
@@ -125,4 +128,27 @@ export function buildShareableStoreUrl(storeSlug: string, productId?: string): s
     return `${origin}/?store=${cleanSlug}&product=${encodeURIComponent(productId)}`;
   }
   return `${origin}/?store=${cleanSlug}`;
+}
+
+/**
+ * Extracts the driver order ID from a URL string or search string (supports query params and hash)
+ */
+export function extractDriverOrderIdFromUrl(urlStr: string): string | null {
+  try {
+    const url = new URL(urlStr, 'https://dummy.base');
+    const directParam = url.searchParams.get('driver');
+    if (directParam) return directParam.trim();
+
+    // Check if hash has query params e.g. #/?driver=xxx or #/driver=xxx
+    if (url.hash && url.hash.includes('?')) {
+      const hashQuery = url.hash.split('?')[1];
+      const hashParams = new URLSearchParams(hashQuery);
+      const hashParam = hashParams.get('driver');
+      if (hashParam) return hashParam.trim();
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }

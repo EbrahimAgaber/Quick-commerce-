@@ -5,6 +5,7 @@ import { requestAIGeneration } from '../../services/aiService';
 import { CloudSyncStatus } from '../../services/storeManager';
 import { AuthService } from '../../services/authService';
 import { InvoiceModal } from '../storefront/InvoiceModal';
+import { DriverSettlementModal } from '../driver/DriverSettlementModal';
 import { playOrderNotificationSound } from '../../services/notificationService';
 import { 
   Copy, 
@@ -112,6 +113,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<Order | null>(null);
   const [localTrackingNotes, setLocalTrackingNotes] = useState<Record<string, string>>({});
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
+  const [isSettlementOpen, setIsSettlementOpen] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
   const [courierForm, setCourierForm] = useState({
     courierName: '',
@@ -282,6 +284,50 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     }
     setSyncMessage('🚚 تم حفظ وتحديث بيانات الشحن والتوصيل بنجاح');
     setTimeout(() => setSyncMessage(null), 2500);
+  };
+
+  const handleDispatchToDriver = (order: Order) => {
+    const driverPhone = editableSettings.driverPhone || order.courierPhone || prompt('أدخل رقم جوال المندوب (مثال: 9665XXXXXXXX):');
+    if (!driverPhone) return;
+
+    const cleanPhone = driverPhone.replace(/[^0-9]/g, '');
+    const origin = window.location.origin;
+    const driverLink = `${origin}/?driver=${order.id}`;
+
+    const isCOD = order.paymentMethod.toLowerCase().includes('cod') || order.paymentMethod.includes('استلام');
+    const paymentStatus = isCOD 
+      ? `💵 الدفع عند الاستلام (COD): تحصيل ${order.grandTotal} ${editableSettings.currency}`
+      : `✅ مدفوع إلكترونياً مسبقاً (لا يُحصّل من العميل)`;
+
+    let msg = `🚚 *مهمة توصيل جديدة - متجر ${editableSettings.storeName}*\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📦 *رقم الطلب:* #${order.id}\n`;
+    if (editableSettings.storeLocationUrl) {
+      msg += `📍 *موقع استلام الشحنة (المحل):* ${editableSettings.storeLocationUrl}\n`;
+    }
+    msg += `👤 *العميل:* ${order.customerName}\n`;
+    msg += `📱 *جوال العميل:* ${order.customerPhone}\n`;
+    msg += `🏠 *العنوان:* ${order.city} - ${order.deliveryAddress}\n`;
+    if (order.googleMapsUrl) {
+      msg += `🗺️ *موقع العميل (Google Maps):* ${order.googleMapsUrl}\n`;
+    }
+    if (order.landmarkNotes) {
+      msg += `📝 *ملاحظات:* ${order.landmarkNotes}\n`;
+    }
+    msg += `💰 *حالة التحصيل:* ${paymentStatus}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `🔗 *رابط مسار التوصيل المباشر للمندوب:* \n${driverLink}\n`;
+    msg += `(افتح الرابط بدون الحاجة لتحميل تطبيق لتأكيد الاستلام والتسليم بنقرة واحدة)`;
+
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
+
+    // If order was Received or In Progress, transition to Out for Delivery
+    if (order.status === 'Received' || order.status === 'In Progress') {
+      handleOrderStatusChange(order.id, 'Out for Delivery');
+      if (selectedOrderDetail && selectedOrderDetail.id === order.id) {
+        setSelectedOrderDetail({ ...selectedOrderDetail, status: 'Out for Delivery' });
+      }
+    }
   };
 
   const handleRefundOrder = async (order: Order) => {
@@ -895,15 +941,28 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
               </span>
             </div>
 
-            {orders.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
               <button
-                onClick={handleExportOrdersCSV}
-                className="px-3.5 py-2 bg-white hover:bg-stone-50 text-stone-800 border border-stone-200 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer self-start sm:self-auto"
+                type="button"
+                onClick={() => setIsSettlementOpen(true)}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                title="تصفية حسابات ومبالغ التوصيل مع المندوب"
               >
-                <Download className="w-3.5 h-3.5 text-[#2563EB]" />
-                <span>تصدير الطلبات لملف Excel (CSV)</span>
+                <Truck className="w-3.5 h-3.5" />
+                <span>دفتر تصفية المندوب (Driver Ledger)</span>
               </button>
-            )}
+
+              {orders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleExportOrdersCSV}
+                  className="px-3.5 py-2 bg-white hover:bg-stone-50 text-stone-800 border border-stone-200 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#2563EB]" />
+                  <span>تصدير الطلبات لملف Excel (CSV)</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Analytics & Insights Performance Breakdown */}
@@ -1084,19 +1143,27 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                     <div className="flex items-center gap-2 pt-1">
                       <button
                         type="button"
+                        onClick={() => handleDispatchToDriver(ord)}
+                        className="py-2 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+                        title="إرسال تفاصيل الشحنة للمندوب عبر واتساب"
+                      >
+                        <Truck className="w-3.5 h-3.5" />
+                        <span>للمندوب</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => handleContactCustomerWhatsApp(ord)}
                         className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <MessageCircle className="w-3.5 h-3.5" />
-                        <span>مراسلة العميل واتساب</span>
+                        <span>العميل</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setSelectedOrderDetail(ord)}
-                        className="px-3 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
+                        className="px-2.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5" />
-                        <span>التفاصيل</span>
                       </button>
                       <button
                         type="button"
@@ -1192,6 +1259,14 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleDispatchToDriver(ord)}
+                              className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors cursor-pointer"
+                              title="إرسال تفاصيل الشحنة للمندوب عبر واتساب (1-Tap Dispatch)"
+                            >
+                              <Truck className="w-4 h-4" />
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleContactCustomerWhatsApp(ord)}
@@ -1667,6 +1742,98 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                 </div>
               </div>
 
+              {/* Local Shared Freelance Driver Settings */}
+              <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
+                <div className="border-b border-stone-100 pb-2">
+                  <h3 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
+                    <Truck className="w-4 h-4 text-blue-600" />
+                    <span>إعدادات المندوب المحلي المشترك (Local Freelance Driver)</span>
+                  </h3>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    اربط متجرك بمندوب توصيل محلي مشترك يوصل طلباتك لعملائك ويحصل المبالغ النقدية دون الحاجة لتحميل أي تطبيق
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">اسم المندوب المحلي</label>
+                    <input
+                      type="text"
+                      value={editableSettings.driverName || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          driverName: e.target.value,
+                        })
+                      }
+                      placeholder="مثال: كابتن أحمد / أبو محمد"
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">رقم واتساب المندوب (لاستلام الشحنات)</label>
+                    <input
+                      type="text"
+                      value={editableSettings.driverPhone || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          driverPhone: e.target.value,
+                        })
+                      }
+                      placeholder="9665XXXXXXXX"
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">
+                      أجرة توصيل المندوب لكل طلب ({editableSettings.currency})
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editableSettings.driverFee ?? 15}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          driverFee: Number(e.target.value),
+                        })
+                      }
+                      placeholder="15"
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                    />
+                    <span className="text-[10px] text-stone-400 mt-0.5 block">
+                      المبلغ المتفق عليه للمندوب عن كل شحنة ناجحة ليتم احتسابه تلقائياً في دفتر التصفية اليومي
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">
+                      رابط موقع المحل / المستودع على Google Maps
+                    </label>
+                    <input
+                      type="url"
+                      value={editableSettings.storeLocationUrl || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          storeLocationUrl: e.target.value,
+                        })
+                      }
+                      placeholder="https://maps.app.goo.gl/..."
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                      dir="ltr"
+                    />
+                    <span className="text-[10px] text-stone-400 mt-0.5 block">
+                      يرسل للمندوب بنقرة واحدة لفتح اتجاهات القيادة واستلام الطرود من محلك
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Store Pickup & ZATCA Tax Compliance */}
               <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
                 <h3 className="text-sm font-bold text-stone-900 border-b border-stone-100 pb-2">
@@ -2033,6 +2200,19 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
               <div><strong>العميل:</strong> {selectedOrderDetail.customerName}</div>
               <div><strong>الجوال:</strong> <span className="font-mono" dir="ltr">{selectedOrderDetail.customerPhone}</span></div>
               <div><strong>العنوان:</strong> {selectedOrderDetail.city} — {selectedOrderDetail.deliveryAddress}</div>
+              {selectedOrderDetail.googleMapsUrl && (
+                <div>
+                  <strong>موقع GPS للعميل:</strong>{' '}
+                  <a
+                    href={selectedOrderDetail.googleMapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline font-bold inline-flex items-center gap-1"
+                  >
+                    <span>فتح الموقع على Google Maps 📍</span>
+                  </a>
+                </div>
+              )}
               <div><strong>طريقة الدفع:</strong> {selectedOrderDetail.paymentMethod}</div>
               {selectedOrderDetail.landmarkNotes && <div><strong>ملاحظات العميل:</strong> {selectedOrderDetail.landmarkNotes}</div>}
             </div>
@@ -2137,9 +2317,17 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => handleSaveCourierDetails(selectedOrderDetail.id)}
-                className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                className="w-full py-1.5 bg-stone-800 hover:bg-stone-900 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer"
               >
                 تحديث وحفظ بيانات الشحن
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDispatchToDriver(selectedOrderDetail)}
+                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+              >
+                <Truck className="w-4 h-4" />
+                <span>إرسال تفاصيل الشحنة للمندوب عبر واتساب (1-Tap Dispatch)</span>
               </button>
             </div>
 
@@ -2197,6 +2385,15 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
         onClose={() => setInvoiceOrder(null)}
         order={invoiceOrder}
         settings={editableSettings}
+      />
+
+      {/* Driver Cash Settlement Ledger Modal */}
+      <DriverSettlementModal
+        isOpen={isSettlementOpen}
+        onClose={() => setIsSettlementOpen(false)}
+        orders={orders}
+        settings={editableSettings}
+        onUpdateOrders={onUpdateOrders}
       />
 
       {/* MODAL: ADD / EDIT PRODUCT */}

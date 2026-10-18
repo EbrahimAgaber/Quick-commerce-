@@ -76,6 +76,10 @@ export interface StoreSettings {
   snapchatPixelId?: string;
   enableStorePickup?: boolean;
   storePickupAddress?: string;
+  driverName?: string;
+  driverPhone?: string;
+  driverFee?: number;
+  storeLocationUrl?: string;
 }
 
 export interface Product {
@@ -130,6 +134,11 @@ export interface Order {
   trackingNumber?: string;
   trackingUrl?: string;
   deliveryType?: 'delivery' | 'pickup';
+  googleMapsUrl?: string;
+  driverCashCollected?: number;
+  driverDeliveredAt?: string;
+  driverSettled?: boolean;
+  driverSettledAt?: string;
   vatAmount?: number;
   vatRate?: number;
   paymentId?: string;

@@ -90,6 +90,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [landmarkNotes, setLandmarkNotes] = useState(orderNotes || '');
   const [paymentMethod, setPaymentMethod] = useState(settings.paymentMethods[0] || 'الدفع عند الاستلام (COD)');
   const [copiedIban, setCopiedIban] = useState(false);
+  const [googleMapsUrl, setGoogleMapsUrl] = useState('');
+  const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -163,6 +165,32 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   };
 
+  const handleGetLocation = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      alert('المتصفح لا يدعم تحديد الموقع التلقائي. يمكنك كتابة العنوان يدوياً.');
+      return;
+    }
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        setGoogleMapsUrl(mapsUrl);
+        if (!deliveryAddress.trim()) {
+          setDeliveryAddress(`موقع محدد عبر الخريطة (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+        }
+        setIsLocating(false);
+      },
+      (err) => {
+        console.warn('Geolocation error:', err);
+        setIsLocating(false);
+        alert('تعذر الوصول إلى موقعك تلقائياً. يرجى السماح بالوصول للموقع في المتصفح أو إدخال العنوان يدوياً.');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   // Validate step 1 and advance
   const handleNextFromStep1 = () => {
     setErrorMsg('');
@@ -234,6 +262,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           city: finalCity,
           address: finalAddress,
           landmark: landmarkNotes.trim(),
+          googleMapsUrl: googleMapsUrl.trim(),
+          deliveryType,
         },
         paymentMethod: mappedPaymentMethod,
         promoCode: appliedPromo?.code,
@@ -455,9 +485,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                   {/* Detailed Address */}
                   <div>
-                    <label className="block text-xs font-bold text-stone-800 mb-1">
-                      الحي واسم الشارع أو العنوان الوطني <span className="text-red-500">*</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-stone-800">
+                        الحي واسم الشارع أو العنوان الوطني <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleGetLocation}
+                        disabled={isLocating}
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                        <span>{isLocating ? 'جاري تحديد موقعك...' : 'تحديد موقعي التلقائي (GPS)'}</span>
+                      </button>
+                    </div>
                     <input
                       type="text"
                       required
@@ -466,6 +507,22 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       placeholder="مثال: حي الياسمين، شارع أنس بن مالك، فيلا 12"
                       className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm focus:outline-none"
                     />
+                    {googleMapsUrl && (
+                      <div className="mt-1.5 p-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 font-bold">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>تم ربط إحداثيات موقعك بالخريطة للمندوب</span>
+                        </span>
+                        <a
+                          href={googleMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] underline text-blue-700 font-bold"
+                        >
+                          معاينة
+                        </a>
+                      </div>
+                    )}
                   </div>
 
                   {/* Landmark Notes */}

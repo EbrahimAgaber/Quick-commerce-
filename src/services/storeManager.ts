@@ -529,7 +529,15 @@ export class StoreManager {
   static async submitOrderToServer(params: {
     storeId: string;
     items: { productId: string; variant?: string; qty: number }[];
-    customer: { name: string; phone: string; city: string; address: string; landmark?: string };
+    customer: { 
+      name: string; 
+      phone: string; 
+      city: string; 
+      address: string; 
+      landmark?: string;
+      googleMapsUrl?: string;
+      deliveryType?: 'delivery' | 'pickup';
+    };
     paymentMethod: 'cod' | 'bank_transfer' | 'card' | 'apple_pay' | 'stc_pay';
     promoCode?: string;
     utm?: Record<string, string>;
@@ -543,6 +551,8 @@ export class StoreManager {
         city: params.customer.city,
         deliveryAddress: params.customer.address,
         landmarkNotes: params.customer.landmark || '',
+        googleMapsUrl: params.customer.googleMapsUrl || '',
+        deliveryType: params.customer.deliveryType || 'delivery',
         paymentMethod: params.paymentMethod,
         itemsSummary: `${params.items.length} منتجات (طلب تجريبي)`,
         items: params.items.map((i) => ({
