@@ -38,7 +38,8 @@ import {
   Truck,
   RotateCcw,
   FileText,
-  Bell
+  Bell,
+  MapPin
 } from 'lucide-react';
 
 interface StoreDashboardProps {
@@ -199,6 +200,34 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const totalRevenue = useMemo(() => validOrders.reduce((sum, o) => sum + o.grandTotal, 0), [validOrders]);
   const deliveredOrders = useMemo(() => orders.filter((o) => o.status === 'Delivered').length, [orders]);
   const inStockProducts = useMemo(() => products.filter((p) => p.inStock).length, [products]);
+
+  const averageOrderValue = useMemo(() => {
+    return validOrders.length > 0 ? Math.round(totalRevenue / validOrders.length) : 0;
+  }, [validOrders.length, totalRevenue]);
+
+  const cityBreakdown = useMemo(() => {
+    const counts: Record<string, { count: number; total: number }> = {};
+    validOrders.forEach((o) => {
+      const c = o.city || 'أخرى';
+      if (!counts[c]) counts[c] = { count: 0, total: 0 };
+      counts[c].count += 1;
+      counts[c].total += o.grandTotal;
+    });
+    return Object.entries(counts).sort((a, b) => b[1].total - a[1].total);
+  }, [validOrders]);
+
+  const topProducts = useMemo(() => {
+    const map: Record<string, { name: string; qty: number; revenue: number }> = {};
+    validOrders.forEach((o) => {
+      (o.items || []).forEach((item) => {
+        const id = item.productId || item.name;
+        if (!map[id]) map[id] = { name: item.name, qty: 0, revenue: 0 };
+        map[id].qty += item.quantity;
+        map[id].revenue += item.price * item.quantity;
+      });
+    });
+    return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 5);
+  }, [validOrders]);
 
   const filteredOrders = useMemo(() => {
     return orders.filter((ord) => {
@@ -876,6 +905,63 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
               </button>
             )}
           </div>
+
+          {/* Analytics & Insights Performance Breakdown */}
+          {validOrders.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              {/* AOV & Efficiency Card */}
+              <div className="bg-white p-4 rounded-2xl border border-stone-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-stone-700">مؤشرات الأداء والكفاءة</span>
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-stone-500">متوسط قيمة السلة (AOV):</span>
+                    <span className="font-mono font-bold text-stone-900">{averageOrderValue} {settings.currency}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-stone-500">معدل اكتمال الطلبات:</span>
+                    <span className="font-mono font-bold text-emerald-700">
+                      {orders.length > 0 ? Math.round((deliveredOrders / orders.length) * 100) : 0}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Geographic Performance */}
+              <div className="bg-white p-4 rounded-2xl border border-stone-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-stone-700">أعلى المدن مبيعاً (Geographic)</span>
+                  <MapPin className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="space-y-1 max-h-24 overflow-y-auto text-xs">
+                  {cityBreakdown.slice(0, 3).map(([cityName, data]) => (
+                    <div key={cityName} className="flex justify-between items-center">
+                      <span className="text-stone-700 font-medium truncate max-w-[120px]">{cityName} ({data.count})</span>
+                      <span className="font-mono font-bold text-stone-900">{data.total.toLocaleString('en-US')} {settings.currency}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Top Selling Products */}
+              <div className="bg-white p-4 rounded-2xl border border-stone-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-stone-700">المنتجات الأكثر طلباً (Top Products)</span>
+                  <ShoppingBag className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="space-y-1 max-h-24 overflow-y-auto text-xs">
+                  {topProducts.slice(0, 3).map((p, idx) => (
+                    <div key={idx} className="flex justify-between items-center">
+                      <span className="text-stone-700 font-medium truncate max-w-[130px]">{p.name} ({p.qty} قطعة)</span>
+                      <span className="font-mono font-bold text-stone-900">{p.revenue.toLocaleString('en-US')} {settings.currency}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Orders Filter & Search Bar */}
           {orders.length > 0 && (
@@ -1574,6 +1660,196 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                           },
                         })
                       }
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Store Pickup & ZATCA Tax Compliance */}
+              <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
+                <h3 className="text-sm font-bold text-stone-900 border-b border-stone-100 pb-2">
+                  الاستلام من الفرع وبيانات الضريبة (ZATCA)
+                </h3>
+
+                <div className="space-y-3 text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-stone-800">
+                    <input
+                      type="checkbox"
+                      checked={editableSettings.enableStorePickup ?? false}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          enableStorePickup: e.target.checked,
+                        })
+                      }
+                      className="rounded text-blue-600 w-4 h-4"
+                    />
+                    <span>تفعيل خيار الاستلام المباشر من الفرع / المتجر (بدون رسوم شحن)</span>
+                  </label>
+
+                  {editableSettings.enableStorePickup && (
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1">
+                        عنوان وموقع الاستلام المباشر
+                      </label>
+                      <input
+                        type="text"
+                        value={editableSettings.storePickupAddress || ''}
+                        onChange={(e) =>
+                          setEditableSettings({
+                            ...editableSettings,
+                            storePickupAddress: e.target.value,
+                          })
+                        }
+                        placeholder="مثال: الرياض - طريق الملك فهد - مجمع التحلية التجاري، المعرض 4"
+                        className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1">
+                        الرقم الضريبي للمنشأة (VAT Number)
+                      </label>
+                      <input
+                        type="text"
+                        value={editableSettings.vatNumber || ''}
+                        onChange={(e) =>
+                          setEditableSettings({
+                            ...editableSettings,
+                            vatNumber: e.target.value,
+                          })
+                        }
+                        placeholder="300000000000003"
+                        className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                        dir="ltr"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1">
+                        رقم السجل التجاري (Commercial Register)
+                      </label>
+                      <input
+                        type="text"
+                        value={editableSettings.commercialRegister || ''}
+                        onChange={(e) =>
+                          setEditableSettings({
+                            ...editableSettings,
+                            commercialRegister: e.target.value,
+                          })
+                        }
+                        placeholder="1010XXXXXX"
+                        className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                        dir="ltr"
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-bold text-stone-800 pt-1">
+                    <input
+                      type="checkbox"
+                      checked={editableSettings.pricesIncludeVat ?? true}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          pricesIncludeVat: e.target.checked,
+                        })
+                      }
+                      className="rounded text-blue-600 w-4 h-4"
+                    />
+                    <span>الأسعار المعروضة في المتجر شاملة لضريبة القيمة المضافة 15%</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Marketing Pixels & Ad Campaigns */}
+              <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
+                <div className="border-b border-stone-100 pb-2">
+                  <h3 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
+                    <TrendingUp className="w-4 h-4 text-emerald-600" />
+                    <span>بكسلات التتبع والحملات الإعلانية (Marketing Pixels & GA4)</span>
+                  </h3>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    اربط متجرك مع منصات الإعلانات لتتبع التحويلات (PageView, AddToCart, Purchase) تلقائياً
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">
+                      Google Analytics 4 (معرّف القياس)
+                    </label>
+                    <input
+                      type="text"
+                      value={editableSettings.googleAnalyticsId || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          googleAnalyticsId: e.target.value,
+                        })
+                      }
+                      placeholder="G-XXXXXXXXXX"
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">
+                      Meta Pixel ID (فيسبوك / انستقرام)
+                    </label>
+                    <input
+                      type="text"
+                      value={editableSettings.facebookPixelId || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          facebookPixelId: e.target.value,
+                        })
+                      }
+                      placeholder="123456789012345"
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">
+                      TikTok Pixel ID (تيك توك)
+                    </label>
+                    <input
+                      type="text"
+                      value={editableSettings.tiktokPixelId || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          tiktokPixelId: e.target.value,
+                        })
+                      }
+                      placeholder="CXXXXXXXXXXXXXXXXXXX"
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">
+                      Snapchat Pixel ID (سناب شات)
+                    </label>
+                    <input
+                      type="text"
+                      value={editableSettings.snapchatPixelId || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          snapchatPixelId: e.target.value,
+                        })
+                      }
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                       className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
                       dir="ltr"
                     />

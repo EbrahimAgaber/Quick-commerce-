@@ -14,6 +14,7 @@ import { StoreManager } from './services/storeManager';
 import { AuthService } from './services/authService';
 import { onFirebaseAuthStateChanged } from './services/firebase';
 import { injectBrandThemeStyles } from './utils/themeInjector';
+import { initializeMarketingPixels } from './utils/analytics';
 import { matchesSearch } from './utils/arabicSearch';
 import { parseStoreRouteFromLocation } from './utils/urlRouter';
 
@@ -162,6 +163,13 @@ export default function App() {
       injectBrandThemeStyles(settings.brandTheme);
     }
   }, [settings.brandTheme]);
+
+  // Initialize third-party marketing tags (GA4, Facebook Pixel, TikTok, Snapchat) safely
+  useEffect(() => {
+    if (settings) {
+      initializeMarketingPixels(settings);
+    }
+  }, [settings]);
 
   // UI View Modes:
   // - If `?store=<slug>` or `/s/<slug>` is present in the URL, open the customer's pure `'storefront'` directly.

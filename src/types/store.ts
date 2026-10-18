@@ -70,6 +70,12 @@ export interface StoreSettings {
   pricesIncludeVat?: boolean;
   vatRate?: number;
   city?: string;
+  googleAnalyticsId?: string;
+  facebookPixelId?: string;
+  tiktokPixelId?: string;
+  snapchatPixelId?: string;
+  enableStorePickup?: boolean;
+  storePickupAddress?: string;
 }
 
 export interface Product {
@@ -123,6 +129,7 @@ export interface Order {
   courierPhone?: string;
   trackingNumber?: string;
   trackingUrl?: string;
+  deliveryType?: 'delivery' | 'pickup';
   vatAmount?: number;
   vatRate?: number;
   paymentId?: string;
