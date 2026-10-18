@@ -132,7 +132,14 @@ export default function App() {
         setCurrentUser(merchant);
 
         // Fetch any cloud stores created by this merchant
-        StoreManager.fetchUserStoresFromFirestore(fbUser.uid).catch(console.warn);
+        StoreManager.fetchUserStoresFromFirestore(fbUser.uid).then((stores) => {
+          if (stores.length > 0) {
+            const currentActive = StoreManager.getActiveStore();
+            if (currentActive.ownerId !== fbUser.uid || currentActive.id === 'store_aurora_01') {
+              handleSelectStore(stores[0].id);
+            }
+          }
+        }).catch(console.warn);
       }
     });
 
@@ -513,6 +520,7 @@ export default function App() {
       accentColor: newSettings.brandTheme?.accentColor || '#2563EB',
       backgroundColor: newSettings.brandTheme?.backgroundColor || '#F8FAFC',
       logoLetter: newSettings.logoLetter || 'S',
+      logoUrl: newSettings.logoUrl,
       freeShippingThreshold: newSettings.freeShippingThreshold,
       standardShippingRate: newSettings.standardShippingRate,
       initialProducts: initialProds ?? [],

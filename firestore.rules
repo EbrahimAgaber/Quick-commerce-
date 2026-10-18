@@ -64,9 +64,9 @@ service cloud.firestore {
 
     // Stores collection (Public storefront info, strict owner-only write, no arbitrary list)
     match /stores/{storeId} {
-      // Direct store get is public; listing arbitrary stores is disabled for privacy
+      // Direct store get is public; listing is allowed only for the store's authenticated owner
       allow get: if true;
-      allow list: if false;
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       allow create: if isSignedIn() && isValidId(storeId) && storeId != 'store_aurora_01' && isValidStore(request.resource.data);
       allow update: if isSignedIn() && isValidId(storeId) && storeId != 'store_aurora_01' && resource.data.ownerId == request.auth.uid && isValidStore(request.resource.data);
       allow delete: if isSignedIn() && isValidId(storeId) && storeId != 'store_aurora_01' && resource.data.ownerId == request.auth.uid;

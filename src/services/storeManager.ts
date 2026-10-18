@@ -325,9 +325,46 @@ export class StoreManager {
         querySnap.docs.map(async (d) => {
           const raw = d.data() as StoreInstance;
           const orders = await this.fetchStoreOrdersFromFirestore(raw.id);
+
+          // Fetch products from subcollection if not present in main doc
+          let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
+          try {
+            const productsSubCol = collection(db, 'stores', raw.id, 'products');
+            const productsSnap = await getDocs(productsSubCol);
+            if (!productsSnap.empty) {
+              const subColProducts: Product[] = [];
+              productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
+              if (subColProducts.length > 0) {
+                productsList = subColProducts;
+              }
+            }
+          } catch (pErr) {
+            console.warn('Subcollection products fetch notice in user stores:', pErr);
+          }
+
+          // Fetch private config subcollection
+          let mergedSettings = { ...DEFAULT_SETTINGS, ...(raw.settings || {}) };
+          try {
+            const privSnap = await getDoc(doc(db, 'stores', raw.id, 'private', 'config'));
+            if (privSnap.exists()) {
+              const privData = privSnap.data();
+              mergedSettings = {
+                ...mergedSettings,
+                promoCodes: privData.promoCodes || mergedSettings.promoCodes || [],
+                orderNotificationEmail: privData.orderNotificationEmail || mergedSettings.orderNotificationEmail || '',
+                googleWebAppUrl: privData.googleWebAppUrl || mergedSettings.googleWebAppUrl || '',
+              };
+            }
+          } catch (privErr) {
+            console.warn('Private config fetch notice in user stores:', privErr);
+          }
+
           return {
             ...raw,
+            settings: mergedSettings,
+            products: productsList,
             orders,
+            policies: Array.isArray(raw.policies) && raw.policies.length > 0 ? raw.policies : DEFAULT_POLICIES,
           };
         })
       );
@@ -335,10 +372,22 @@ export class StoreManager {
       if (userStores.length > 0) {
         const existing = this.getAllStores();
         const mergedMap = new Map<string, StoreInstance>();
-        existing.forEach(s => mergedMap.set(s.id, s));
-        userStores.forEach(s => mergedMap.set(s.id, s));
+        // Put user's own stores first in the cache
+        userStores.forEach((s) => mergedMap.set(s.id, s));
+        existing.forEach((s) => {
+          if (!mergedMap.has(s.id)) {
+            mergedMap.set(s.id, s);
+          }
+        });
         const mergedList = Array.from(mergedMap.values());
         this.saveAllStores(mergedList);
+
+        // If active store is demo or does not belong to this merchant, switch to user's first store
+        const activeId = localStorage.getItem(ACTIVE_STORE_KEY);
+        const currentActive = existing.find((s) => s.id === activeId);
+        if (!activeId || activeId === 'store_aurora_01' || (currentActive && currentActive.ownerId !== ownerId)) {
+          this.setActiveStoreId(userStores[0].id);
+        }
       }
       return userStores;
     } catch (err) {
@@ -652,7 +701,7 @@ export class StoreManager {
     const newStore: StoreInstance = {
       id: generatedId,
       slug: cleanSlug,
-      ownerId: params.ownerId || auth.currentUser?.uid || 'merchant_user',
+      ownerId: (params.ownerId && params.ownerId !== 'guest' ? params.ownerId : auth.currentUser?.uid) || 'merchant_user',
       createdAt: new Date().toISOString(),
       settings: {
         ...DEFAULT_SETTINGS,

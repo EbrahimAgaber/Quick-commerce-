@@ -38,12 +38,12 @@ describe('Firestore Rules & Access Control (S1, S4, S6, S7)', () => {
     expect(rulesContent).toContain("storeId != 'store_aurora_01'");
   });
 
-  it('disallows arbitrary listing of all stores (allow list: if false)', () => {
+  it('disallows arbitrary public listing of stores and restricts list to owner', () => {
     const storesMatch = rulesContent.match(/match \/stores\/\{storeId\} \{[\s\S]*?match \/private/);
     expect(storesMatch).not.toBeNull();
     const storeHeader = storesMatch![0];
 
-    expect(storeHeader).toContain('allow list: if false;');
+    expect(storeHeader).toContain('allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;');
     expect(storeHeader).not.toContain('request.query.limit <= 20');
   });
 
