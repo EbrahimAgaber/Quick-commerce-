@@ -39,10 +39,20 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
     async function loadData() {
       setLoading(true);
       try {
-        const store = StoreManager.getStoreById(storeId) || StoreManager.getActiveStore();
+        let store = StoreManager.getStoreById(storeId) || StoreManager.getStoreBySlug(storeId);
+        if (!store && storeId) {
+          store = await StoreManager.fetchStoreFromFirestore(storeId);
+        }
+        if (!store) {
+          store = StoreManager.getActiveStore();
+        }
         if (store) {
           setSettings(store.settings);
-          const found = store.orders.find((o) => o.id === orderId);
+          const cleanOrderId = orderId.toUpperCase().trim().replace('#', '');
+          let found: Order | null | undefined = (store.orders || []).find((o) => o.id.toUpperCase().trim().replace('#', '') === cleanOrderId);
+          if (!found && store.id) {
+            found = await StoreManager.lookupOrderById(store.id, cleanOrderId, store.orders || []);
+          }
           if (found) {
             setOrder(found);
             if (found.status === 'Delivered') {
@@ -87,7 +97,7 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
 
   const handleUpdateStatus = (newStatus: 'Out for Delivery' | 'Delivered') => {
     setUpdating(true);
-    const store = StoreManager.getStoreById(storeId) || StoreManager.getActiveStore();
+    const store = StoreManager.getStoreById(storeId) || StoreManager.getStoreBySlug(storeId) || StoreManager.getActiveStore();
     const updatedOrder: Order = {
       ...order,
       status: newStatus,
@@ -95,8 +105,11 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
       driverCashCollected: newStatus === 'Delivered' && isCOD ? order.grandTotal : order.driverCashCollected,
     };
 
-    const updatedOrders = store.orders.map((o) => (o.id === order.id ? updatedOrder : o));
-    StoreManager.updateStore({ ...store, orders: updatedOrders });
+    if (store) {
+      const updatedOrders = (store.orders || []).map((o) => (o.id === order.id ? updatedOrder : o));
+      StoreManager.updateStore({ ...store, orders: updatedOrders });
+      StoreManager.updateOrderInStore(store.id, updatedOrder).catch(console.warn);
+    }
     setOrder(updatedOrder);
     setUpdating(false);
 

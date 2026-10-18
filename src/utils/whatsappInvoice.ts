@@ -1,4 +1,5 @@
 import { Order, StoreSettings } from '../types/store';
+import { normalizeArabicDigits } from './digits';
 
 /**
  * Generates a high-entropy, collision-resistant order reference (e.g. "BA-8F3K9M2X").
@@ -81,8 +82,8 @@ ${lineItemsText}
  * Creates the direct wa.me link with the sanitized phone number and encoded text
  */
 export function createWhatsAppUrl(phoneNumber: string, message: string): string {
-  // Strip any +, -, spaces, or parentheses
-  let cleanPhone = (phoneNumber || '').replace(/\D/g, '');
+  // Strip any +, -, spaces, or parentheses while preserving Arabic digits converted to ASCII
+  let cleanPhone = normalizeArabicDigits(phoneNumber || '').replace(/\D/g, '');
   // Normalize Saudi local mobile numbers e.g. 0501234567 -> 966501234567
   if (cleanPhone.startsWith('05') && cleanPhone.length === 10) {
     cleanPhone = '966' + cleanPhone.substring(1);

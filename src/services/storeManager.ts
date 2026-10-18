@@ -1,5 +1,6 @@
 import { StoreInstance, Product, Order } from '../types/store';
 import { 
+  StoreStorage,
   DEFAULT_SETTINGS, 
   DEFAULT_PRODUCTS, 
   DEFAULT_ORDERS, 
@@ -7,6 +8,7 @@ import {
 } from './storeStorage';
 import { db, auth, isFirebaseConfigured } from './firebase';
 import { generateCleanStoreSlug } from '../utils/urlRouter';
+import { normalizeArabicDigits } from '../utils/digits';
 import { 
   doc, 
   getDoc, 
@@ -84,6 +86,32 @@ export class StoreManager {
   static getMerchantStores(ownerId?: string | null): StoreInstance[] {
     if (!ownerId) return [];
     return this.getAllStores().filter((s) => s.ownerId === ownerId);
+  }
+
+  /**
+   * Reclaims and associates any guest stores created during onboarding with the authenticated merchant
+   */
+  static claimGuestStores(ownerId: string): StoreInstance[] {
+    if (!ownerId) return [];
+    const all = this.getAllStores();
+    let hasChanges = false;
+    const updated = all.map((store) => {
+      if (store.id === 'store_aurora_01') return store;
+      if (store.ownerId === 'merchant_user' || store.ownerId === 'guest') {
+        hasChanges = true;
+        const claimed = { ...store, ownerId };
+        if (auth.currentUser && auth.currentUser.uid === ownerId) {
+          this.syncStoreToFirestore(claimed).catch(console.warn);
+        }
+        return claimed;
+      }
+      return store;
+    });
+
+    if (hasChanges) {
+      this.saveAllStores(updated);
+    }
+    return updated.filter((s) => s.ownerId === ownerId);
   }
 
   static saveAllStores(stores: StoreInstance[]): void {
@@ -187,20 +215,22 @@ export class StoreManager {
         if (snapshot.exists()) {
           const raw = snapshot.data();
           
-          // 4. Load products subcollection if present (S10)
+          // 4. Load products subcollection if not present in main document
           let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
-          try {
-            const productsSubCol = collection(db, 'stores', storeIdToFetch, 'products');
-            const productsSnap = await getDocs(productsSubCol);
-            if (!productsSnap.empty) {
-              const subColProducts: Product[] = [];
-              productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
-              if (subColProducts.length > 0) {
-                productsList = subColProducts;
+          if (!Array.isArray(raw.products)) {
+            try {
+              const productsSubCol = collection(db, 'stores', storeIdToFetch, 'products');
+              const productsSnap = await getDocs(productsSubCol);
+              if (!productsSnap.empty) {
+                const subColProducts: Product[] = [];
+                productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
+                if (subColProducts.length > 0) {
+                  productsList = subColProducts;
+                }
               }
+            } catch (pErr) {
+              console.warn('Subcollection products fetch notice:', pErr);
             }
-          } catch (pErr) {
-            console.warn('Subcollection products fetch notice:', pErr);
           }
 
           const storeData: StoreInstance = {
@@ -245,6 +275,7 @@ export class StoreManager {
 
       const publicPayload = {
         ...publicStoreData,
+        products: products || [],
         settings: publicSettings,
         storeName: store.settings.storeName || 'متجر إلكتروني',
         updatedAt: new Date().toISOString(),
@@ -263,12 +294,27 @@ export class StoreManager {
       }, { merge: true });
 
       // 3. Sync products to subcollection /stores/{id}/products/{productId} (S10)
-      if (Array.isArray(products) && products.length > 0) {
-        const syncProductPromises = products.map((prod) => {
-          const prodRef = doc(db, 'stores', store.id, 'products', prod.id);
-          return setDoc(prodRef, prod, { merge: true });
+      try {
+        const productsSubCol = collection(db, 'stores', store.id, 'products');
+        const existingProductsSnap = await getDocs(productsSubCol);
+        const currentProdIds = new Set((products || []).map((p) => p.id));
+        const deletePromises: Promise<void>[] = [];
+        existingProductsSnap.forEach((pDoc) => {
+          if (!currentProdIds.has(pDoc.id)) {
+            deletePromises.push(deleteDoc(pDoc.ref));
+          }
         });
-        await Promise.all(syncProductPromises);
+        await Promise.all(deletePromises);
+
+        if (Array.isArray(products) && products.length > 0) {
+          const syncProductPromises = products.map((prod) => {
+            const prodRef = doc(db, 'stores', store.id, 'products', prod.id);
+            return setDoc(prodRef, prod, { merge: true });
+          });
+          await Promise.all(syncProductPromises);
+        }
+      } catch (prodErr) {
+        console.warn('Subcollection products sync notice:', prodErr);
       }
 
       // 4. Register slug in /slugs/{slug} (S6)
@@ -328,18 +374,20 @@ export class StoreManager {
 
           // Fetch products from subcollection if not present in main doc
           let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
-          try {
-            const productsSubCol = collection(db, 'stores', raw.id, 'products');
-            const productsSnap = await getDocs(productsSubCol);
-            if (!productsSnap.empty) {
-              const subColProducts: Product[] = [];
-              productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
-              if (subColProducts.length > 0) {
-                productsList = subColProducts;
+          if (!Array.isArray(raw.products)) {
+            try {
+              const productsSubCol = collection(db, 'stores', raw.id, 'products');
+              const productsSnap = await getDocs(productsSubCol);
+              if (!productsSnap.empty) {
+                const subColProducts: Product[] = [];
+                productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
+                if (subColProducts.length > 0) {
+                  productsList = subColProducts;
+                }
               }
+            } catch (pErr) {
+              console.warn('Subcollection products fetch notice in user stores:', pErr);
             }
-          } catch (pErr) {
-            console.warn('Subcollection products fetch notice in user stores:', pErr);
           }
 
           // Fetch private config subcollection
@@ -493,6 +541,11 @@ export class StoreManager {
       if (idx >= 0) {
         all[idx] = store;
         this.saveAllStores(all);
+      }
+
+      if (store.id === localStorage.getItem(ACTIVE_STORE_KEY)) {
+        StoreStorage.saveProducts(store.products || []);
+        StoreStorage.saveOrders(store.orders || []);
       }
 
       if (stockChanged && auth.currentUser && store.ownerId === auth.currentUser.uid) {
@@ -690,7 +743,7 @@ export class StoreManager {
     const isReserved = RESERVED_SLUGS.has(baseSlug.toLowerCase());
     const slugExists = isReserved || all.some((s) => s.slug.toLowerCase() === baseSlug.toLowerCase());
     const cleanSlug = slugExists ? `${baseSlug}-${Math.floor(100 + Math.random() * 900)}` : baseSlug;
-    const cleanWhatsapp = params.whatsappNumber.replace(/\D/g, '') || '';
+    const cleanWhatsapp = normalizeArabicDigits(params.whatsappNumber || '').replace(/\D/g, '') || '';
 
     // Generate store ID with crypto.randomUUID (S6)
     const generatedId =

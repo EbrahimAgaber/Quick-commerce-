@@ -45,6 +45,7 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
   // Delivered orders relevant for the driver
   const deliveredOrders = orders.filter((o) => {
     if (o.status !== 'Delivered') return false;
+    if (o.driverSettled) return false;
     if (filterMode === 'today') {
       const orderDate = (o.driverDeliveredAt || o.timestamp || '').split('T')[0];
       return orderDate === todayStr;

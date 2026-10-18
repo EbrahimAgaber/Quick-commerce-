@@ -79,6 +79,7 @@ export default function App() {
     return !cached;
   });
   const [storeNotFound, setStoreNotFound] = useState(false);
+  const [activeDriverOrderId, setActiveDriverOrderId] = useState<string | null>(() => initialRoute.driverOrderId);
 
   // Active Store Database States
   const [settings, setSettings] = useState<StoreSettings>(() => activeStore.settings || StoreStorage.getSettings());
@@ -130,6 +131,9 @@ export default function App() {
         };
         AuthService.setCurrentUser(merchant);
         setCurrentUser(merchant);
+
+        // Claim any onboarding guest stores created before login
+        StoreManager.claimGuestStores(fbUser.uid);
 
         // Fetch any cloud stores created by this merchant
         StoreManager.fetchUserStoresFromFirestore(fbUser.uid).then((stores) => {
@@ -199,8 +203,8 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [isTrackerOpen, setIsTrackerOpen] = useState(false);
-  const [trackerInitialId, setTrackerInitialId] = useState('');
+  const [isTrackerOpen, setIsTrackerOpen] = useState(() => Boolean(initialRoute.trackOrderId));
+  const [trackerInitialId, setTrackerInitialId] = useState(() => initialRoute.trackOrderId || '');
   const [isPoliciesOpen, setIsPoliciesOpen] = useState(false);
   const [isBrandStudioOpen, setIsBrandStudioOpen] = useState(false);
   const [isNewStoreWizardOpen, setIsNewStoreWizardOpen] = useState(false);
@@ -213,23 +217,46 @@ export default function App() {
     if (store) {
       setActiveStore(store);
       setSettings(store.settings);
-      setProducts(store.products);
-      setOrders(store.orders);
-      setPolicies(store.policies);
+      setProducts(store.products || []);
+      setOrders(store.orders || []);
+      setPolicies(store.policies || []);
       StoreStorage.hydrateStore({
         settings: store.settings,
-        products: store.products,
-        orders: store.orders,
-        policies: store.policies,
+        products: store.products || [],
+        orders: store.orders || [],
+        policies: store.policies || [],
       });
     }
   };
 
-  // Handle URL parameters: ?store=<slug_or_id>&product=<product_id> or /s/<slug>
+  // Handle URL parameters: ?store=<slug_or_id>&product=<product_id> or /s/<slug> or ?track=<order_id>
   useEffect(() => {
     const resolveStoreFromUrl = async () => {
       try {
-        const { storeSlug, productId } = parseStoreRouteFromLocation();
+        const route = parseStoreRouteFromLocation();
+        const { storeSlug, productId, trackOrderId, viewParam, driverOrderId } = route;
+
+        setActiveDriverOrderId(driverOrderId);
+
+        if (trackOrderId) {
+          setTrackerInitialId(trackOrderId);
+          setIsTrackerOpen(true);
+        } else {
+          setIsTrackerOpen(false);
+        }
+
+        if (viewParam === 'dashboard') {
+          setViewMode('dashboard');
+        } else if (storeSlug || viewParam === 'storefront') {
+          setViewMode('storefront');
+        } else if (viewParam === 'landing' || (!storeSlug && !viewParam)) {
+          setViewMode('landing');
+        }
+
+        if (!productId) {
+          setSelectedProduct(null);
+        }
+
         if (!storeSlug) return;
 
         // 1. Check local cache for instant render
@@ -240,7 +267,7 @@ export default function App() {
           handleSelectStore(localMatch.id);
           setViewMode('storefront');
           if (productId) {
-            const p = localMatch.products.find((item) => item.id === productId);
+            const p = (localMatch.products || []).find((item) => item.id === productId);
             if (p) setSelectedProduct(p);
           }
           // Refresh catalog from Cloud Firestore in background so returning shoppers get latest prices/products
@@ -249,7 +276,7 @@ export default function App() {
               if (freshStore) {
                 handleSelectStore(freshStore.id);
                 if (productId) {
-                  const freshP = freshStore.products.find((item) => item.id === productId);
+                  const freshP = (freshStore.products || []).find((item) => item.id === productId);
                   if (freshP) setSelectedProduct(freshP);
                 }
               }
@@ -268,7 +295,7 @@ export default function App() {
           handleSelectStore(cloudStore.id);
           setViewMode('storefront');
           if (productId) {
-            const p = cloudStore.products.find((item) => item.id === productId);
+            const p = (cloudStore.products || []).find((item) => item.id === productId);
             if (p) setSelectedProduct(p);
           }
         } else {
@@ -281,6 +308,10 @@ export default function App() {
     };
 
     resolveStoreFromUrl();
+    window.addEventListener('popstate', resolveStoreFromUrl);
+    return () => {
+      window.removeEventListener('popstate', resolveStoreFromUrl);
+    };
   }, []);
 
   // Filter & Search State
@@ -365,20 +396,26 @@ export default function App() {
 
   // Cart handlers
   const handleAddToCart = (product: Product, variant: string, quantity: number) => {
+    const cleanVariant = (!variant || variant === 'الخيار الافتراضي') ? '' : variant;
     setCart((prev) => {
-      const existingIdx = prev.findIndex(
-        (item) => item.product.id === product.id && item.selectedVariant === variant
-      );
+      const existingIdx = prev.findIndex((item) => {
+        const itemVar = (!item.selectedVariant || item.selectedVariant === 'الخيار الافتراضي') ? '' : item.selectedVariant;
+        return item.product.id === product.id && itemVar === cleanVariant;
+      });
       const maxAllowed =
         product.stockQuantity !== undefined && product.stockQuantity > 0
           ? product.stockQuantity
           : 99;
       if (existingIdx >= 0) {
         const updated = [...prev];
-        updated[existingIdx].quantity = Math.min(maxAllowed, updated[existingIdx].quantity + quantity);
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          selectedVariant: cleanVariant,
+          quantity: Math.min(maxAllowed, updated[existingIdx].quantity + quantity),
+        };
         return updated;
       }
-      return [...prev, { product, selectedVariant: variant, quantity: Math.min(maxAllowed, quantity) }];
+      return [...prev, { product, selectedVariant: cleanVariant, quantity: Math.min(maxAllowed, quantity) }];
     });
   };
 
@@ -386,11 +423,12 @@ export default function App() {
   const handleQuickAdd = (product: Product, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!product.inStock) return;
-    if (product.variants && product.variants.length > 1) {
+    const realVariants = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي');
+    if (realVariants.length > 1) {
       setSelectedProduct(product);
       return;
     }
-    const defaultVariant = product.variants && product.variants.length > 0 ? product.variants[0] : 'الخيار الافتراضي';
+    const defaultVariant = realVariants.length > 0 ? realVariants[0] : '';
     handleAddToCart(product, defaultVariant, 1);
     setJustAddedId(product.id);
     setTimeout(() => setJustAddedId(null), 1200);
@@ -417,7 +455,7 @@ export default function App() {
   const handleOrderSuccess = (order: Order) => {
     StoreManager.submitOrderToStore(activeStore.id, order);
     setOrders(StoreStorage.getOrders());
-    setProducts(StoreStorage.getProducts());
+    setProducts(StoreManager.getActiveStore().products || []);
     setActiveStore(StoreManager.getActiveStore());
     setAllStores(StoreManager.getAllStores());
     setCart([]);
@@ -449,7 +487,7 @@ export default function App() {
   const handleUpdateOrders = (newOrders: Order[]) => {
     newOrders.forEach((updatedOrder) => {
       const prev = orders.find((o) => o.id === updatedOrder.id);
-      if (!prev || prev.status !== updatedOrder.status || prev.trackingNotes !== updatedOrder.trackingNotes) {
+      if (!prev || JSON.stringify(prev) !== JSON.stringify(updatedOrder)) {
         StoreManager.updateOrderInStore(activeStore.id, updatedOrder);
       }
     });
@@ -534,23 +572,25 @@ export default function App() {
   const handleAuthSuccess = async (user: MerchantUser) => {
     setCurrentUser(user);
     setIsAuthModalOpen(false);
+    const claimed = StoreManager.claimGuestStores(user.id);
+    for (const s of claimed) {
+      StoreManager.syncStoreToFirestore(s).catch(console.warn);
+    }
+    setAllStores(StoreManager.getAllStores());
     try {
-      const cloudStores = await StoreManager.fetchUserStoresFromFirestore(user.id);
-      const owned = cloudStores.length > 0 ? cloudStores : StoreManager.getMerchantStores(user.id);
-      if (owned.length > 0) {
-        handleSelectStore(owned[0].id);
-        setViewMode('dashboard');
-      } else {
-        setIsNewStoreWizardOpen(true);
-      }
-    } catch {
-      const owned = StoreManager.getMerchantStores(user.id);
-      if (owned.length > 0) {
-        handleSelectStore(owned[0].id);
-        setViewMode('dashboard');
-      } else {
-        setIsNewStoreWizardOpen(true);
-      }
+      await StoreManager.fetchUserStoresFromFirestore(user.id);
+    } catch (e) {
+      console.warn('Error fetching user stores from firestore:', e);
+    }
+    const allUserStores = StoreManager.getMerchantStores(user.id);
+    setAllStores(StoreManager.getAllStores());
+    if (allUserStores.length > 0) {
+      const currentActive = StoreManager.getActiveStore();
+      const targetStore = allUserStores.find((s) => s.id === currentActive.id) || allUserStores[0];
+      handleSelectStore(targetStore.id);
+      setViewMode('dashboard');
+    } else {
+      setIsNewStoreWizardOpen(true);
     }
   };
 
@@ -656,10 +696,10 @@ export default function App() {
   }
 
   // Driver 1-Tap Mobile View Route (?driver=<orderId>)
-  if (initialRoute.driverOrderId) {
+  if (activeDriverOrderId) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-stone-950 text-white flex items-center justify-center p-4"><Loader2 className="w-8 h-8 animate-spin text-emerald-400" /></div>}>
-        <DriverDispatchView orderId={initialRoute.driverOrderId} storeId={activeStore.id} />
+        <DriverDispatchView orderId={activeDriverOrderId} storeId={initialRoute.storeSlug || activeStore.id} />
       </Suspense>
     );
   }
@@ -1081,6 +1121,7 @@ export default function App() {
         onOrderNotesChange={setOrderNotes}
         appliedPromo={appliedPromo}
         onApplyPromo={setAppliedPromo}
+        storeId={activeStore.id}
       />
 
       {/* 6. Order Success Celebration Modal */}

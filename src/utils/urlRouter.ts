@@ -84,10 +84,11 @@ export interface ParsedStoreRoute {
   productId: string | null;
   viewParam: string | null;
   driverOrderId: string | null;
+  trackOrderId: string | null;
 }
 
 /**
- * Extracts store slug, product ID, view mode, and driver order ID from URL
+ * Extracts store slug, product ID, view mode, driver order ID, and track order ID from URL
  */
 export function parseStoreRouteFromLocation(loc: Location = window.location): ParsedStoreRoute {
   try {
@@ -96,9 +97,14 @@ export function parseStoreRouteFromLocation(loc: Location = window.location): Pa
     const productId = params.get('product')?.trim() || null;
     const viewParam = params.get('view')?.trim() || null;
     const driverOrderId = params.get('driver')?.trim() || null;
+    let trackOrderId = params.get('track')?.trim() || params.get('order')?.trim() || null;
+
+    if (!trackOrderId && loc.hash && loc.hash.startsWith('#track-')) {
+      trackOrderId = loc.hash.replace('#track-', '').trim() || null;
+    }
 
     if (queryStore) {
-      return { storeSlug: queryStore, productId, viewParam, driverOrderId };
+      return { storeSlug: queryStore, productId, viewParam, driverOrderId, trackOrderId };
     }
 
     // Check clean path `/s/:slug`
@@ -109,12 +115,13 @@ export function parseStoreRouteFromLocation(loc: Location = window.location): Pa
         productId,
         viewParam,
         driverOrderId,
+        trackOrderId,
       };
     }
 
-    return { storeSlug: null, productId, viewParam, driverOrderId };
+    return { storeSlug: null, productId, viewParam, driverOrderId, trackOrderId };
   } catch {
-    return { storeSlug: null, productId: null, viewParam: null, driverOrderId: null };
+    return { storeSlug: null, productId: null, viewParam: null, driverOrderId: null, trackOrderId: null };
   }
 }
 

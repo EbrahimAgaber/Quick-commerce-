@@ -362,7 +362,7 @@ export class StoreStorage {
     } catch (e) {
       console.error('Error reading products from localStorage', e);
     }
-    return DEFAULT_PRODUCTS;
+    return [];
   }
 
   static saveProducts(products: Product[]): void {

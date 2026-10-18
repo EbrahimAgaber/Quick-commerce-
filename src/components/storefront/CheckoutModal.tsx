@@ -646,6 +646,30 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               )}
 
+              {/* If Card / Mada / Apple Pay is selected, show payment trust feedback */}
+              {(paymentMethod.includes('بطاق') || paymentMethod.includes('فيزا') || paymentMethod.includes('مدى') || paymentMethod.includes('Apple') || paymentMethod.toLowerCase().includes('card')) && (
+                <div className="mt-3 p-3.5 rounded-2xl bg-blue-50/60 border border-blue-200 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-stone-900 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>دفع إلكتروني آمن ومعتمد 100%</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full">
+                      تشفير مصرفي 256-bit
+                    </span>
+                  </div>
+                  <p className="text-stone-600 leading-relaxed text-[11px]">
+                    نقبل بطاقات <strong>مدى (mada)</strong>، <strong>Visa</strong>، <strong>Mastercard</strong>، و <strong>Apple Pay</strong> مع توثيق الحماية الثلاثية (3D Secure OTP) من مصرفك.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1 text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-white border border-stone-200 text-emerald-700 shadow-2xs">مدى mada</span>
+                    <span className="px-2 py-0.5 rounded-md bg-white border border-stone-200 text-blue-700 shadow-2xs">Visa</span>
+                    <span className="px-2 py-0.5 rounded-md bg-white border border-stone-200 text-amber-700 shadow-2xs">Mastercard</span>
+                    <span className="px-2 py-0.5 rounded-md bg-white border border-stone-200 text-stone-800 shadow-2xs">Apple Pay</span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
@@ -753,12 +777,24 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>جاري إرسال وتوثيق الطلب...</span>
+                      <span>
+                        {(paymentMethod.includes('بطاق') || paymentMethod.includes('فيزا') || paymentMethod.includes('مدى') || paymentMethod.includes('Apple') || paymentMethod.toLowerCase().includes('card'))
+                          ? 'جاري تجهيز بوابة الدفع وتوثيق الطلب...'
+                          : 'جاري إرسال وتوثيق الطلب...'}
+                      </span>
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4" />
-                      <span>{`تأكيد الطلب (${grandTotal.toLocaleString('en-US')} ${settings.currency})`}</span>
+                      {(paymentMethod.includes('بطاق') || paymentMethod.includes('فيزا') || paymentMethod.includes('مدى') || paymentMethod.includes('Apple') || paymentMethod.toLowerCase().includes('card')) ? (
+                        <CreditCard className="w-4 h-4" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                      <span>
+                        {(paymentMethod.includes('بطاق') || paymentMethod.includes('فيزا') || paymentMethod.includes('مدى') || paymentMethod.includes('Apple') || paymentMethod.toLowerCase().includes('card'))
+                          ? `تأكيد ودفع ${grandTotal.toLocaleString('en-US')} ${settings.currency} بأمان`
+                          : `تأكيد الطلب (${grandTotal.toLocaleString('en-US')} ${settings.currency})`}
+                      </span>
                     </>
                   )}
                 </button>

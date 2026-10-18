@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CartItem, PromoCode, StoreSettings } from '../../types/store';
-import { X, Trash2, ShoppingBag, ArrowLeft, Sparkles, Truck, Tag, Check, Package } from 'lucide-react';
+import { X, Trash2, ShoppingBag, ArrowLeft, Sparkles, Truck, Tag, Check, Package, Loader2 } from 'lucide-react';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ interface CartDrawerProps {
   onOrderNotesChange: (notes: string) => void;
   appliedPromo: PromoCode | null;
   onApplyPromo: (promo: PromoCode | null) => void;
+  storeId?: string;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -28,11 +29,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onOrderNotesChange,
   appliedPromo,
   onApplyPromo,
+  storeId,
 }) => {
   if (!isOpen) return null;
 
   const [couponInput, setCouponInput] = useState(appliedPromo?.code || '');
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
   const brand = settings.brandTheme || {
     primaryColor: '#0B253F',
@@ -80,7 +83,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     ? Math.min(100, Math.round((discountedSubtotal / settings.freeShippingThreshold) * 100))
     : 100;
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     setCouponError(null);
     const code = couponInput.trim().toUpperCase();
@@ -89,26 +92,62 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       return;
     }
 
+    // 1. Try local settings fallback first if promoCodes are populated
     const availableCodes = settings.promoCodes || [];
     const matched = availableCodes.find(
       (c) => c.active && c.code.trim().toUpperCase() === code
     );
 
-    if (!matched) {
-      setCouponError('كود الخصم غير صحيح أو منتهي الصلاحية.');
-      onApplyPromo(null);
+    if (matched) {
+      if (matched.minOrderAmount && subtotal < matched.minOrderAmount) {
+        setCouponError(
+          `الحد الأدنى لتفعيل هذا الكوبون هو ${matched.minOrderAmount} ${settings.currency}`
+        );
+        onApplyPromo(null);
+        return;
+      }
+      onApplyPromo(matched);
       return;
     }
 
-    if (matched.minOrderAmount && subtotal < matched.minOrderAmount) {
-      setCouponError(
-        `الحد الأدنى لتفعيل هذا الكوبون هو ${matched.minOrderAmount} ${settings.currency}`
-      );
-      onApplyPromo(null);
-      return;
+    // 2. Validate via backend endpoint /api/validatePromo against private merchant config
+    if (storeId) {
+      setIsValidatingCoupon(true);
+      try {
+        const res = await fetch('/api/validatePromo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storeId,
+            promoCode: code,
+            subtotal,
+          }),
+        });
+        const data = await res.json();
+        if (data.valid) {
+          const promo: PromoCode = {
+            code: data.code || code,
+            type: data.type || 'fixed',
+            value: Number(data.value) || 0,
+            active: true,
+            minOrderAmount: data.minOrderAmount,
+          };
+          onApplyPromo(promo);
+          return;
+        } else {
+          setCouponError(data.message || 'كود الخصم غير صحيح أو منتهي الصلاحية.');
+          onApplyPromo(null);
+          return;
+        }
+      } catch (err) {
+        console.warn('Backend promo validation error:', err);
+      } finally {
+        setIsValidatingCoupon(false);
+      }
     }
 
-    onApplyPromo(matched);
+    setCouponError('كود الخصم غير صحيح أو منتهي الصلاحية.');
+    onApplyPromo(null);
   };
 
   return (
@@ -301,6 +340,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   placeholder="كود الخصم (مثال: EID20)"
                   className="w-full pr-8 pl-3 py-2 text-xs bg-white border rounded-xl text-stone-800 font-mono uppercase placeholder:font-sans focus:outline-none"
                   style={{ borderColor: brand.neutralColor }}
+                  dir="ltr"
                 />
               </div>
               {appliedPromo ? (
@@ -317,9 +357,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               ) : (
                 <button
                   type="submit"
-                  className="px-3.5 py-2 bg-stone-900 text-white rounded-xl text-xs font-bold hover:bg-stone-800 transition-colors cursor-pointer"
+                  disabled={isValidatingCoupon}
+                  className="px-3.5 py-2 bg-stone-900 text-white rounded-xl text-xs font-bold hover:bg-stone-800 transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
                 >
-                  تطبيق
+                  {isValidatingCoupon ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <span>تطبيق</span>
+                  )}
                 </button>
               )}
             </form>

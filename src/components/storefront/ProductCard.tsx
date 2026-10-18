@@ -139,12 +139,16 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
           </h3>
 
           {/* Variants summary text */}
-          {product.variants && product.variants.length > 0 && (
-            <div className="mt-1.5 text-[11px] text-stone-500 flex items-center gap-1 overflow-hidden">
-              <span className="shrink-0 text-stone-400">الخيارات:</span>
-              <span className="truncate">{product.variants.join(' · ')}</span>
-            </div>
-          )}
+          {(() => {
+            const realVariants = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي');
+            if (realVariants.length === 0) return null;
+            return (
+              <div className="mt-1.5 text-[11px] text-stone-500 flex items-center gap-1 overflow-hidden">
+                <span className="shrink-0 text-stone-400">الخيارات:</span>
+                <span className="truncate">{realVariants.join(' · ')}</span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Price & Action row */}
@@ -175,7 +179,7 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
                 : 'bg-stone-200 text-stone-400 cursor-not-allowed'
             }`}
             style={{ backgroundColor: isAddedJustNow ? '#059669' : !isOutOfStock ? brand.accentColor : '#E5E7EB' }}
-            title={!isOutOfStock ? (product.variants?.length > 1 ? 'اختيار الخيار والإضافة' : 'إضافة سريعة للسلة') : 'غير متوفر'}
+            title={!isOutOfStock ? (((product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي')).length > 1 ? 'اختيار الخيار والإضافة' : 'إضافة سريعة للسلة') : 'غير متوفر'}
           >
             {isAddedJustNow ? (
               <Check className="w-4 h-4 animate-in zoom-in" />

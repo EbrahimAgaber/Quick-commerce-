@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StoreSettings, Product, Order, StorePolicy, OrderStatus, MerchantUser, PromoCode } from '../../types/store';
 import { compressImageFile } from '../../utils/imageUploader';
+import { normalizeArabicDigits } from '../../utils/digits';
 import { requestAIGeneration } from '../../services/aiService';
 import { CloudSyncStatus } from '../../services/storeManager';
 import { AuthService } from '../../services/authService';
@@ -166,9 +167,9 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const [productForm, setProductForm] = useState({
     name: '',
     category: 'منتجات مميزة',
-    price: 150,
-    salePrice: 0,
-    variants: 'الخيار الأساسي',
+    price: 150 as string | number,
+    salePrice: 0 as string | number,
+    variants: '',
     imageUrl: '',
     galleryImages: [] as string[],
     description: '',
@@ -292,7 +293,8 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
 
     const cleanPhone = driverPhone.replace(/[^0-9]/g, '');
     const origin = window.location.origin;
-    const driverLink = `${origin}/?driver=${order.id}`;
+    const targetStore = storeSlug || storeId || '';
+    const driverLink = `${origin}/?store=${encodeURIComponent(targetStore)}&driver=${encodeURIComponent(order.id)}`;
 
     const isCOD = order.paymentMethod.toLowerCase().includes('cod') || order.paymentMethod.includes('استلام');
     const paymentStatus = isCOD 
@@ -444,7 +446,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       category: 'عام',
       price: 100,
       salePrice: 0,
-      variants: 'مقاس موحد',
+      variants: '',
       imageUrl: '',
       galleryImages: [],
       description: '',
@@ -464,7 +466,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       category: p.category,
       price: p.price,
       salePrice: p.salePrice || 0,
-      variants: (p.variants || []).join(', '),
+      variants: (p.variants || []).filter((v) => v && v !== 'الخيار الافتراضي').join(', '),
       imageUrl: p.imageUrl,
       galleryImages: p.galleryImages && p.galleryImages.length > 0 ? p.galleryImages : [p.imageUrl],
       description: p.description,
@@ -532,8 +534,9 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     e.preventDefault();
     if (!productForm.name.trim()) return;
 
-    const basePrice = Number(productForm.price) || 0;
-    const discountPrice = productForm.salePrice && Number(productForm.salePrice) > 0 ? Number(productForm.salePrice) : undefined;
+    const basePrice = Number(normalizeArabicDigits(String(productForm.price))) || 0;
+    const normSale = productForm.salePrice ? Number(normalizeArabicDigits(String(productForm.salePrice))) : 0;
+    const discountPrice = normSale > 0 ? normSale : undefined;
 
     if (discountPrice !== undefined && discountPrice >= basePrice) {
       setProductFormError('سعر الخصم يجب أن يكون أقل من السعر الأساسي للمنتج.');
@@ -543,7 +546,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     const variantsArray = productForm.variants
       .split(/[,،]/)
       .map((v) => v.trim())
-      .filter(Boolean);
+      .filter((v) => Boolean(v) && v !== 'الخيار الافتراضي');
 
     const defaultImg = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
     const primaryImg = productForm.imageUrl.trim() || productForm.galleryImages[0] || defaultImg;
@@ -552,9 +555,10 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
         ? Array.from(new Set([primaryImg, ...productForm.galleryImages]))
         : [primaryImg];
 
+    const normStock = productForm.stockQuantity !== '' ? normalizeArabicDigits(String(productForm.stockQuantity)) : '';
     const parsedStockQty =
-      productForm.stockQuantity !== '' && !isNaN(Number(productForm.stockQuantity))
-        ? Math.max(0, Number(productForm.stockQuantity))
+      normStock !== '' && !isNaN(Number(normStock))
+        ? Math.max(0, Number(normStock))
         : undefined;
 
     const finalInStock = parsedStockQty !== undefined ? parsedStockQty > 0 && productForm.inStock : productForm.inStock;
@@ -568,7 +572,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
               category: productForm.category.trim() || 'عام',
               price: basePrice,
               salePrice: discountPrice,
-              variants: variantsArray.length > 0 ? variantsArray : ['الخيار الافتراضي'],
+              variants: variantsArray,
               imageUrl: primaryImg,
               galleryImages: finalGallery,
               description: productForm.description.trim(),
@@ -587,7 +591,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
         category: productForm.category.trim() || 'عام',
         price: basePrice,
         salePrice: discountPrice,
-        variants: variantsArray.length > 0 ? variantsArray : ['الخيار الافتراضي'],
+        variants: variantsArray,
         imageUrl: primaryImg,
         galleryImages: finalGallery,
         description: productForm.description.trim(),
@@ -1328,6 +1332,24 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                 <Search className="w-3.5 h-3.5 text-stone-400 absolute right-2.5 top-2.5 pointer-events-none" />
               </div>
 
+              {products.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm('هل أنت متأكد من رغبتك في حذف كافة المنتجات وتفريغ الكتالوج؟ لا يمكن التراجع عن هذا الإجراء.')) {
+                      onUpdateProducts([]);
+                      setSyncMessage('🗑️ تم تفريغ كتالوج المنتجات بنجاح');
+                      setTimeout(() => setSyncMessage(null), 2500);
+                    }
+                  }}
+                  className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-rose-200 shrink-0"
+                  title="تفريغ كافة المنتجات من المتجر"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">تفريغ الكتالوج</span>
+                </button>
+              )}
+
               <button
                 onClick={handleOpenAddProduct}
                 className="px-4 py-2 bg-[#2563EB] hover:bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
@@ -1555,7 +1577,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                     <input
                       type="text"
                       value={editableSettings.whatsappNumber}
-                      onChange={(e) => setEditableSettings({ ...editableSettings, whatsappNumber: e.target.value })}
+                      onChange={(e) => setEditableSettings({ ...editableSettings, whatsappNumber: normalizeArabicDigits(e.target.value) })}
                       placeholder="9665XXXXXXXX"
                       className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
                       dir="ltr"
@@ -1654,15 +1676,17 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                       رسوم الشحن العادية ({editableSettings.currency})
                     </label>
                     <input
-                      type="number"
-                      min={0}
+                      type="text"
+                      inputMode="decimal"
+                      dir="ltr"
                       value={editableSettings.standardShippingRate}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const norm = normalizeArabicDigits(e.target.value);
                         setEditableSettings({
                           ...editableSettings,
-                          standardShippingRate: Number(e.target.value),
-                        })
-                      }
+                          standardShippingRate: norm === '' ? 0 : Number(norm),
+                        });
+                      }}
                       className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
                     />
                   </div>
@@ -1672,15 +1696,17 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                       الحد الأدنى للشحن المجاني ({editableSettings.currency})
                     </label>
                     <input
-                      type="number"
-                      min={0}
+                      type="text"
+                      inputMode="decimal"
+                      dir="ltr"
                       value={editableSettings.freeShippingThreshold}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const norm = normalizeArabicDigits(e.target.value);
                         setEditableSettings({
                           ...editableSettings,
-                          freeShippingThreshold: Number(e.target.value),
-                        })
-                      }
+                          freeShippingThreshold: norm === '' ? 0 : Number(norm),
+                        });
+                      }}
                       className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
                     />
                   </div>
@@ -1793,15 +1819,17 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                       أجرة توصيل المندوب لكل طلب ({editableSettings.currency})
                     </label>
                     <input
-                      type="number"
-                      min={0}
+                      type="text"
+                      inputMode="decimal"
+                      dir="ltr"
                       value={editableSettings.driverFee ?? 15}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const norm = normalizeArabicDigits(e.target.value);
                         setEditableSettings({
                           ...editableSettings,
-                          driverFee: Number(e.target.value),
-                        })
-                      }
+                          driverFee: norm === '' ? 0 : Number(norm),
+                        });
+                      }}
                       placeholder="15"
                       className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
                     />
@@ -2075,10 +2103,14 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">قيمة الخصم</label>
                   <input
-                    type="number"
-                    min={1}
+                    type="text"
+                    inputMode="decimal"
+                    dir="ltr"
                     value={newPromoValue}
-                    onChange={(e) => setNewPromoValue(Number(e.target.value))}
+                    onChange={(e) => {
+                      const norm = normalizeArabicDigits(e.target.value);
+                      setNewPromoValue(norm === '' ? 0 : Number(norm));
+                    }}
                     className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl font-mono"
                   />
                 </div>
@@ -2343,7 +2375,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                   <span>عرض وطباعة الفاتورة (ZATCA)</span>
                 </button>
 
-                {selectedOrderDetail.paymentMethod === 'Moyasar' && selectedOrderDetail.status !== 'Cancelled' && (
+                {(['card', 'apple_pay', 'stc_pay', 'moyasar'].includes((selectedOrderDetail.paymentMethod || '').toLowerCase()) || selectedOrderDetail.paymentMethod === 'Moyasar') && selectedOrderDetail.status !== 'Cancelled' && (
                   <button
                     type="button"
                     disabled={isRefunding}
@@ -2469,11 +2501,15 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                     السعر الأساسي ({settings.currency}) <span className="text-red-500">*</span>
                   </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
+                    dir="ltr"
                     required
-                    min={0}
                     value={productForm.price}
-                    onChange={(e) => setProductForm({ ...productForm, price: Number(e.target.value) })}
+                    onChange={(e) => {
+                      const norm = normalizeArabicDigits(e.target.value);
+                      setProductForm({ ...productForm, price: norm });
+                    }}
                     className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                   />
                 </div>
@@ -2483,10 +2519,14 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                     سعر الخصم ({settings.currency})
                   </label>
                   <input
-                    type="number"
-                    min={0}
+                    type="text"
+                    inputMode="decimal"
+                    dir="ltr"
                     value={productForm.salePrice}
-                    onChange={(e) => setProductForm({ ...productForm, salePrice: Number(e.target.value) })}
+                    onChange={(e) => {
+                      const norm = normalizeArabicDigits(e.target.value);
+                      setProductForm({ ...productForm, salePrice: norm });
+                    }}
                     placeholder="0 بدون خصم"
                     className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                   />
@@ -2497,15 +2537,17 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                     الكمية المتوفرة (اختياري)
                   </label>
                   <input
-                    type="number"
-                    min={0}
+                    type="text"
+                    inputMode="numeric"
+                    dir="ltr"
                     value={productForm.stockQuantity}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const norm = normalizeArabicDigits(e.target.value);
                       setProductForm({
                         ...productForm,
-                        stockQuantity: e.target.value === '' ? '' : Number(e.target.value),
-                      })
-                    }
+                        stockQuantity: norm,
+                      });
+                    }}
                     placeholder="غير محدود"
                     className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
                   />

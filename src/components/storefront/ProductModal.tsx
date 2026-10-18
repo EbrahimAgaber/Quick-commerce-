@@ -32,8 +32,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
   const [selectedImage, setSelectedImage] = useState<string>(product.imageUrl);
   const [imgError, setImgError] = useState<boolean>(false);
+  const realVariants = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي');
   const [selectedVariant, setSelectedVariant] = useState<string>(
-    product.variants && product.variants.length > 0 ? product.variants[0] : ''
+    realVariants.length > 0 ? realVariants[0] : ''
   );
   const [quantity, setQuantity] = useState<number>(1);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
@@ -41,9 +42,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
   // Sync state if product changes
   useEffect(() => {
+    const realVars = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي');
     setSelectedImage(product.imageUrl);
     setImgError(false);
-    setSelectedVariant(product.variants && product.variants.length > 0 ? product.variants[0] : '');
+    setSelectedVariant(realVars.length > 0 ? realVars[0] : '');
     setQuantity(1);
     setIsSuccess(false);
   }, [product]);
@@ -247,12 +249,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             </div>
 
             {/* Variants / Packages Selection */}
-            {product.variants && product.variants.length > 0 && (
+            {realVariants.length > 0 && (
               <div className="mt-5 space-y-2">
                 <span className="text-xs font-bold text-stone-800">اختر الخيار المطلوب:</span>
 
                 <div className="flex flex-wrap gap-2">
-                  {product.variants.map((v) => {
+                  {realVariants.map((v) => {
                     const isSelected = selectedVariant === v;
                     return (
                       <button

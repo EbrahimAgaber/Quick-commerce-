@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StoreSettings, Product } from '../../types/store';
 import { DEFAULT_PRODUCTS } from '../../services/storeStorage';
 import { generateCleanStoreSlug } from '../../utils/urlRouter';
+import { normalizeArabicDigits } from '../../utils/digits';
 import { requestAIGeneration } from '../../services/aiService';
 import { compressImageFile } from '../../utils/imageUploader';
 import { 
@@ -96,7 +97,7 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
         setStepError('يرجى إدخال اسم المتجر أولاً للمتابعة.');
         return;
       }
-      const cleanPhone = whatsappNumber.trim().replace(/\D/g, '');
+      const cleanPhone = normalizeArabicDigits(whatsappNumber.trim()).replace(/\D/g, '');
       if (!cleanPhone || cleanPhone.length < 8) {
         setStepError('يرجى إدخال رقم واتساب صحيح (مع رمز الدولة مثل 9665XXXXXXXX) لاستقبال طلبات العملاء.');
         return;
@@ -121,10 +122,13 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
   };
 
   const handleFinish = () => {
-    const cleanPhone = whatsappNumber.trim().replace(/\D/g, '');
+    const cleanPhone = normalizeArabicDigits(whatsappNumber.trim()).replace(/\D/g, '');
     const finalSlug = (customSlug.trim() || generateCleanStoreSlug(storeName.trim() || 'store'))
       .toLowerCase()
       .replace(/[^a-z0-9-_]/g, '');
+
+    const normFreeShipping = Number(normalizeArabicDigits(String(freeShippingThreshold)));
+    const normStandardShipping = Number(normalizeArabicDigits(String(standardShippingRate)));
 
     const updatedSettings: StoreSettings = {
       ...currentSettings,
@@ -137,8 +141,8 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
       whatsappNumber: cleanPhone,
       supportPhone: cleanPhone ? `+${cleanPhone}` : '',
       currency: currency.trim() || 'ر.س',
-      freeShippingThreshold: Number(freeShippingThreshold) >= 0 ? Number(freeShippingThreshold) : 250,
-      standardShippingRate: Number(standardShippingRate) >= 0 ? Number(standardShippingRate) : 25,
+      freeShippingThreshold: !isNaN(normFreeShipping) && normFreeShipping >= 0 ? normFreeShipping : 250,
+      standardShippingRate: !isNaN(normStandardShipping) && normStandardShipping >= 0 ? normStandardShipping : 25,
       googleWebAppUrl: '',
       brandTheme: {
         primaryColor,
@@ -527,10 +531,14 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
                   </label>
                   <div className="relative">
                     <input
-                      type="number"
-                      min={0}
+                      type="text"
+                      inputMode="decimal"
+                      dir="ltr"
                       value={standardShippingRate}
-                      onChange={(e) => setStandardShippingRate(Number(e.target.value))}
+                      onChange={(e) => {
+                        const norm = normalizeArabicDigits(e.target.value);
+                        setStandardShippingRate(norm === '' ? 0 : Number(norm));
+                      }}
                       className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm font-mono focus:outline-none"
                     />
                     <Truck className="w-4 h-4 text-stone-400 absolute left-3 top-3 pointer-events-none" />
@@ -542,10 +550,14 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
                     الحد الأدنى للشحن المجاني ({currency})
                   </label>
                   <input
-                    type="number"
-                    min={0}
+                    type="text"
+                    inputMode="decimal"
+                    dir="ltr"
                     value={freeShippingThreshold}
-                    onChange={(e) => setFreeShippingThreshold(Number(e.target.value))}
+                    onChange={(e) => {
+                      const norm = normalizeArabicDigits(e.target.value);
+                      setFreeShippingThreshold(norm === '' ? 0 : Number(norm));
+                    }}
                     className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm font-mono focus:outline-none"
                   />
                 </div>

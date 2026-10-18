@@ -319,10 +319,37 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                         </td>
                       </tr>
                     ))
+                  ) : order.itemsSummary ? (
+                    order.itemsSummary.split(/[\n,]/).filter((l) => l.trim().length > 0).map((line, idx) => {
+                      const trimmed = line.trim();
+                      const match1 = trimmed.match(/^(\d+)\s*[xX×]\s*(.*?)(?:\s*-\s*(\d+(?:\.\d+)?))?/);
+                      const match2 = trimmed.match(/^(.*?)\s*[xX×]\s*(\d+)/);
+                      let name = trimmed;
+                      let qty = '1';
+                      let total = '-';
+                      if (match1) {
+                        qty = match1[1];
+                        name = match1[2]?.trim() || trimmed;
+                        total = match1[3] ? Number(match1[3]).toFixed(2) : '-';
+                      } else if (match2) {
+                        name = match2[1]?.trim() || trimmed;
+                        qty = match2[2];
+                      }
+                      return (
+                        <tr key={idx} className="text-xs">
+                          <td className="py-2">
+                            <p className="font-bold">{name}</p>
+                          </td>
+                          <td className="py-2 text-center font-mono">{qty}</td>
+                          <td className="py-2 text-left font-mono text-stone-400">-</td>
+                          <td className="py-2 text-left font-mono font-semibold">{total}</td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
-                      <td colSpan={4} className="py-2 text-stone-600 font-mono text-xs">
-                        {order.itemsSummary}
+                      <td colSpan={4} className="py-3 text-center text-stone-500 text-xs italic">
+                        تفاصيل المنتجات ملخصة في الإجمالي
                       </td>
                     </tr>
                   )}
