@@ -15,11 +15,18 @@ import {
   collection, 
   query, 
   where, 
+  orderBy,
   limit,
   getDocs,
   onSnapshot,
   Unsubscribe
 } from 'firebase/firestore';
+
+export const RESERVED_SLUGS = new Set([
+  'admin', 'api', 'app', 'login', 'register', 'auth', 's', 'aurora', 'store',
+  'dashboard', 'checkout', 'orders', 'cart', 'static', 'assets', 'tracking',
+  'null', 'undefined', 'privacy', 'terms', 'help', 'settings'
+]);
 
 const STORES_STORAGE_KEY = 'storelink_all_stores';
 const ACTIVE_STORE_KEY = 'storelink_active_store_id';
@@ -57,16 +64,8 @@ export class StoreManager {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const isStale = parsed.some((s: StoreInstance) =>
-            s.settings?.tagline?.includes('Chemical') ||
-            s.settings?.storeSubtitle?.includes('Ebrahim') ||
-            s.settings?.heroTitle?.includes('Ebrahim') ||
-            s.products?.some(p => p.name?.includes('Process Design') || p.name?.includes('Aspen') || p.name?.includes('باقة الحلول التقنية'))
-          );
-          if (!isStale) {
-            memoryStoresCache = parsed;
-            return parsed;
-          }
+          memoryStoresCache = parsed;
+          return parsed;
         }
       }
     } catch (e) {
@@ -168,49 +167,49 @@ export class StoreManager {
 
     const fetchPromise = (async (): Promise<StoreInstance | null> => {
       try {
-        const looksLikeStoreId = cleanQuery.startsWith('store_');
+        let storeIdToFetch: string | null = null;
 
-        if (looksLikeStoreId) {
-          const docRef = doc(db, 'stores', cleanQuery);
-          const snapshot = await getDoc(docRef);
-          if (snapshot.exists()) {
-            const raw = snapshot.data();
-            const storeData: StoreInstance = {
-              ...(raw as StoreInstance),
-              orders: Array.isArray(raw.orders) ? raw.orders : [],
-            };
-            this.cacheStoreLocally(storeData);
-            return storeData;
-          }
+        // 1. Check if slug document exists in /slugs/{slug} registry
+        const slugDocRef = doc(db, 'slugs', cleanQuery.toLowerCase());
+        const slugSnap = await getDoc(slugDocRef);
+        if (slugSnap.exists()) {
+          storeIdToFetch = slugSnap.data()?.storeId || null;
         }
 
-        // Direct indexed slug query with limit(1)
-        const storesCol = collection(db, 'stores');
-        const q = query(storesCol, where('slug', '==', cleanQuery.toLowerCase()), limit(1));
-        const querySnap = await getDocs(q);
-        if (!querySnap.empty) {
-          const raw = querySnap.docs[0].data();
+        // 2. Fallback to direct storeId
+        if (!storeIdToFetch) {
+          storeIdToFetch = cleanQuery;
+        }
+
+        // 3. Fetch store document
+        const docRef = doc(db, 'stores', storeIdToFetch);
+        const snapshot = await getDoc(docRef);
+        if (snapshot.exists()) {
+          const raw = snapshot.data();
+          
+          // 4. Load products subcollection if present (S10)
+          let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
+          try {
+            const productsSubCol = collection(db, 'stores', storeIdToFetch, 'products');
+            const productsSnap = await getDocs(productsSubCol);
+            if (!productsSnap.empty) {
+              const subColProducts: Product[] = [];
+              productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
+              if (subColProducts.length > 0) {
+                productsList = subColProducts;
+              }
+            }
+          } catch (pErr) {
+            console.warn('Subcollection products fetch notice:', pErr);
+          }
+
           const storeData: StoreInstance = {
             ...(raw as StoreInstance),
+            products: productsList,
             orders: Array.isArray(raw.orders) ? raw.orders : [],
           };
           this.cacheStoreLocally(storeData);
           return storeData;
-        }
-
-        // Fallback to direct ID lookup only if slug query missed and it wasn't checked yet
-        if (!looksLikeStoreId) {
-          const docRef = doc(db, 'stores', cleanQuery);
-          const snapshot = await getDoc(docRef);
-          if (snapshot.exists()) {
-            const raw = snapshot.data();
-            const storeData: StoreInstance = {
-              ...(raw as StoreInstance),
-              orders: Array.isArray(raw.orders) ? raw.orders : [],
-            };
-            this.cacheStoreLocally(storeData);
-            return storeData;
-          }
         }
       } catch (err) {
         console.warn('Firestore fetchStore error:', err);
@@ -239,14 +238,49 @@ export class StoreManager {
     }
     try {
       this.dispatchSyncStatus('syncing');
-      const docRef = doc(db, 'stores', store.id);
-      const { orders: _orders, ...publicStoreData } = store;
-      const payload = {
+
+      // 1. Separate public settings from private merchant config (S4)
+      const { promoCodes = [], orderNotificationEmail = '', googleWebAppUrl = '', ...publicSettings } = store.settings;
+      const { orders: _orders, products = [], ...publicStoreData } = store;
+
+      const publicPayload = {
         ...publicStoreData,
+        settings: publicSettings,
         storeName: store.settings.storeName || 'متجر إلكتروني',
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
-      await setDoc(docRef, payload, { merge: true });
+
+      const docRef = doc(db, 'stores', store.id);
+      await setDoc(docRef, publicPayload, { merge: true });
+
+      // 2. Sync private config subcollection /stores/{id}/private/config
+      const privateRef = doc(db, 'stores', store.id, 'private', 'config');
+      await setDoc(privateRef, {
+        promoCodes,
+        orderNotificationEmail,
+        googleWebAppUrl,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+
+      // 3. Sync products to subcollection /stores/{id}/products/{productId} (S10)
+      if (Array.isArray(products) && products.length > 0) {
+        const syncProductPromises = products.map((prod) => {
+          const prodRef = doc(db, 'stores', store.id, 'products', prod.id);
+          return setDoc(prodRef, prod, { merge: true });
+        });
+        await Promise.all(syncProductPromises);
+      }
+
+      // 4. Register slug in /slugs/{slug} (S6)
+      if (store.slug && store.slug !== 'aurora') {
+        const slugRef = doc(db, 'slugs', store.slug.toLowerCase().trim());
+        await setDoc(slugRef, {
+          storeId: store.id,
+          ownerId: store.ownerId,
+          createdAt: store.createdAt || new Date().toISOString(),
+        }, { merge: true });
+      }
+
       this.dispatchSyncStatus('synced');
       return true;
     } catch (err) {
@@ -320,11 +354,10 @@ export class StoreManager {
     if (!storeId || !isFirebaseConfigured || !auth.currentUser) return [];
     try {
       const ordersCol = collection(db, 'stores', storeId, 'orders');
-      const q = query(ordersCol, limit(200));
+      const q = query(ordersCol, orderBy('timestamp', 'desc'), limit(100));
       const snap = await getDocs(q);
       const list: Order[] = [];
       snap.forEach((d) => list.push(d.data() as Order));
-      list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       return list;
     } catch (err) {
       console.warn('Could not fetch store orders from Firestore:', err);
@@ -346,7 +379,7 @@ export class StoreManager {
       let isInitialSnapshot = true;
       let knownOrderIds = new Set<string>();
       const ordersCol = collection(db, 'stores', storeId, 'orders');
-      const q = query(ordersCol, limit(200));
+      const q = query(ordersCol, orderBy('timestamp', 'desc'), limit(100));
 
       return onSnapshot(
         q,
@@ -441,15 +474,36 @@ export class StoreManager {
     const localMatch = localOrders.find((o) => o.id.toUpperCase().trim() === cleanId);
     if (localMatch) return localMatch;
 
-    if (isFirebaseConfigured && storeId) {
+    if (isFirebaseConfigured) {
       try {
-        const orderRef = doc(db, 'stores', storeId, 'orders', cleanId);
-        const snap = await getDoc(orderRef);
+        const trackingRef = doc(db, 'tracking', cleanId);
+        const snap = await getDoc(trackingRef);
         if (snap.exists()) {
-          return snap.data() as Order;
+          const trackData = snap.data();
+          const mappedOrder: Order = {
+            id: trackData.orderId || cleanId,
+            timestamp: trackData.timestamp || new Date().toISOString(),
+            customerName: 'عميل المتجر',
+            customerPhone: trackData.phoneLast4 ? `***-****-${trackData.phoneLast4}` : '***',
+            city: '',
+            deliveryAddress: '',
+            paymentMethod: trackData.paymentMethod || 'الدفع عند الاستلام',
+            itemsSummary: trackData.itemsSummary || '',
+            items: [],
+            subtotal: trackData.subtotal || 0,
+            shippingFee: trackData.shippingFee || 0,
+            grandTotal: trackData.grandTotal || 0,
+            status: trackData.status || 'Received',
+            trackingNotes: trackData.trackingNotes,
+            courierName: trackData.courierName,
+            courierPhone: trackData.courierPhone,
+            trackingNumber: trackData.trackingNumber,
+            trackingUrl: trackData.trackingUrl,
+          };
+          return mappedOrder;
         }
       } catch (err) {
-        console.warn('Order lookup notice:', err);
+        console.warn('Tracking projection lookup notice:', err);
       }
     }
     return null;
@@ -465,6 +519,73 @@ export class StoreManager {
       await setDoc(orderRef, updatedOrder, { merge: true });
     } catch (err) {
       console.warn('Could not update order in Firestore:', err);
+    }
+  }
+
+  /**
+   * Submits a customer order to the hardened serverless endpoint /api/createOrder.
+   * Ensures unit prices, discounts, stock, VAT, and status are 100% computed server-side.
+   */
+  static async submitOrderToServer(params: {
+    storeId: string;
+    items: { productId: string; variant?: string; qty: number }[];
+    customer: { name: string; phone: string; city: string; address: string; landmark?: string };
+    paymentMethod: 'cod' | 'bank_transfer' | 'card' | 'apple_pay' | 'stc_pay';
+    promoCode?: string;
+    utm?: Record<string, string>;
+  }): Promise<{ success: boolean; order?: Order; error?: string }> {
+    if (params.storeId === 'store_aurora_01' || !isFirebaseConfigured) {
+      const mockOrder: Order = {
+        id: `DEMO-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
+        timestamp: new Date().toISOString(),
+        customerName: params.customer.name,
+        customerPhone: params.customer.phone,
+        city: params.customer.city,
+        deliveryAddress: params.customer.address,
+        landmarkNotes: params.customer.landmark || '',
+        paymentMethod: params.paymentMethod,
+        itemsSummary: `${params.items.length} منتجات (طلب تجريبي)`,
+        items: params.items.map((i) => ({
+          productId: i.productId,
+          name: 'منتج تجريبي',
+          variant: i.variant,
+          price: 100,
+          quantity: i.qty,
+        })),
+        subtotal: 100,
+        shippingFee: 0,
+        grandTotal: 100,
+        status: 'Received',
+        trackingNotes: 'تم تسجيل الطلب التجريبي محلياً.',
+      };
+      return { success: true, order: mockOrder };
+    }
+
+    try {
+      const res = await fetch('/api/createOrder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return {
+          success: false,
+          error: data?.error || 'تعذر تسجيل الطلب في الخادم. يرجى المحاولة لاحقاً.',
+        };
+      }
+
+      return {
+        success: true,
+        order: data.order,
+      };
+    } catch (err: any) {
+      console.error('submitOrderToServer error:', err);
+      return {
+        success: false,
+        error: 'تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.',
+      };
     }
   }
 
@@ -506,13 +627,20 @@ export class StoreManager {
     const rawSlugInput = params.slug?.trim() || params.storeName;
     const baseSlug = generateCleanStoreSlug(rawSlugInput, 'shop');
 
-    // Ensure local slug uniqueness
-    const slugExists = all.some((s) => s.slug.toLowerCase() === baseSlug.toLowerCase());
+    // Ensure slug uniqueness and check reserved slugs (S6)
+    const isReserved = RESERVED_SLUGS.has(baseSlug.toLowerCase());
+    const slugExists = isReserved || all.some((s) => s.slug.toLowerCase() === baseSlug.toLowerCase());
     const cleanSlug = slugExists ? `${baseSlug}-${Math.floor(100 + Math.random() * 900)}` : baseSlug;
     const cleanWhatsapp = params.whatsappNumber.replace(/\D/g, '') || '';
 
+    // Generate store ID with crypto.randomUUID (S6)
+    const generatedId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? `store_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`
+        : `store_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
     const newStore: StoreInstance = {
-      id: `store_${Date.now()}`,
+      id: generatedId,
       slug: cleanSlug,
       ownerId: params.ownerId || auth.currentUser?.uid || 'merchant_user',
       createdAt: new Date().toISOString(),

@@ -1,75 +1,96 @@
 import { GoogleGenAI } from '@google/genai';
+import { getAdminAuth } from './_firebaseAdmin';
+import { handleCors, checkRateLimit, getClientIp, AI_TEMPLATES } from './_security';
 
-const MAX_PROMPT_LENGTH = 2000;
-const MAX_SYSTEM_INSTRUCTION_LENGTH = 1000;
+const MAX_PROMPT_LENGTH = 1500;
+const MERCHANT_RATE_LIMIT_MAX = 15;
+const MERCHANT_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
- * Serverless API Function to securely proxy Gemini API requests.
- * Uses process.env.GEMINI_API_KEY strictly on the server-side,
- * completely preventing client-side API key exposure.
+ * Hardened Serverless API Function to proxy Gemini AI requests.
+ * Enforces Firebase ID token verification, rate limits, server-controlled prompts,
+ * and strict CORS allow-lists.
  */
 export default async function handler(req: any, res: any) {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
-  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  if (!handleCors(req, res)) {
+    return res.status(403).json({ error: 'Origin not allowed.', success: false });
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
+    return res.status(405).json({ error: 'Method Not Allowed. Use POST.', success: false });
   }
 
-  // Require an authenticated merchant session token to prevent anonymous quota abuse
+  // 1. Verify Firebase ID Token via Admin SDK
   const authHeader = req.headers?.authorization || req.headers?.Authorization;
   if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
-      error: 'Authentication required. Please sign in as a merchant to use AI generation.',
+      error: 'Authentication required. Please sign in as a merchant.',
       success: false,
     });
   }
 
   const token = authHeader.slice('Bearer '.length).trim();
-  if (token.split('.').length !== 3) {
+  let decodedToken;
+  try {
+    const adminAuth = getAdminAuth();
+    decodedToken = await adminAuth.verifyIdToken(token, true);
+  } catch (authErr: any) {
+    console.error('Firebase token verification failed:', authErr.code || authErr.message);
     return res.status(401).json({
-      error: 'Invalid authentication token format.',
+      error: 'Invalid, expired, or revoked merchant authentication token.',
+      success: false,
+    });
+  }
+
+  const merchantUid = decodedToken.uid;
+
+  // 2. Enforce per-merchant rate limit
+  const rateLimitAllowed = checkRateLimit(
+    `ai_${merchantUid}`,
+    MERCHANT_RATE_LIMIT_MAX,
+    MERCHANT_RATE_LIMIT_WINDOW_MS
+  );
+
+  if (!rateLimitAllowed) {
+    return res.status(429).json({
+      error: 'Rate limit exceeded. Please wait a few minutes before generating more content.',
       success: false,
     });
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
+    console.error('GEMINI_API_KEY is not configured on the server.');
     return res.status(500).json({
-      error: 'GEMINI_API_KEY is not configured in server environment variables.',
+      error: 'AI copywriting service is currently unavailable.',
       success: false,
     });
   }
 
   try {
-    const { prompt, systemInstruction } = req.body || {};
+    const { prompt, templateKey = 'product_description' } = req.body || {};
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'Valid prompt string is required.', success: false });
     }
 
     if (prompt.length > MAX_PROMPT_LENGTH) {
       return res.status(400).json({
-        error: `Prompt exceeds maximum allowed length (${MAX_PROMPT_LENGTH} characters).`,
+        error: `Prompt exceeds maximum allowed length of ${MAX_PROMPT_LENGTH} characters.`,
         success: false,
       });
     }
 
-    const safeSystemInstruction =
-      typeof systemInstruction === 'string'
-        ? systemInstruction.slice(0, MAX_SYSTEM_INSTRUCTION_LENGTH)
-        : undefined;
+    // Stop accepting client-supplied systemInstruction. Use fixed server-side templates only.
+    const systemInstruction = AI_TEMPLATES[templateKey] || AI_TEMPLATES.product_description;
 
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
-      config: safeSystemInstruction ? { systemInstruction: safeSystemInstruction } : undefined,
+      config: {
+        systemInstruction,
+        temperature: 0.7,
+      },
     });
 
     return res.status(200).json({
@@ -77,9 +98,10 @@ export default async function handler(req: any, res: any) {
       text: response.text,
     });
   } catch (err: any) {
+    // Log sensitive details server-side only; return safe generic error to client
     console.error('Server Gemini API Error:', err);
     return res.status(500).json({
-      error: err.message || 'Error processing request with Gemini API',
+      error: 'An unexpected error occurred while generating content. Please try again.',
       success: false,
     });
   }

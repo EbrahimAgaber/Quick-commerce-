@@ -16,8 +16,6 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   onClose,
   onTrackOrder,
 }) => {
-  if (!order) return null;
-
   const [copied, setCopied] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
@@ -33,6 +31,8 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
+
+  if (!order) return null;
 
   const handleCopyInvoice = () => {
     const text = buildWhatsAppInvoiceMessage(order, settings);

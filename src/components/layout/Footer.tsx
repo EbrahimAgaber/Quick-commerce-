@@ -1,6 +1,6 @@
-import React from 'react';
 import { StoreSettings } from '../../types/store';
 import { MessageCircle, ExternalLink, Sparkles, Mail, Phone } from 'lucide-react';
+import { isValidSafeUrl } from '../../utils/security';
 
 interface FooterProps {
   settings: StoreSettings;
@@ -141,7 +141,7 @@ export const Footer: React.FC<FooterProps> = ({
                   </button>
                 </li>
               )}
-              {settings.websiteUrl && (
+              {settings.websiteUrl && isValidSafeUrl(settings.websiteUrl) && (
                 <li>
                   <a
                     href={settings.websiteUrl}

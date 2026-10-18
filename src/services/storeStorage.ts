@@ -331,20 +331,13 @@ export class StoreStorage {
       const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (data) {
         const parsed = JSON.parse(data);
-        if (
-          parsed.tagline?.includes('Chemical') || 
-          parsed.tagline?.includes('Engineering Process Design') || 
-          parsed.heroTitle?.includes('Chemical') ||
-          parsed.heroTitle?.includes('Ebrahim') ||
-          parsed.storeSubtitle?.includes('Ebrahim') ||
-          parsed.supportEmail?.includes('ea.gaber10') ||
-          parsed.websiteUrl?.includes('simpler-ebrahim') ||
-          !parsed.brandTheme
-        ) {
-          safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
-          return DEFAULT_SETTINGS;
+        if (parsed && typeof parsed === 'object') {
+          return {
+            ...DEFAULT_SETTINGS,
+            ...parsed,
+            brandTheme: parsed.brandTheme || DEFAULT_SETTINGS.brandTheme,
+          };
         }
-        return parsed;
       }
     } catch (e) {
       console.error('Error reading settings from localStorage', e);
@@ -362,20 +355,9 @@ export class StoreStorage {
       const data = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
       if (data) {
         const parsed = JSON.parse(data);
-        if (
-          Array.isArray(parsed) && 
-          parsed.length > 0 && 
-          (
-            parsed[0].name?.includes('كريب') || 
-            parsed[0].name?.includes('Process Design') || 
-            parsed[0].name?.includes('Aspen') ||
-            parsed[0].name?.includes('باقة الحلول التقنية')
-          )
-        ) {
-          safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(DEFAULT_PRODUCTS));
-          return DEFAULT_PRODUCTS;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
-        return parsed;
       }
     } catch (e) {
       console.error('Error reading products from localStorage', e);
@@ -429,11 +411,9 @@ export class StoreStorage {
       const data = localStorage.getItem(STORAGE_KEYS.POLICIES);
       if (data) {
         const parsed = JSON.parse(data);
-        if (Array.isArray(parsed) && parsed.some(p => p.content?.includes('إبراهيم جابر'))) {
-          safeSetLocalStorage(STORAGE_KEYS.POLICIES, JSON.stringify(DEFAULT_POLICIES));
-          return DEFAULT_POLICIES;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
         }
-        return parsed;
       }
     } catch (e) {
       console.error('Error reading policies from localStorage', e);

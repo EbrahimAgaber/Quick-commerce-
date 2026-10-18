@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "deploy": "npx vercel --prod",
-    "deploy:rules": "npx firebase-tools deploy --only firestore:rules,firestore:indexes"
+    "deploy:rules": "npx firebase-tools deploy --only firestore:rules,firestore:indexes",
+    "migrate:dry-run": "tsx scripts/migrateStoreData.ts --dry-run",
+    "migrate": "tsx scripts/migrateStoreData.ts"
   },
   "engines": {
     "node": ">=20.0.0"

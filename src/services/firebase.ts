@@ -8,6 +8,8 @@ import {
   updateProfile,
   signOut as fbSignOut, 
   onAuthStateChanged,
+  sendPasswordResetEmail,
+  sendEmailVerification,
   User as FirebaseUser,
   Auth
 } from 'firebase/auth';
@@ -33,10 +35,20 @@ export const firestoreDatabaseId =
   import.meta.env.VITE_FIREBASE_DATABASE_ID || 
   '(default)';
 
+export const isDemoMode = import.meta.env.VITE_DEMO_MODE === 'true';
+export const isProduction = import.meta.env.PROD;
+
 export const isFirebaseConfigured = Boolean(
   resolvedFirebaseConfig.apiKey && 
   resolvedFirebaseConfig.apiKey !== 'your-firebase-api-key'
 );
+
+export const hasFirebaseMisconfiguration = isProduction && !isFirebaseConfigured && !isDemoMode;
+if (hasFirebaseMisconfiguration) {
+  console.error(
+    'CRITICAL: Production build detected without valid VITE_FIREBASE_* environment variables and without VITE_DEMO_MODE=true.'
+  );
+}
 
 // Initialize Firebase safely so missing env vars during initial setup never crash the app
 const app: FirebaseApp = initializeApp(
@@ -160,4 +172,33 @@ export async function signOutFromFirebase(): Promise<void> {
  */
 export function onFirebaseAuthStateChanged(callback: (user: FirebaseUser | null) => void) {
   return onAuthStateChanged(auth, callback);
+}
+
+/**
+ * Sends a password reset email via Firebase Auth
+ */
+export async function sendPasswordReset(email: string): Promise<void> {
+  if (!isFirebaseConfigured) {
+    if (!isDemoMode) {
+      throw new Error('FIREBASE_NOT_CONFIGURED');
+    }
+    return;
+  }
+  await sendPasswordResetEmail(auth, email.trim());
+}
+
+/**
+ * Sends email verification to the currently logged in merchant
+ */
+export async function sendCurrentEmailVerification(): Promise<void> {
+  if (!auth.currentUser) throw new Error('NO_USER_LOGGED_IN');
+  await sendEmailVerification(auth.currentUser);
+}
+
+/**
+ * Checks whether the currently logged in merchant's email is verified
+ */
+export function isCurrentEmailVerified(): boolean {
+  if (isDemoMode && !isFirebaseConfigured) return true;
+  return Boolean(auth.currentUser?.emailVerified);
 }

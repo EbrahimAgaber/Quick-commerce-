@@ -62,8 +62,6 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
   settings,
   initialOrderId = '',
 }) => {
-  if (!isOpen) return null;
-
   const [searchId, setSearchId] = useState(initialOrderId);
   const [searchedOrder, setSearchedOrder] = useState<Order | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
@@ -119,6 +117,8 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
     const url = createWhatsAppUrl(settings.whatsappNumber, text);
     window.open(url, '_blank');
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/70 backdrop-blur-xs">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CartItem, Order, PromoCode, StoreSettings } from '../../types/store';
-import { generateOrderId, buildWhatsAppInvoiceMessage, createWhatsAppUrl } from '../../utils/whatsappInvoice';
-import { X, Send, CreditCard, Banknote, Building2, Check, Copy, AlertCircle } from 'lucide-react';
+import { StoreManager } from '../../services/storeManager';
+import { X, Send, CreditCard, Banknote, Building2, Check, Copy, AlertCircle, Loader2 } from 'lucide-react';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -11,6 +11,7 @@ interface CheckoutModalProps {
   orderNotes: string;
   appliedPromo?: PromoCode | null;
   onOrderSuccess: (order: Order) => void;
+  storeId?: string;
 }
 
 const DEFAULT_CITIES = [
@@ -44,9 +45,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   orderNotes,
   appliedPromo,
   onOrderSuccess,
+  storeId,
 }) => {
-  if (!isOpen) return null;
-
   const brand = settings.brandTheme || {
     primaryColor: '#0B253F',
     accentColor: '#0077FF',
@@ -139,75 +139,53 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
 
     setIsSubmitting(true);
+    setErrorMsg('');
 
     try {
-      const orderId = generateOrderId('BA');
-      const itemsSummary = items
-        .map((i) => {
-          const hasSale =
-            typeof i.product.salePrice === 'number' &&
-            i.product.salePrice > 0 &&
-            i.product.salePrice < i.product.price;
-          const unitPrice = hasSale ? i.product.salePrice! : i.product.price;
-          return `${i.quantity}x ${i.product.name}${
-            i.selectedVariant ? ` (${i.selectedVariant})` : ''
-          } - ${unitPrice * i.quantity} ${settings.currency}`;
-        })
-        .join(', ');
-
-      const orderItems = items.map((i) => {
-        const hasSale =
-          typeof i.product.salePrice === 'number' &&
-          i.product.salePrice > 0 &&
-          i.product.salePrice < i.product.price;
-        const unitPrice = hasSale ? i.product.salePrice! : i.product.price;
-        return {
-          productId: i.product.id,
-          name: i.product.name,
-          variant: i.selectedVariant,
-          price: unitPrice,
-          quantity: i.quantity,
-          imageUrl: i.product.imageUrl,
-        };
-      });
-
-      const newOrder: Order = {
-        id: orderId,
-        timestamp: new Date().toISOString(),
-        customerName: customerName.trim(),
-        customerPhone: digitsOnlyPhone,
-        city: finalCity,
-        deliveryAddress: deliveryAddress.trim(),
-        landmarkNotes: landmarkNotes.trim(),
-        paymentMethod,
-        itemsSummary,
-        items: orderItems,
-        subtotal,
-        discountCode: discountAmount > 0 ? appliedPromo?.code : undefined,
-        discountAmount: discountAmount > 0 ? discountAmount : undefined,
-        shippingFee,
-        grandTotal,
-        status: 'Received',
-        trackingNotes: 'تم استلام الطلب وتأكيده بنجاح.',
-      };
-
-      // Build WhatsApp message
-      const whatsappMsg = buildWhatsAppInvoiceMessage(newOrder, settings);
-      const whatsappUrl = createWhatsAppUrl(settings.whatsappNumber, whatsappMsg);
-
-      // Open WhatsApp window smoothly before async completion
-      if (settings.whatsappNumber) {
-        window.open(whatsappUrl, '_blank');
+      let mappedPaymentMethod: 'cod' | 'bank_transfer' | 'card' | 'apple_pay' | 'stc_pay' = 'cod';
+      if (paymentMethod.includes('تحويل')) {
+        mappedPaymentMethod = 'bank_transfer';
+      } else if (paymentMethod.includes('بطاق') || paymentMethod.includes('فيزا') || paymentMethod.includes('مدى')) {
+        mappedPaymentMethod = 'card';
+      } else if (paymentMethod.includes('Apple')) {
+        mappedPaymentMethod = 'apple_pay';
+      } else if (paymentMethod.includes('STC')) {
+        mappedPaymentMethod = 'stc_pay';
       }
 
-      // Trigger success callback
-      onOrderSuccess(newOrder);
+      const serverRes = await StoreManager.submitOrderToServer({
+        storeId: storeId || 'store_aurora_01',
+        items: items.map((i) => ({
+          productId: i.product.id,
+          variant: i.selectedVariant,
+          qty: i.quantity,
+        })),
+        customer: {
+          name: customerName.trim(),
+          phone: digitsOnlyPhone,
+          city: finalCity,
+          address: deliveryAddress.trim(),
+          landmark: landmarkNotes.trim(),
+        },
+        paymentMethod: mappedPaymentMethod,
+        promoCode: appliedPromo?.code,
+      });
+
+      if (!serverRes.success || !serverRes.order) {
+        setErrorMsg(serverRes.error || 'تعذر تسجيل الطلب في الخادم. يرجى مراجعة البيانات والمحاولة مجدداً.');
+        return;
+      }
+
+      // Success: pass verified server order to parent
+      onOrderSuccess(serverRes.order);
     } catch (err: any) {
       setErrorMsg(err.message || 'حدث خطأ أثناء معالجة الطلب');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/70 backdrop-blur-xs">
@@ -463,17 +441,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-4 px-4 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg transition-all active:scale-98 disabled:opacity-50 cursor-pointer"
+              style={{ backgroundColor: brand.accentColor }}
+              className="w-full py-4 px-4 text-white rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg hover:brightness-105 transition-all active:scale-98 disabled:opacity-50 cursor-pointer"
             >
-              <Send className="w-4 h-4" />
-              <span>
-                {isSubmitting
-                  ? 'جاري تجهيز الطلب...'
-                  : `تأكيد وإرسال الفاتورة عبر واتساب (${grandTotal.toLocaleString('en-US')} ${settings.currency})`}
-              </span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>جاري تسجيل الطلب والتحقق في الخادم...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>
+                    {`تأكيد الطلب (${grandTotal.toLocaleString('en-US')} ${settings.currency})`}
+                  </span>
+                </>
+              )}
             </button>
             <p className="text-center text-[11px] text-stone-400 mt-2">
-              بمجرد الضغط سيتم تسجيل الطلب في سجلات المتجر وفتح محادثة واتساب جاهزة مع خدمة العملاء
+              يتم حفظ وتسجيل الطلب بشكل مشفّر في خوادم المتجر مع إمكانية إرسال الفاتورة عبر واتساب فوراً
             </p>
           </div>
         </form>

@@ -982,6 +982,7 @@ export default function App() {
             orderNotes={orderNotes}
             appliedPromo={appliedPromo}
             onOrderSuccess={handleOrderSuccess}
+            storeId={activeStore.id}
           />
         )}
 

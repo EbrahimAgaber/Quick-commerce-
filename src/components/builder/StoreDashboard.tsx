@@ -338,12 +338,14 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       const prompt = `المنتج: ${productForm.name.trim()}\nالفئة: ${
         productForm.category.trim() || 'عام'
       }\nالمتجر: ${settings.storeName}`;
-      const res = await requestAIGeneration(prompt);
-      if (res.text) {
+      const res = await requestAIGeneration(prompt, 'product_description');
+      if (res.success && res.text) {
         setProductForm((prev) => ({ ...prev, description: res.text || '' }));
+      } else {
+        setProductFormError(res.error || 'تعذر توليد وصف المنتج بالذكاء الاصطناعي.');
       }
     } catch {
-      // Fallback handled inside aiService
+      setProductFormError('حدث خطأ غير متوقع أثناء توليد الوصف.');
     } finally {
       setGeneratingProductAI(false);
     }

@@ -112,6 +112,10 @@ export interface Order {
   grandTotal: number;
   status: OrderStatus;
   trackingNotes?: string;
+  courierName?: string;
+  courierPhone?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
 }
 
 export interface StorePolicy {

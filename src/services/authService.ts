@@ -6,7 +6,11 @@ import {
   signOutFromFirebase, 
   auth, 
   mapFirebaseUser,
-  isFirebaseConfigured
+  isFirebaseConfigured,
+  isDemoMode,
+  sendPasswordReset,
+  sendCurrentEmailVerification,
+  isCurrentEmailVerified
 } from './firebase';
 
 const AUTH_STORAGE_KEY = 'storelink_current_merchant';
@@ -60,28 +64,22 @@ export class AuthService {
   static getCurrentUser(): MerchantUser | null {
     // 1. Check live Firebase Auth user first
     if (auth.currentUser) {
-      const mapped = mapFirebaseUser(auth.currentUser);
-      return mapped;
+      return mapFirebaseUser(auth.currentUser);
     }
 
-    // 2. Check cached session while Firebase Auth initializes
-    try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as MerchantUser;
-        // Never allow legacy fake/demo IDs
-        if (
-          parsed &&
-          parsed.id &&
-          parsed.id !== 'user_ebrahim_01' &&
-          !parsed.email?.includes('merchant.demo@')
-        ) {
-          return parsed;
+    // 2. Local session is strictly a UI hint and only permitted in explicit demo mode
+    if (isDemoMode) {
+      try {
+        const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored) as MerchantUser;
+          if (parsed && parsed.id) {
+            return parsed;
+          }
         }
-        localStorage.removeItem(AUTH_STORAGE_KEY);
+      } catch (e) {
+        console.warn('Error reading auth state', e);
       }
-    } catch (e) {
-      console.warn('Error reading auth state', e);
     }
 
     return null;
@@ -113,7 +111,11 @@ export class AuthService {
       return merchant;
     }
 
-    // Fallback when Firebase .env keys are not yet configured in local environment
+    if (!isDemoMode) {
+      throw new Error('خدمة المصادقة السحابية غير مهيأة. يرجى إعداد متغيرات VITE_FIREBASE_*.');
+    }
+
+    // Fallback ONLY when explicit VITE_DEMO_MODE=true
     const accounts = getLocalAccounts();
     const record = accounts[cleanEmail];
     if (!record) {
@@ -130,8 +132,8 @@ export class AuthService {
   static async registerWithEmail(name: string, email: string, password: string): Promise<MerchantUser> {
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanName || !cleanEmail || password.length < 6) {
-      throw new Error('يرجى إدخال الاسم والبريد الإلكتروني وكلمة مرور لا تقل عن 6 أحرف.');
+    if (!cleanName || !cleanEmail || password.length < 8) {
+      throw new Error('يرجى إدخال الاسم والبريد الإلكتروني وكلمة مرور لا تقل عن 8 أحرف.');
     }
     if (isFirebaseConfigured) {
       const merchant = await registerWithEmail(cleanName, cleanEmail, password);
@@ -139,7 +141,11 @@ export class AuthService {
       return merchant;
     }
 
-    // Fallback when Firebase .env keys are not yet configured in local environment
+    if (!isDemoMode) {
+      throw new Error('خدمة المصادقة السحابية غير مهيأة. يرجى إعداد متغيرات VITE_FIREBASE_*.');
+    }
+
+    // Fallback ONLY when explicit VITE_DEMO_MODE=true
     const accounts = getLocalAccounts();
     if (accounts[cleanEmail]) {
       throw new Error('هذا البريد الإلكتروني مسجل مسبقاً. يرجى تسجيل الدخول.');
@@ -155,6 +161,22 @@ export class AuthService {
     saveLocalAccounts(accounts);
     this.setCurrentUser(newMerchant);
     return newMerchant;
+  }
+
+  static async resetPassword(email: string): Promise<void> {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      throw new Error('يرجى إدخال البريد الإلكتروني لاستعادة كلمة المرور.');
+    }
+    await sendPasswordReset(cleanEmail);
+  }
+
+  static async sendEmailVerification(): Promise<void> {
+    await sendCurrentEmailVerification();
+  }
+
+  static isEmailVerified(): boolean {
+    return isCurrentEmailVerified();
   }
 
   static async logout(): Promise<void> {
