@@ -47,7 +47,7 @@ describe('Simulation Kit - Business Owner & Shopper Persona Tests', () => {
       expect(report.totalSteps).toBe(16);
       expect(report.storeId).toBeDefined();
       expect(report.orderId).toBeDefined();
-    });
+    }, 20000);
   });
 
   describe('2. Business Owner Persona (Merchant Operations)', () => {

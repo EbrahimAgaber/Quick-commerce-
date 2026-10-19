@@ -4,8 +4,28 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const currentBuildTime = Date.now();
   return {
-    plugins: [react(), tailwindcss()],
+    define: {
+      __APP_BUILD_TIME__: JSON.stringify(currentBuildTime),
+    },
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'generate-version-json',
+        generateBundle() {
+          this.emitFile({
+            type: 'asset',
+            fileName: 'version.json',
+            source: JSON.stringify({
+              buildTime: currentBuildTime,
+              buildDate: new Date(currentBuildTime).toISOString(),
+            }),
+          });
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname || process.cwd(), '.'),
