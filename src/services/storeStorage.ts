@@ -46,6 +46,9 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   announcementText: '✨ شحن مجاني لكافة الطلبات فوق 250 ر.س · طلب فوري عبر الواتساب والدفع عند الاستلام',
   deliveryEstimationDays: '1 - 3 أيام عمل للتسليم المباشر',
   googleWebAppUrl: '',
+  enableOnlinePayments: true,
+  moyasarPublishableKey: '',
+  moyasarTestMode: true,
 };
 
 export const DEFAULT_PRODUCTS: Product[] = [

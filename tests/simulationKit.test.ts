@@ -329,5 +329,59 @@ describe('Simulation Kit - Business Owner & Shopper Persona Tests', () => {
       const find3 = await shopper.trackOrder(`  #${rawId.toLowerCase()}  `);
       expect(find3?.id).toBe(rawId);
     });
+
+    it('simulates Moyasar online payment (Card / Apple Pay) transition to Paid', async () => {
+      const merchant = new BusinessOwnerSimulator();
+      const store = merchant.createStore({
+        storeName: 'إلكترونيات المستقبل',
+        whatsappNumber: '0501112233',
+      });
+      store.settings.enableOnlinePayments = true;
+      store.settings.moyasarPublishableKey = 'pk_test_sample_key_123';
+      store.settings.moyasarTestMode = true;
+      StoreManager.updateStore(store);
+
+      const prod = merchant.addProduct({
+        name: 'سماعات لاسلكية عازلة للضوضاء',
+        category: 'إلكترونيات',
+        price: 299,
+        stockQuantity: 20,
+      });
+
+      const shopper = new ShopperSimulator();
+      shopper.locateStore(store.id);
+
+      // Shopper checks out with card
+      const res = await shopper.submitCheckout({
+        items: [{ productId: prod.id, qty: 1 }],
+        customerName: 'عبدالعزيز الراشد',
+        customerPhone: '0501234567',
+        city: 'الرياض',
+        deliveryAddress: 'حي النخيل',
+        paymentMethod: 'card',
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.order).toBeDefined();
+      const createdOrder = res.order!;
+
+      // Simulate Moyasar 3DS / Webhook approval
+      const paymentId = 'pay_test_mysr_9988';
+      const paidOrder = {
+        ...createdOrder,
+        status: 'Paid' as const,
+        paymentId,
+        paidAt: new Date().toISOString(),
+        trackingNotes: `تم استلام الدفع الإلكتروني بنجاح (معرف العملية: ${paymentId}).`,
+      };
+
+      await StoreManager.updateOrderInStore(store.id, paidOrder);
+
+      // Verify the order in store is now Paid
+      const verified = await shopper.trackOrder(createdOrder.id);
+      expect(verified?.status).toBe('Paid');
+      expect(verified?.paymentId).toBe('pay_test_mysr_9988');
+      expect(verified?.paidAt).toBeDefined();
+    });
   });
 });

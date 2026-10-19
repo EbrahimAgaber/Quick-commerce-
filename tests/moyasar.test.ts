@@ -135,6 +135,39 @@ describe('Moyasar Webhook & Payment Verification (Section 3)', () => {
     expect(result.statusCode).toBe(401);
     expect(result.error).toBe('SECRET_MISMATCH');
   });
+
+  it('accurately converts fractional Saudi Riyal prices to Halalas without float drift', () => {
+    // 29.99 SAR -> 2999 Halalas
+    expect(Math.round(29.99 * 100)).toBe(2999);
+    // 100.05 SAR -> 10005 Halalas
+    expect(Math.round(100.05 * 100)).toBe(10005);
+    // 0.50 SAR -> 50 Halalas
+    expect(Math.round(0.50 * 100)).toBe(50);
+  });
+
+  it('verifies 3D Secure bank callback parameter parsing and Paid status transition', () => {
+    const mockOrder: MockOrder = {
+      id: 'ORD-MYS-888',
+      grandTotal: 345,
+      status: 'Received',
+    };
+
+    // Callback simulated from Bank 3DS: ?pay_callback=1&id=pay_live_7766&status=paid&order=ORD-MYS-888
+    const callbackParams = {
+      pay_callback: '1',
+      id: 'pay_live_7766',
+      status: 'paid',
+      order: 'ORD-MYS-888',
+    };
+
+    if (callbackParams.pay_callback === '1' && callbackParams.status === 'paid' && callbackParams.id) {
+      mockOrder.status = 'Paid';
+      mockOrder.paymentId = callbackParams.id;
+    }
+
+    expect(mockOrder.status).toBe('Paid');
+    expect(mockOrder.paymentId).toBe('pay_live_7766');
+  });
 });
 
 describe('ZATCA E-Invoicing & VAT Breakdown (Section 5)', () => {

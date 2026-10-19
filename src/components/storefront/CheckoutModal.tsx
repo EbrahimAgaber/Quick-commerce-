@@ -22,6 +22,7 @@ import {
   ShoppingBag, 
   ShieldCheck 
 } from 'lucide-react';
+import { MoyasarPaymentModal } from './MoyasarPaymentModal';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -94,6 +95,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isLocating, setIsLocating] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [pendingMoyasarOrder, setPendingMoyasarOrder] = useState<Order | null>(null);
+  const [showMoyasarModal, setShowMoyasarModal] = useState(false);
 
   // Close on Escape
   useEffect(() => {
@@ -272,6 +275,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
       if (!serverRes.success || !serverRes.order) {
         setErrorMsg(serverRes.error || 'تعذر تسجيل الطلب في الخادم. يرجى مراجعة البيانات والمحاولة مجدداً.');
+        return;
+      }
+
+      // If online payment (Mada, Apple Pay, Visa/MC, STC Pay) is selected, trigger Moyasar Payment Modal
+      if (mappedPaymentMethod === 'card' || mappedPaymentMethod === 'apple_pay' || mappedPaymentMethod === 'stc_pay') {
+        setPendingMoyasarOrder(serverRes.order);
+        setShowMoyasarModal(true);
         return;
       }
 
@@ -809,6 +819,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Moyasar Online Payment Gateway Modal */}
+      {showMoyasarModal && pendingMoyasarOrder && (
+        <MoyasarPaymentModal
+          isOpen={showMoyasarModal}
+          onClose={() => setShowMoyasarModal(false)}
+          order={pendingMoyasarOrder}
+          settings={settings}
+          storeSlug={storeId}
+          onPaymentSuccess={(paidOrder) => {
+            setShowMoyasarModal(false);
+            trackPurchase(paidOrder, settings.currency);
+            onOrderSuccess(paidOrder);
+          }}
+          onPaymentFailed={(errMsg) => {
+            setErrorMsg(errMsg);
+          }}
+        />
+      )}
     </div>
   );
 };

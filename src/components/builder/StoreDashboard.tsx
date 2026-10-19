@@ -41,7 +41,10 @@ import {
   RotateCcw,
   FileText,
   Bell,
-  MapPin
+  MapPin,
+  CreditCard,
+  Lock,
+  ShieldCheck
 } from 'lucide-react';
 
 interface StoreDashboardProps {
@@ -430,6 +433,8 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       'Out for Delivery': 'طلبك خرج للتوصيل مع المندوب',
       Delivered: 'تم توصيل طلبك بنجاح، شكراً لتسوقك معنا',
       Cancelled: 'تم إلغاء الطلب',
+      Paid: 'تم استلام وتأكيد الدفع الإلكتروني بنجاح',
+      'Payment Failed': 'تعذر استلام الدفع الإلكتروني للطلب',
     };
     const msg = `مرحباً ${ord.customerName} 🌟\nبخصوص طلبك رقم #${ord.id} من *${settings.storeName}*:\nالحالة الحالية: *${statusMap[ord.status]}*${
       ord.trackingNotes ? `\nملاحظات الشحن: ${ord.trackingNotes}` : ''
@@ -1764,6 +1769,92 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                       className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
                       dir="ltr"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Moyasar Payment Gateway Settings */}
+              <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
+                <div className="border-b border-stone-100 pb-2 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4 text-emerald-600" />
+                      <span>بوابة الدفع الإلكتروني مويسر (Moyasar Gateway)</span>
+                    </h3>
+                    <p className="text-xs text-stone-500 mt-0.5">
+                      قبول بطاقات مدى (mada)، Apple Pay، Visa، و Mastercard مع توثيق الحماية المصرفية الثلاثية (3D Secure)
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>معتمد من SAMA و PCI-DSS</span>
+                  </div>
+                </div>
+
+                <div className="space-y-4 text-xs">
+                  {/* Enable Online Payments Toggle */}
+                  <label className="flex items-center justify-between p-3 rounded-2xl bg-stone-50 border border-stone-200 cursor-pointer">
+                    <div>
+                      <span className="font-bold text-stone-900 block">تفعيل الدفع الإلكتروني بالبطاقات و Apple Pay</span>
+                      <span className="text-stone-500 text-[11px]">إتاحة خيار الدفع الإلكتروني لعملائك في صفحة إنهاء الطلب</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editableSettings.enableOnlinePayments !== false}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          enableOnlinePayments: e.target.checked,
+                        })
+                      }
+                      className="w-5 h-5 rounded text-emerald-600 cursor-pointer"
+                    />
+                  </label>
+
+                  {/* Test Mode Toggle */}
+                  <label className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/60 border border-amber-200 cursor-pointer">
+                    <div>
+                      <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>وضع التجربة (Sandbox Test Mode)</span>
+                      </span>
+                      <span className="text-amber-800 text-[11px]">استخدام بيئة الاختبار لتجربة عمليات الشراء والتحصيل بدون خصم مبالغ حقيقية</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editableSettings.moyasarTestMode !== false}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          moyasarTestMode: e.target.checked,
+                        })
+                      }
+                      className="w-5 h-5 rounded text-amber-600 cursor-pointer"
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1">
+                        مفتاح النشر العام (Moyasar Publishable API Key)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="pk_live_... أو pk_test_..."
+                        value={editableSettings.moyasarPublishableKey || ''}
+                        onChange={(e) =>
+                          setEditableSettings({
+                            ...editableSettings,
+                            moyasarPublishableKey: e.target.value.trim(),
+                          })
+                        }
+                        className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono text-xs"
+                        dir="ltr"
+                      />
+                      <p className="text-[11px] text-stone-400 mt-1">
+                        يمكنك الحصول على مفتاحك العام من لوحة تحكم مويسر الرسمية (Settings &gt; API Keys). اتركه فارغاً لاستخدام المفتاح التجريبي الافتراضي.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

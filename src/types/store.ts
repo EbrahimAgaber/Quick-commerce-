@@ -84,6 +84,10 @@ export interface StoreSettings {
   driverPhone?: string;
   driverFee?: number;
   storeLocationUrl?: string;
+  enableOnlinePayments?: boolean;
+  moyasarPublishableKey?: string;
+  moyasarSecretKey?: string;
+  moyasarTestMode?: boolean;
 }
 
 export interface Product {
@@ -103,7 +107,7 @@ export interface Product {
   colorName?: string;
 }
 
-export type OrderStatus = 'Received' | 'In Progress' | 'Out for Delivery' | 'Delivered' | 'Cancelled';
+export type OrderStatus = 'Received' | 'In Progress' | 'Out for Delivery' | 'Delivered' | 'Cancelled' | 'Paid' | 'Payment Failed';
 
 export interface OrderItem {
   productId: string;
