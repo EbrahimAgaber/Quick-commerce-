@@ -383,5 +383,53 @@ describe('Simulation Kit - Business Owner & Shopper Persona Tests', () => {
       expect(verified?.paymentId).toBe('pay_test_mysr_9988');
       expect(verified?.paidAt).toBeDefined();
     });
+
+    it('preserves orders and prevents data loss when URL or store is reloaded/hydrated', async () => {
+      const merchant = new BusinessOwnerSimulator();
+      const store = merchant.createStore({
+        storeName: 'متجر الهدايا التذكارية',
+        whatsappNumber: '0559988776',
+      });
+
+      const prod = merchant.addProduct({
+        name: 'صندوق خشبي تراثي',
+        category: 'هدايا',
+        price: 180,
+        stockQuantity: 10,
+      });
+
+      const shopper = new ShopperSimulator();
+      shopper.locateStore(store.id);
+
+      // Shopper places an order
+      const res = await shopper.submitCheckout({
+        items: [{ productId: prod.id, qty: 1 }],
+        customerName: 'فاطمة الشهري',
+        customerPhone: '0551234567',
+        city: 'الدمام',
+        deliveryAddress: 'حي الشاطئ',
+        paymentMethod: 'cod',
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.order).toBeDefined();
+      const placedOrderId = res.order!.id;
+
+      // Simulate a page reload / hydration event with empty orders (like fetching catalog from cloud)
+      const { StoreStorage } = await import('../src/services/storeStorage');
+      StoreStorage.hydrateStore({
+        settings: store.settings,
+        products: store.products || [],
+        orders: [], // empty incoming orders from cloud catalog doc
+        policies: store.policies || [],
+      });
+
+      // Verify that previously placed order was NOT wiped out
+      const ordersAfterHydrate = StoreStorage.getOrders();
+      expect(ordersAfterHydrate.some((o) => o.id === placedOrderId)).toBe(true);
+
+      const storeInManager = StoreManager.getStoreById(store.id);
+      expect(storeInManager?.orders?.some((o) => o.id === placedOrderId)).toBe(true);
+    });
   });
 });

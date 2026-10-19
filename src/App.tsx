@@ -183,19 +183,29 @@ export default function App() {
 
   // Real-time Orders Subscription for Store Owners
   useEffect(() => {
-    if (!isStoreOwner || !activeStore.id) return;
+    if (!activeStore.id || activeStore.id === 'store_aurora_01') return;
+
+    const isOwner = Boolean(
+      (currentUser && activeStore.ownerId === currentUser.id) ||
+      activeStore.ownerId === 'merchant_user' ||
+      activeStore.ownerId === 'guest'
+    );
+    if (!isOwner) return;
 
     const unsubscribeOrders = StoreManager.subscribeToStoreOrders(
       activeStore.id,
       (liveOrders) => {
-        setOrders(liveOrders);
+        if (liveOrders && liveOrders.length > 0) {
+          setOrders(liveOrders);
+          StoreStorage.saveOrders(liveOrders);
+        }
       }
     );
 
     return () => {
       if (unsubscribeOrders) unsubscribeOrders();
     };
-  }, [isStoreOwner, activeStore.id]);
+  }, [currentUser, isStoreOwner, activeStore.id, activeStore.ownerId]);
 
   // Inject custom typography and brand colors whenever settings.brandTheme changes
   useEffect(() => {
@@ -237,15 +247,20 @@ export default function App() {
     StoreManager.setActiveStoreId(storeId);
     const store = StoreManager.getStoreById(storeId);
     if (store) {
-      setActiveStore(store);
+      const currentOrders = StoreStorage.getOrders();
+      const resolvedOrders = store.orders?.length ? store.orders : currentOrders;
+      setActiveStore({
+        ...store,
+        orders: resolvedOrders,
+      });
       setSettings(store.settings);
       setProducts(store.products || []);
-      setOrders(store.orders || []);
+      setOrders(resolvedOrders);
       setPolicies(store.policies || []);
       StoreStorage.hydrateStore({
         settings: store.settings,
         products: store.products || [],
-        orders: store.orders || [],
+        orders: resolvedOrders,
         policies: store.policies || [],
       });
     }
@@ -296,7 +311,16 @@ export default function App() {
           StoreManager.fetchStoreFromFirestore(storeSlug)
             .then((freshStore) => {
               if (freshStore) {
-                handleSelectStore(freshStore.id);
+                setActiveStore((prev) => ({
+                  ...freshStore,
+                  orders: prev.orders?.length ? prev.orders : freshStore.orders || [],
+                }));
+                setSettings(freshStore.settings);
+                setProducts(freshStore.products || []);
+                setPolicies(freshStore.policies || []);
+                if (freshStore.orders && freshStore.orders.length > 0) {
+                  setOrders(freshStore.orders);
+                }
                 if (productId) {
                   const freshP = (freshStore.products || []).find((item) => item.id === productId);
                   if (freshP) setSelectedProduct(freshP);

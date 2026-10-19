@@ -462,10 +462,29 @@ export class StoreStorage {
     orders: Order[];
     policies: StorePolicy[];
   }): void {
-    safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(data.settings));
-    safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(data.products));
-    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify((data.orders || []).slice(0, 150)));
-    safeSetLocalStorage(STORAGE_KEYS.POLICIES, JSON.stringify(data.policies));
+    if (data.settings) {
+      safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(data.settings));
+    }
+    if (Array.isArray(data.products) && data.products.length > 0) {
+      safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(data.products));
+    }
+
+    // Merge existing and incoming orders to guarantee orders never disappear on reload
+    const currentOrders = this.getOrders();
+    const incomingOrders = Array.isArray(data.orders) ? data.orders : [];
+    const ordersMap = new Map<string, Order>();
+    incomingOrders.forEach((o) => {
+      if (o && o.id) ordersMap.set(o.id, o);
+    });
+    currentOrders.forEach((o) => {
+      if (o && o.id && !ordersMap.has(o.id)) ordersMap.set(o.id, o);
+    });
+    const mergedOrders = Array.from(ordersMap.values()).slice(0, 150);
+    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(mergedOrders));
+
+    if (Array.isArray(data.policies) && data.policies.length > 0) {
+      safeSetLocalStorage(STORAGE_KEYS.POLICIES, JSON.stringify(data.policies));
+    }
     this.dispatchUpdate();
   }
 

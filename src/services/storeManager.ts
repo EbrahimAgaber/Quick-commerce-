@@ -337,10 +337,34 @@ export class StoreManager {
             }
           }
 
+          // Preserve cached local orders when hydrating from public catalog document
+          const existingStore = this.getStoreById(storeIdToFetch) || this.getStoreBySlug(cleanQuery);
+          const cachedOrders = existingStore?.orders?.length ? existingStore.orders : StoreStorage.getOrders();
+
+          // If the authenticated merchant owns this store, fetch latest live orders from Firestore orders subcollection
+          let liveOrders: Order[] = cachedOrders;
+          if (auth.currentUser && (raw.ownerId === auth.currentUser.uid || raw.ownerId === 'merchant_user')) {
+            try {
+              const cloudOrders = await this.fetchStoreOrdersFromFirestore(storeIdToFetch);
+              if (cloudOrders.length > 0) {
+                const ordersMap = new Map<string, Order>();
+                cloudOrders.forEach((o) => {
+                  if (o?.id) ordersMap.set(o.id, o);
+                });
+                cachedOrders.forEach((o) => {
+                  if (o?.id && !ordersMap.has(o.id)) ordersMap.set(o.id, o);
+                });
+                liveOrders = Array.from(ordersMap.values()).slice(0, 150);
+              }
+            } catch (ordErr) {
+              console.warn('Orders subcollection fetch notice in fetchStoreFromFirestore:', ordErr);
+            }
+          }
+
           const storeData: StoreInstance = {
             ...(raw as StoreInstance),
             products: productsList,
-            orders: Array.isArray(raw.orders) ? raw.orders : [],
+            orders: liveOrders,
           };
           this.cacheStoreLocally(storeData);
           return storeData;

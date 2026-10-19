@@ -53,15 +53,15 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
   const formMountedRef = useRef<boolean>(false);
 
   const amountInHalalas = Math.round((order.grandTotal || 0) * 100);
+  const rawKey = settings.moyasarPublishableKey?.trim() || (import.meta as any).env?.VITE_MOYASAR_PUBLISHABLE_KEY || '';
   const publishableKey =
-    settings.moyasarPublishableKey?.trim() ||
-    (import.meta as any).env?.VITE_MOYASAR_PUBLISHABLE_KEY ||
-    DEFAULT_SANDBOX_KEY;
+    rawKey && /^pk_(test|live)_[a-zA-Z0-9]+$/.test(rawKey) && !rawKey.includes('xxx')
+      ? rawKey
+      : DEFAULT_SANDBOX_KEY;
 
   const isTestMode =
-    settings.moyasarTestMode ||
-    publishableKey.startsWith('pk_test_') ||
-    !settings.moyasarPublishableKey;
+    settings.moyasarTestMode !== false ||
+    publishableKey.startsWith('pk_test_');
 
   // Load Moyasar CSS & JS SDK dynamically
   useEffect(() => {
@@ -132,20 +132,43 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
       const targetSlug = storeSlug || '';
       const callbackUrl = `${window.location.origin}/?store=${encodeURIComponent(targetSlug)}&order=${encodeURIComponent(order.id)}&pay_callback=1`;
 
-      window.Moyasar.init({
+      // Moyasar SDK requires Apple Pay label to strictly match ASCII characters only (/^[\x20-\x7E]+$/)
+      const sanitizedStoreName = (settings.storeName || '')
+        .replace(/[^\x20-\x7E]/g, '')
+        .trim();
+      const sanitizedSlug = (storeSlug || '').replace(/[^\x20-\x7E]/g, '').trim();
+      const asciiLabel = sanitizedStoreName || sanitizedSlug || 'QuickStore';
+
+      // Detect native Apple Pay support in the current browser/device session
+      const supportsApplePay =
+        typeof window !== 'undefined' &&
+        typeof (window as any).ApplePaySession === 'function' &&
+        (window as any).ApplePaySession.canMakePayments &&
+        (window as any).ApplePaySession.canMakePayments();
+
+      const activeMethods = supportsApplePay ? ['creditcard', 'applepay'] : ['creditcard'];
+
+      const config: any = {
         element: '#mysr-form-container',
         amount: amountInHalalas,
         currency: 'SAR',
-        description: `طلب #${order.id} - ${settings.storeName}`,
+        description: `Order #${order.id} - ${asciiLabel}`,
         publishable_api_key: publishableKey,
         callback_url: callbackUrl,
-        methods: ['creditcard', 'applepay'],
+        methods: activeMethods,
         supported_networks: ['mada', 'visa', 'mastercard'],
-        apple_pay: {
+      };
+
+      if (supportsApplePay) {
+        config.apple_pay = {
           country: 'SA',
-          label: settings.storeName || 'StoreLink',
+          label: asciiLabel,
           validate_merchant_url: 'https://api.moyasar.com/v1/applepay/initiate',
-        },
+        };
+      }
+
+      window.Moyasar.init({
+        ...config,
         on_completed: async (payment: any) => {
           await handlePaymentCompletion(payment);
         },
