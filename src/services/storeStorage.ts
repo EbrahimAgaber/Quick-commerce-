@@ -49,6 +49,12 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   enableOnlinePayments: true,
   moyasarPublishableKey: '',
   moyasarTestMode: true,
+  enableAudioNotifications: true,
+  enableDesktopNotifications: true,
+  enableEmailNotifications: true,
+  notificationWebhookUrl: '',
+  telegramBotToken: '',
+  telegramChatId: '',
 };
 
 export const DEFAULT_PRODUCTS: Product[] = [

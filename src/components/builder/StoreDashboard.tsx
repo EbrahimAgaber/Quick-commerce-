@@ -7,7 +7,11 @@ import { CloudSyncStatus } from '../../services/storeManager';
 import { AuthService } from '../../services/authService';
 import { InvoiceModal } from '../storefront/InvoiceModal';
 import { DriverSettlementModal } from '../driver/DriverSettlementModal';
-import { playOrderNotificationSound } from '../../services/notificationService';
+import { 
+  playOrderNotificationSound,
+  NotificationHub,
+  requestDesktopNotificationPermission
+} from '../../services/notificationService';
 import { 
   Copy, 
   Check, 
@@ -44,7 +48,11 @@ import {
   MapPin,
   CreditCard,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  Volume2,
+  Send,
+  CheckCircle2,
+  Radio
 } from 'lucide-react';
 
 interface StoreDashboardProps {
@@ -126,6 +134,89 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     trackingUrl: '',
   });
   const [newOrderBanner, setNewOrderBanner] = useState<string | null>(null);
+
+  // Notification Hub State & Testing Handlers
+  const [desktopPermission, setDesktopPermission] = useState<NotificationPermission>(() => {
+    return typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default';
+  });
+  const [testTelegramLoading, setTestTelegramLoading] = useState(false);
+  const [testTelegramStatus, setTestTelegramStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [testWebhookLoading, setTestWebhookLoading] = useState(false);
+  const [testWebhookStatus, setTestWebhookStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [testSoundPlayed, setTestSoundPlayed] = useState(false);
+
+  const handleRequestDesktopPermission = async () => {
+    const granted = await requestDesktopNotificationPermission();
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setDesktopPermission(Notification.permission);
+    }
+    if (granted) {
+      setEditableSettings((prev) => ({ ...prev, enableDesktopNotifications: true }));
+    }
+  };
+
+  const handleTestSound = () => {
+    playOrderNotificationSound();
+    setTestSoundPlayed(true);
+    setTimeout(() => setTestSoundPlayed(false), 2000);
+  };
+
+  const handleTestTelegram = async () => {
+    if (!editableSettings.telegramBotToken || !editableSettings.telegramChatId) {
+      setTestTelegramStatus({
+        type: 'error',
+        message: 'يرجى إدخال Bot Token و Chat ID أولاً لتجربة الاتصال.',
+      });
+      return;
+    }
+    setTestTelegramLoading(true);
+    setTestTelegramStatus(null);
+    const res = await NotificationHub.sendTestTelegram(
+      editableSettings.telegramBotToken,
+      editableSettings.telegramChatId,
+      editableSettings
+    );
+    setTestTelegramLoading(false);
+    if (res.success) {
+      setTestTelegramStatus({
+        type: 'success',
+        message: 'تم إرسال إشعار تجريبي ناجح إلى محادثتك في تليجرام! ⚡',
+      });
+    } else {
+      setTestTelegramStatus({
+        type: 'error',
+        message: res.error || 'فشل إرسال الإشعار. تأكد من صحة التوكن ورقم المحادثة.',
+      });
+    }
+  };
+
+  const handleTestWebhook = async () => {
+    if (!editableSettings.notificationWebhookUrl) {
+      setTestWebhookStatus({
+        type: 'error',
+        message: 'يرجى إدخال رابط Webhook أولاً لتجربة الاتصال.',
+      });
+      return;
+    }
+    setTestWebhookLoading(true);
+    setTestWebhookStatus(null);
+    const res = await NotificationHub.sendTestWebhook(
+      editableSettings.notificationWebhookUrl,
+      editableSettings
+    );
+    setTestWebhookLoading(false);
+    if (res.success) {
+      setTestWebhookStatus({
+        type: 'success',
+        message: 'تم استقبال استجابة ناجحة من رابط الويب هوك (HTTP 200 OK)! ⚡',
+      });
+    } else {
+      setTestWebhookStatus({
+        type: 'error',
+        message: res.error || 'تعذر الاتصال بالرابط المحدد.',
+      });
+    }
+  };
 
   // Sync courierForm when an order is selected
   useEffect(() => {
@@ -1855,6 +1946,287 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                         يمكنك الحصول على مفتاحك العام من لوحة تحكم مويسر الرسمية (Settings &gt; API Keys). اتركه فارغاً لاستخدام المفتاح التجريبي الافتراضي.
                       </p>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Real-time Order Notifications Hub */}
+              <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-5 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-100 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                      <span className="p-1.5 rounded-xl bg-amber-500/10 text-amber-600">
+                        <Bell className="w-4 h-4" />
+                      </span>
+                      <span>مركز التنبيهات وإشعارات الطلبات الفورية (Order Notification Hub)</span>
+                    </h3>
+                    <p className="text-xs text-stone-500 mt-1">
+                      استقبل تنبيهات مباشرة ولحظية لمتجرك فور إتمام العميل للطلب — حتى لو أغلق المتصفح أو لم يرسل رسالة واتساب
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold shrink-0 self-start sm:self-auto">
+                    <Radio className="w-3 h-3 text-emerald-500 animate-pulse" />
+                    <span>تنبيه آلي مباشر</span>
+                  </div>
+                </div>
+
+                <div className="space-y-4 text-xs">
+                  {/* Channel 1: Audio Chime */}
+                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-xl bg-blue-50 text-blue-600 shrink-0 mt-0.5">
+                        <Volume2 className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="font-bold text-stone-900 block text-xs">
+                          رنين التنبيه الصوتي الذكي (Synthesized Audio Chime)
+                        </span>
+                        <span className="text-stone-500 text-[11px] block mt-0.5">
+                          تشغيل جرس موسيقي نقي وفوري في جهازك عند تسجيل أي طلب جديد بدون الحاجة لملفات خارجية
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={handleTestSound}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
+                          testSoundPlayed
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-white border border-stone-200 text-stone-700 hover:bg-stone-100'
+                        }`}
+                      >
+                        <Volume2 className="w-3.5 h-3.5" />
+                        <span>{testSoundPlayed ? 'تم الرنين ✓' : 'تجربة النغمة'}</span>
+                      </button>
+                      <input
+                        type="checkbox"
+                        checked={editableSettings.enableAudioNotifications !== false}
+                        onChange={(e) =>
+                          setEditableSettings({
+                            ...editableSettings,
+                            enableAudioNotifications: e.target.checked,
+                          })
+                        }
+                        className="w-5 h-5 rounded text-blue-600 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Channel 2: Desktop & Mobile Push Notifications */}
+                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-xl bg-purple-50 text-purple-600 shrink-0 mt-0.5">
+                        <Bell className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-stone-900 text-xs">
+                            إشعارات سطح المكتب والنظام (Browser / Desktop Notifications)
+                          </span>
+                          {desktopPermission === 'granted' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                              مسموح به ✓
+                            </span>
+                          ) : desktopPermission === 'denied' ? (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
+                              محظور من المتصفح
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+                              يحتاج إذن
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-stone-500 text-[11px] block mt-0.5">
+                          إظهار إشعار فوري على شاشة جهازك المحمول أو الكمبيوتر يتضمن اسم العميل وقيمة الطلب
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      {desktopPermission !== 'granted' && (
+                        <button
+                          type="button"
+                          onClick={handleRequestDesktopPermission}
+                          className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs transition-all cursor-pointer"
+                        >
+                          تفعيل إذن المتصفح
+                        </button>
+                      )}
+                      <input
+                        type="checkbox"
+                        checked={editableSettings.enableDesktopNotifications !== false}
+                        onChange={(e) =>
+                          setEditableSettings({
+                            ...editableSettings,
+                            enableDesktopNotifications: e.target.checked,
+                          })
+                        }
+                        className="w-5 h-5 rounded text-purple-600 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Channel 3: Telegram Bot Instant Alerts */}
+                  <div className="p-4 rounded-2xl bg-sky-50/50 border border-sky-100 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-start gap-2.5">
+                        <div className="p-1.5 rounded-xl bg-sky-500 text-white shrink-0 mt-0.5">
+                          <Send className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-stone-900 block text-xs">
+                            تنبيهات تليجرام الفورية (Telegram Bot Integration)
+                          </span>
+                          <span className="text-stone-500 text-[11px] block">
+                            تصلك تفاصيل كل فاتورة وعنوان العميل والمنتجات برسالة تليجرام أنيقة لحظياً
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={testTelegramLoading}
+                        onClick={handleTestTelegram}
+                        className="self-end sm:self-auto px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                      >
+                        {testTelegramLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5" />
+                        )}
+                        <span>{testTelegramLoading ? 'جارِ الإرسال...' : 'إرسال إشعار تجريبي'}</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div>
+                        <label className="block font-bold text-stone-700 mb-1">
+                          توكن البوت (Telegram Bot Token)
+                        </label>
+                        <input
+                          type="text"
+                          value={editableSettings.telegramBotToken || ''}
+                          onChange={(e) =>
+                            setEditableSettings({
+                              ...editableSettings,
+                              telegramBotToken: e.target.value.trim(),
+                            })
+                          }
+                          placeholder="مثال: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+                          className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl font-mono text-xs"
+                          dir="ltr"
+                        />
+                        <span className="text-[10px] text-stone-400 mt-1 block">
+                          أنشئ بوتاً في دقيقة عبر مراسلة @BotFather على تليجرام
+                        </span>
+                      </div>
+                      <div>
+                        <label className="block font-bold text-stone-700 mb-1">
+                          معرّف المحادثة (Telegram Chat ID)
+                        </label>
+                        <input
+                          type="text"
+                          value={editableSettings.telegramChatId || ''}
+                          onChange={(e) =>
+                            setEditableSettings({
+                              ...editableSettings,
+                              telegramChatId: e.target.value.trim(),
+                            })
+                          }
+                          placeholder="مثال: 987654321 أو -100123456789"
+                          className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl font-mono text-xs"
+                          dir="ltr"
+                        />
+                        <span className="text-[10px] text-stone-400 mt-1 block">
+                          احصل على رقمك أو رقم قروب المتجر من بوت @userinfobot
+                        </span>
+                      </div>
+                    </div>
+
+                    {testTelegramStatus && (
+                      <div
+                        className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${
+                          testTelegramStatus.type === 'success'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : 'bg-rose-50 text-rose-800 border border-rose-200'
+                        }`}
+                      >
+                        {testTelegramStatus.type === 'success' ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                        )}
+                        <span>{testTelegramStatus.message}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Channel 4: Automated Webhook Dispatch (Discord, Make, Zapier, Google Sheets) */}
+                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-start gap-2.5">
+                        <div className="p-1.5 rounded-xl bg-stone-700 text-white shrink-0 mt-0.5">
+                          <Link2 className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-stone-900 block text-xs">
+                            رابط الويب هوك التلقائي (Webhook / Discord / Make / Zapier)
+                          </span>
+                          <span className="text-stone-500 text-[11px] block">
+                            إرسال حمولة JSON كاملة عن كل طلب جديد لسيرفرك الخاص أو قناة Discord أو شيت إكسل
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={testWebhookLoading}
+                        onClick={handleTestWebhook}
+                        className="self-end sm:self-auto px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-900 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                      >
+                        {testWebhookLoading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5" />
+                        )}
+                        <span>{testWebhookLoading ? 'جارِ الاختبار...' : 'اختبار الرابط'}</span>
+                      </button>
+                    </div>
+
+                    <div>
+                      <input
+                        type="url"
+                        value={editableSettings.notificationWebhookUrl || ''}
+                        onChange={(e) =>
+                          setEditableSettings({
+                            ...editableSettings,
+                            notificationWebhookUrl: e.target.value.trim(),
+                          })
+                        }
+                        placeholder="https://discord.com/api/webhooks/... أو https://hook.eu1.make.com/..."
+                        className="w-full px-3 py-2.5 bg-white border border-stone-200 rounded-xl font-mono text-xs"
+                        dir="ltr"
+                      />
+                      <span className="text-[10px] text-stone-400 mt-1 block">
+                        يدعم تلقائياً بطاقات ديسكورد الغنية (Discord Rich Embeds) ومخططات JSON القياسية
+                      </span>
+                    </div>
+
+                    {testWebhookStatus && (
+                      <div
+                        className={`p-2.5 rounded-xl text-xs flex items-center gap-2 ${
+                          testWebhookStatus.type === 'success'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : 'bg-rose-50 text-rose-800 border border-rose-200'
+                        }`}
+                      >
+                        {testWebhookStatus.type === 'success' ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                        )}
+                        <span>{testWebhookStatus.message}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

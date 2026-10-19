@@ -10,6 +10,7 @@ import { db, auth, isFirebaseConfigured } from './firebase';
 import { generateCleanStoreSlug } from '../utils/urlRouter';
 import { normalizeArabicDigits } from '../utils/digits';
 import { generateOrderId } from '../utils/whatsappInvoice';
+import { NotificationHub } from './notificationService';
 import { 
   doc, 
   getDoc, 
@@ -667,6 +668,13 @@ export class StoreManager {
         return false;
       }
     }
+
+    // Notify merchant via NotificationHub (with deduplication guard)
+    const activeSettings = store?.settings || StoreStorage.getSettings();
+    if (activeSettings) {
+      NotificationHub.dispatchOrderPlaced(order, activeSettings).catch(() => {});
+    }
+
     return true;
   }
 
@@ -973,6 +981,13 @@ export class StoreManager {
       // Persist order in store, decrement inventory, and notify listeners
       const targetStoreId = store?.id || params.storeId || 'store_aurora_01';
       await this.submitOrderToStore(targetStoreId, verifiedOrder);
+
+      // Instantly alert merchant via all active notification channels (Audio chime, OS push, Telegram, Webhook)
+      try {
+        await NotificationHub.dispatchOrderPlaced(verifiedOrder, storeSettings);
+      } catch (notifErr) {
+        console.warn('Order notification dispatch error:', notifErr);
+      }
 
       return {
         success: true,

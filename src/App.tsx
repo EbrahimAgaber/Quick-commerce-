@@ -29,6 +29,7 @@ import { CartDrawer } from './components/storefront/CartDrawer';
 import { OrderSuccessModal } from './components/storefront/OrderSuccessModal';
 import { MerchantAuthGate } from './components/auth/MerchantAuthGate';
 import { Footer } from './components/layout/Footer';
+import { OrderNotificationToast } from './components/common/OrderNotificationToast';
 import { Plus, Sparkles, RotateCcw, Eye, EyeOff, Package, ShoppingBag, Store, Loader2 } from 'lucide-react';
 
 // Code-Split Heavy Merchant & Secondary Modals via React.lazy
@@ -1173,6 +1174,15 @@ export default function App() {
           onTrackOrder={handleOpenTrackerWithId}
         />
       )}
+
+      {/* 10. Floating Multi-Channel Order Notification Toast */}
+      <OrderNotificationToast
+        onSelectOrder={(_orderId) => {
+          if (!isShopperPreviewOnly) {
+            setViewMode('dashboard');
+          }
+        }}
+      />
     </div>
   );
 }

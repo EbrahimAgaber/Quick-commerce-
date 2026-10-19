@@ -88,6 +88,12 @@ export interface StoreSettings {
   moyasarPublishableKey?: string;
   moyasarSecretKey?: string;
   moyasarTestMode?: boolean;
+  notificationWebhookUrl?: string;
+  enableAudioNotifications?: boolean;
+  enableDesktopNotifications?: boolean;
+  enableEmailNotifications?: boolean;
+  telegramBotToken?: string;
+  telegramChatId?: string;
 }
 
 export interface Product {

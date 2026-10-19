@@ -85,8 +85,12 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
           </h3>
 
           <p className="text-xs text-stone-500 mt-1">
-            تم تسجيل طلبك تلقائياً في سجلات المتجر وإعداد تفاصيل الفاتورة.
+            تم إشعار المتجر تلقائياً بطلبك وتسجيله بنجاح وجارٍ مراجعته وتجهيزه.
           </p>
+          <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+            <span>تم إشعار صاحب المتجر مباشرة بدون الحاجة لإرسال أي رسالة</span>
+          </div>
         </div>
 
         {/* Order Reference Box */}
