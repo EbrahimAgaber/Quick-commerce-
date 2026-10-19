@@ -30,6 +30,9 @@ export interface PromoCode {
   value: number; // e.g. 20 (%) or 50 (currency)
   minOrderAmount?: number;
   active: boolean;
+  expiryDate?: string;
+  maxUses?: number;
+  usageCount?: number;
 }
 
 export interface StoreSettings {
@@ -48,6 +51,7 @@ export interface StoreSettings {
   websiteUrl?: string;
   freeShippingThreshold: number;
   standardShippingRate: number;
+  shippingFee?: number;
   paymentMethods: string[];
   bankDetails: {
     bankName: string;

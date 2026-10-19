@@ -53,7 +53,7 @@ export function generateCleanStoreSlug(input: string, fallbackPrefix = 'shop'): 
   let processed = input.trim().toLowerCase();
   const words = processed.split(/\s+/);
   const translatedWords = words.map((w) => {
-    const stripped = w.replace(/[^\u0600-\u06FFa-z0-9]/g, '');
+    const stripped = w.replace(/[^\u0600-\u06FFa-z0-9-]/g, '');
     if (COMMON_ARABIC_WORDS[stripped]) {
       return COMMON_ARABIC_WORDS[stripped];
     }
