@@ -96,6 +96,25 @@ export default function App() {
   // Strict ownership check: merchant controls only appear if the logged-in user owns the active store
   const isStoreOwner = Boolean(currentUser && activeStore.ownerId === currentUser.id);
 
+  // Emergency reset detection & Initial StoreStorage hydration
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window.location.search.includes('reset=true') || window.location.search.includes('repair=true'))) {
+      StoreManager.resetCorruptedStorage();
+      window.history.replaceState({}, '', window.location.pathname);
+      window.location.reload();
+      return;
+    }
+
+    if (activeStore && activeStore.settings) {
+      StoreStorage.hydrateStore({
+        settings: activeStore.settings,
+        products: activeStore.products || [],
+        orders: activeStore.orders || [],
+        policies: activeStore.policies || [],
+      });
+    }
+  }, []);
+
   // Listen to local storage & cross-tab sync events
   useEffect(() => {
     const handleDbSync = () => {
@@ -113,11 +132,13 @@ export default function App() {
       const stores = StoreManager.getAllStores();
       setAllStores(stores);
       const curr = StoreManager.getActiveStore();
-      setActiveStore(curr);
-      setSettings(curr.settings);
-      setProducts(curr.products || []);
-      setOrders(curr.orders || []);
-      setPolicies(curr.policies || []);
+      if (curr) {
+        setActiveStore(curr);
+        setSettings(curr.settings || StoreStorage.getSettings());
+        setProducts(curr.products || []);
+        setOrders(curr.orders || []);
+        setPolicies(curr.policies || []);
+      }
     };
 
     const unsubscribeFb = onFirebaseAuthStateChanged((fbUser) => {
@@ -323,7 +344,12 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem(`storelink_cart_${activeStore.id}`);
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item) => item && item.product && typeof item.product === 'object' && item.product.id);
+      }
+      return [];
     } catch {
       return [];
     }
@@ -335,7 +361,16 @@ export default function App() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(`storelink_cart_${activeStore.id}`);
-      setCart(saved ? JSON.parse(saved) : []);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setCart(parsed.filter((item) => item && item.product && typeof item.product === 'object' && item.product.id));
+        } else {
+          setCart([]);
+        }
+      } else {
+        setCart([]);
+      }
       setAppliedPromo(null);
     } catch {
       setCart([]);
@@ -384,13 +419,18 @@ export default function App() {
 
   // Cart Calculations
   const cartCount = useMemo(() => {
-    return cart.reduce((acc, item) => acc + item.quantity, 0);
+    return (cart || []).reduce((acc, item) => acc + (Number(item?.quantity) || 0), 0);
   }, [cart]);
 
   const cartTotal = useMemo(() => {
-    return cart.reduce((acc, item) => {
-      const price = item.product.salePrice ?? item.product.price;
-      return acc + price * item.quantity;
+    return (cart || []).reduce((acc, item) => {
+      if (!item?.product) return acc;
+      const hasSale =
+        typeof item.product.salePrice === 'number' &&
+        item.product.salePrice > 0 &&
+        item.product.salePrice < item.product.price;
+      const price = (hasSale && typeof item.product.salePrice === 'number') ? item.product.salePrice : (item.product.price || 0);
+      return acc + price * (Number(item.quantity) || 1);
     }, 0);
   }, [cart]);
 

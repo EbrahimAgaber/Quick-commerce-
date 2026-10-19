@@ -1,4 +1,4 @@
-import { StoreInstance, Product, Order } from '../types/store';
+import { StoreInstance, Product, Order, StoreSettings } from '../types/store';
 import { 
   StoreStorage,
   DEFAULT_SETTINGS, 
@@ -55,6 +55,72 @@ let memoryStoresCache: StoreInstance[] | null = null;
 const inFlightStoreFetches = new Map<string, Promise<StoreInstance | null>>();
 const syncDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/**
+ * Validates and deeply sanitizes a raw store object from localStorage or Firestore,
+ * ensuring missing or corrupted properties are safely replaced with robust defaults.
+ */
+export function sanitizeStoreInstance(raw: any): StoreInstance | null {
+  if (!raw || typeof raw !== 'object' || !raw.id || typeof raw.id !== 'string') {
+    return null;
+  }
+
+  const rawSettings = (raw.settings && typeof raw.settings === 'object') ? raw.settings : {};
+  const rawTheme = (rawSettings.brandTheme && typeof rawSettings.brandTheme === 'object') ? rawSettings.brandTheme : {};
+  const rawBank = (rawSettings.bankDetails && typeof rawSettings.bankDetails === 'object') ? rawSettings.bankDetails : {};
+
+  const settings: StoreSettings = {
+    ...DEFAULT_SETTINGS,
+    ...rawSettings,
+    storeName: typeof rawSettings.storeName === 'string' && rawSettings.storeName.trim() ? rawSettings.storeName.trim() : DEFAULT_SETTINGS.storeName,
+    currency: typeof rawSettings.currency === 'string' && rawSettings.currency.trim() ? rawSettings.currency.trim() : 'ر.س',
+    brandTheme: {
+      ...DEFAULT_SETTINGS.brandTheme,
+      ...rawTheme,
+      primaryColor: rawTheme.primaryColor || DEFAULT_SETTINGS.brandTheme.primaryColor,
+      accentColor: rawTheme.accentColor || DEFAULT_SETTINGS.brandTheme.accentColor,
+      backgroundColor: rawTheme.backgroundColor || DEFAULT_SETTINGS.brandTheme.backgroundColor,
+      neutralColor: rawTheme.neutralColor || DEFAULT_SETTINGS.brandTheme.neutralColor,
+      textColor: rawTheme.textColor || rawTheme.primaryColor || DEFAULT_SETTINGS.brandTheme.textColor,
+      fontFamily: rawTheme.fontFamily || DEFAULT_SETTINGS.brandTheme.fontFamily,
+    },
+    bankDetails: {
+      ...DEFAULT_SETTINGS.bankDetails,
+      ...rawBank,
+    },
+    paymentMethods: Array.isArray(rawSettings.paymentMethods) && rawSettings.paymentMethods.length > 0
+      ? rawSettings.paymentMethods
+      : DEFAULT_SETTINGS.paymentMethods,
+  };
+
+  const isDemo = raw.id === 'store_aurora_01';
+  let products = Array.isArray(raw.products)
+    ? raw.products.filter((p: any) => p && typeof p === 'object' && p.id)
+    : [];
+  if (isDemo && products.length === 0) {
+    products = DEFAULT_PRODUCTS;
+  }
+
+  const orders = Array.isArray(raw.orders)
+    ? raw.orders.filter((o: any) => o && typeof o === 'object' && o.id)
+    : [];
+
+  const policies = Array.isArray(raw.policies) && raw.policies.length > 0
+    ? raw.policies.filter((pol: any) => pol && typeof pol === 'object' && pol.id)
+    : DEFAULT_POLICIES;
+
+  return {
+    ...raw,
+    id: raw.id,
+    slug: raw.slug || (isDemo ? 'aurora' : 'store'),
+    ownerId: raw.ownerId || (isDemo ? 'system_demo' : 'merchant_user'),
+    createdAt: raw.createdAt || new Date().toISOString(),
+    settings,
+    products,
+    orders,
+    policies: policies.length > 0 ? policies : DEFAULT_POLICIES,
+  };
+}
+
 export class StoreManager {
   static getAllStores(): StoreInstance[] {
     if (memoryStoresCache && memoryStoresCache.length > 0) {
@@ -66,18 +132,54 @@ export class StoreManager {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          memoryStoresCache = parsed;
-          return parsed;
+          const sanitized = parsed
+            .map(sanitizeStoreInstance)
+            .filter((s): s is StoreInstance => s !== null);
+
+          if (sanitized.length > 0) {
+            // Ensure demo store is always present in list
+            if (!sanitized.some((s) => s.id === 'store_aurora_01')) {
+              sanitized.push(INITIAL_AURORA_STORE);
+            }
+            memoryStoresCache = sanitized;
+            return sanitized;
+          }
         }
       }
     } catch (e) {
-      console.warn('Error reading stores list from localStorage', e);
+      console.warn('Error reading stores list from localStorage, recovering defaults:', e);
     }
 
     const initialList = [INITIAL_AURORA_STORE];
     memoryStoresCache = initialList;
     this.saveAllStores(initialList);
     return initialList;
+  }
+
+  /**
+   * Emergency recovery: clears corrupt local storage and restores fresh baseline state
+   */
+  static resetCorruptedStorage(): void {
+    memoryStoresCache = null;
+    try {
+      localStorage.removeItem(STORES_STORAGE_KEY);
+      localStorage.removeItem(ACTIVE_STORE_KEY);
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('storelink_cart_') || k.startsWith('storelink_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch (e) {
+      console.warn('Notice during storage reset:', e);
+    }
+
+    const freshList = [INITIAL_AURORA_STORE];
+    memoryStoresCache = freshList;
+    this.saveAllStores(freshList);
+    this.setActiveStoreId(INITIAL_AURORA_STORE.id);
   }
 
   /**

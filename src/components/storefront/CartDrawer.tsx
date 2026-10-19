@@ -46,13 +46,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     textColor: '#0B253F',
   };
 
-  const subtotal = items.reduce((sum, item) => {
+  const validItems = (items || []).filter((item) => item && item.product && typeof item.product === 'object' && item.product.id);
+
+  const subtotal = validItems.reduce((sum, item) => {
     const hasSale =
       typeof item.product.salePrice === 'number' &&
       item.product.salePrice > 0 &&
       item.product.salePrice < item.product.price;
-    const price = hasSale ? item.product.salePrice! : item.product.price;
-    return sum + price * item.quantity;
+    const price = hasSale ? item.product.salePrice! : (item.product.price || 0);
+    return sum + price * (item.quantity || 1);
   }, 0);
 
   // Calculate discount from appliedPromo

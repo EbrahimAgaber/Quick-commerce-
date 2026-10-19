@@ -312,10 +312,12 @@ export function safeSetLocalStorage(key: string, value: string): void {
       if (key !== STORAGE_KEYS.ORDERS) {
         const rawOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
         if (rawOrders) {
-          const parsed = JSON.parse(rawOrders);
-          if (Array.isArray(parsed) && parsed.length > 30) {
-            localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(parsed.slice(0, 30)));
-          }
+          try {
+            const parsed = JSON.parse(rawOrders);
+            if (Array.isArray(parsed) && parsed.length > 30) {
+              localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(parsed.slice(0, 30)));
+            }
+          } catch {}
         }
       }
       localStorage.setItem(key, value);
@@ -335,7 +337,17 @@ export class StoreStorage {
           return {
             ...DEFAULT_SETTINGS,
             ...parsed,
-            brandTheme: parsed.brandTheme || DEFAULT_SETTINGS.brandTheme,
+            brandTheme: {
+              ...DEFAULT_SETTINGS.brandTheme,
+              ...(parsed.brandTheme && typeof parsed.brandTheme === 'object' ? parsed.brandTheme : {}),
+            },
+            bankDetails: {
+              ...DEFAULT_SETTINGS.bankDetails,
+              ...(parsed.bankDetails && typeof parsed.bankDetails === 'object' ? parsed.bankDetails : {}),
+            },
+            paymentMethods: Array.isArray(parsed.paymentMethods) && parsed.paymentMethods.length > 0
+              ? parsed.paymentMethods
+              : DEFAULT_SETTINGS.paymentMethods,
           };
         }
       }
@@ -356,7 +368,7 @@ export class StoreStorage {
       if (data !== null) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed)) {
-          return parsed;
+          return parsed.filter((p) => p && typeof p === 'object' && p.id);
         }
       }
     } catch (e) {
@@ -373,7 +385,12 @@ export class StoreStorage {
   static getOrders(): Order[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.ORDERS);
-      if (data) return JSON.parse(data);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((o) => o && typeof o === 'object' && o.id);
+        }
+      }
     } catch (e) {
       console.error('Error reading orders from localStorage', e);
     }
@@ -381,7 +398,7 @@ export class StoreStorage {
   }
 
   static saveOrders(orders: Order[]): void {
-    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(orders.slice(0, 150)));
+    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify((orders || []).slice(0, 150)));
     this.dispatchUpdate();
   }
 
@@ -412,7 +429,8 @@ export class StoreStorage {
       if (data) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const valid = parsed.filter((p) => p && typeof p === 'object' && p.id);
+          if (valid.length > 0) return valid;
         }
       }
     } catch (e) {

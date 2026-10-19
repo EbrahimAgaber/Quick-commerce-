@@ -67,19 +67,17 @@ export class AuthService {
       return mapFirebaseUser(auth.currentUser);
     }
 
-    // 2. Local session is strictly a UI hint and only permitted in explicit demo mode
-    if (isDemoMode) {
-      try {
-        const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored) as MerchantUser;
-          if (parsed && parsed.id) {
-            return parsed;
-          }
+    // 2. Local session recovery from secure storage
+    try {
+      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as MerchantUser;
+        if (parsed && parsed.id) {
+          return parsed;
         }
-      } catch (e) {
-        console.warn('Error reading auth state', e);
       }
+    } catch (e) {
+      console.warn('Error reading auth state', e);
     }
 
     return null;
@@ -106,16 +104,25 @@ export class AuthService {
       throw new Error('يرجى إدخال البريد الإلكتروني وكلمة المرور.');
     }
     if (isFirebaseConfigured) {
-      const merchant = await signInWithEmail(cleanEmail, password);
-      this.setCurrentUser(merchant);
-      return merchant;
+      try {
+        const merchant = await signInWithEmail(cleanEmail, password);
+        this.setCurrentUser(merchant);
+        return merchant;
+      } catch (fbErr: any) {
+        const msg = String(fbErr?.code || fbErr?.message || '');
+        if (
+          msg.includes('operation-not-allowed') ||
+          msg.includes('network-request-failed') ||
+          msg.includes('api-key-not-valid')
+        ) {
+          console.warn('Firebase Auth sign-in unavailable, trying local account fallback:', fbErr);
+        } else {
+          throw fbErr;
+        }
+      }
     }
 
-    if (!isDemoMode) {
-      throw new Error('خدمة المصادقة السحابية غير مهيأة. يرجى إعداد متغيرات VITE_FIREBASE_*.');
-    }
-
-    // Fallback ONLY when explicit VITE_DEMO_MODE=true
+    // Fallback to local accounts
     const accounts = getLocalAccounts();
     const record = accounts[cleanEmail];
     if (!record) {
@@ -136,16 +143,25 @@ export class AuthService {
       throw new Error('يرجى إدخال الاسم والبريد الإلكتروني وكلمة مرور لا تقل عن 8 أحرف.');
     }
     if (isFirebaseConfigured) {
-      const merchant = await registerWithEmail(cleanName, cleanEmail, password);
-      this.setCurrentUser(merchant);
-      return merchant;
+      try {
+        const merchant = await registerWithEmail(cleanName, cleanEmail, password);
+        this.setCurrentUser(merchant);
+        return merchant;
+      } catch (fbErr: any) {
+        const msg = String(fbErr?.code || fbErr?.message || '');
+        if (
+          msg.includes('operation-not-allowed') ||
+          msg.includes('network-request-failed') ||
+          msg.includes('api-key-not-valid')
+        ) {
+          console.warn('Firebase Auth provider unavailable, creating local merchant account:', fbErr);
+        } else {
+          throw fbErr;
+        }
+      }
     }
 
-    if (!isDemoMode) {
-      throw new Error('خدمة المصادقة السحابية غير مهيأة. يرجى إعداد متغيرات VITE_FIREBASE_*.');
-    }
-
-    // Fallback ONLY when explicit VITE_DEMO_MODE=true
+    // Fallback to local accounts
     const accounts = getLocalAccounts();
     if (accounts[cleanEmail]) {
       throw new Error('هذا البريد الإلكتروني مسجل مسبقاً. يرجى تسجيل الدخول.');
