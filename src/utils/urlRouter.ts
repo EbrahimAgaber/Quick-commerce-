@@ -85,10 +85,28 @@ export interface ParsedStoreRoute {
   viewParam: string | null;
   driverOrderId: string | null;
   trackOrderId: string | null;
+  customDomainHostname: string | null;
 }
 
 /**
- * Extracts store slug, product ID, view mode, driver order ID, and track order ID from URL
+ * Checks whether a given hostname is a known platform/development host
+ */
+export function isPlatformHostname(hostname: string): boolean {
+  if (!hostname) return true;
+  const h = hostname.toLowerCase().split(':')[0]; // strip port if any
+  return (
+    h === 'localhost' ||
+    h === '127.0.0.1' ||
+    h.endsWith('.web.app') ||
+    h.endsWith('.firebaseapp.com') ||
+    h.endsWith('.ngrok.io') ||
+    h.endsWith('.ngrok-free.app') ||
+    h.endsWith('.run.app')
+  );
+}
+
+/**
+ * Extracts store slug, custom domain hostname, product ID, view mode, driver order ID, and track order ID from URL
  */
 export function parseStoreRouteFromLocation(loc: Location = window.location): ParsedStoreRoute {
   try {
@@ -103,8 +121,12 @@ export function parseStoreRouteFromLocation(loc: Location = window.location): Pa
       trackOrderId = loc.hash.replace('#track-', '').trim() || null;
     }
 
+    const hostname = loc.hostname || '';
+    const isCustom = !isPlatformHostname(hostname);
+    const customDomainHostname = isCustom ? hostname.toLowerCase() : null;
+
     if (queryStore) {
-      return { storeSlug: queryStore, productId, viewParam, driverOrderId, trackOrderId };
+      return { storeSlug: queryStore, productId, viewParam, driverOrderId, trackOrderId, customDomainHostname };
     }
 
     // Check clean path `/s/:slug`
@@ -116,23 +138,35 @@ export function parseStoreRouteFromLocation(loc: Location = window.location): Pa
         viewParam,
         driverOrderId,
         trackOrderId,
+        customDomainHostname,
       };
     }
 
-    return { storeSlug: null, productId, viewParam, driverOrderId, trackOrderId };
+    return { storeSlug: null, productId, viewParam, driverOrderId, trackOrderId, customDomainHostname };
   } catch {
-    return { storeSlug: null, productId: null, viewParam: null, driverOrderId: null, trackOrderId: null };
+    return { storeSlug: null, productId: null, viewParam: null, driverOrderId: null, trackOrderId: null, customDomainHostname: null };
   }
 }
 
 /**
  * Builds the shareable customer storefront URL for a store (and optional product deep link)
+ * If a customDomain is connected, generates a direct clean URL on that domain.
  */
-export function buildShareableStoreUrl(storeSlug: string, productId?: string): string {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+export function buildShareableStoreUrl(storeSlug: string, productId?: string, customDomain?: string): string {
   const cleanSlug = encodeURIComponent((storeSlug || '').trim());
-  if (productId) {
-    return `${origin}/?store=${cleanSlug}&product=${encodeURIComponent(productId)}`;
+  const productParam = productId ? `product=${encodeURIComponent(productId)}` : '';
+
+  if (customDomain && customDomain.trim()) {
+    const cleanDomain = customDomain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (productParam) {
+      return `https://${cleanDomain}/?${productParam}`;
+    }
+    return `https://${cleanDomain}/`;
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  if (productParam) {
+    return `${origin}/?store=${cleanSlug}&${productParam}`;
   }
   return `${origin}/?store=${cleanSlug}`;
 }

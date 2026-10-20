@@ -17,6 +17,7 @@ import { injectBrandThemeStyles } from './utils/themeInjector';
 import { initializeMarketingPixels } from './utils/analytics';
 import { matchesSearch } from './utils/arabicSearch';
 import { parseStoreRouteFromLocation } from './utils/urlRouter';
+import { injectStoreSEO } from './utils/seoManager';
 
 // Core Storefront Layout & Components (Eagerly loaded for instant First Contentful Paint)
 import { Navbar, AppViewMode, DevicePreviewMode } from './components/layout/Navbar';
@@ -73,11 +74,17 @@ export default function App() {
   // Storefront Cloud Resolution States (Prevents flash of default demo store)
   const initialRoute = useMemo(() => parseStoreRouteFromLocation(), []);
   const [isResolvingStore, setIsResolvingStore] = useState<boolean>(() => {
-    if (!initialRoute.storeSlug) return false;
-    const cached =
-      StoreManager.getStoreBySlug(initialRoute.storeSlug) ||
-      StoreManager.getStoreById(initialRoute.storeSlug);
-    return !cached;
+    if (initialRoute.storeSlug) {
+      const cached =
+        StoreManager.getStoreBySlug(initialRoute.storeSlug) ||
+        StoreManager.getStoreById(initialRoute.storeSlug);
+      return !cached;
+    }
+    if (initialRoute.customDomainHostname) {
+      const domainMatch = StoreManager.getStoreByCustomDomain(initialRoute.customDomainHostname);
+      return !domainMatch;
+    }
+    return false;
   });
   const [storeNotFound, setStoreNotFound] = useState(false);
   const [activeDriverOrderId, setActiveDriverOrderId] = useState<string | null>(() => initialRoute.driverOrderId);
@@ -226,13 +233,23 @@ export default function App() {
   // - If visiting root `/` without `?store=`, show the SaaS platform `'landing'` page.
   const [viewMode, setViewMode] = useState<AppViewMode>(() => {
     if (initialRoute.viewParam === 'dashboard') return 'dashboard';
-    if (initialRoute.storeSlug || initialRoute.viewParam === 'storefront') return 'storefront';
+    if (initialRoute.storeSlug || initialRoute.customDomainHostname || initialRoute.viewParam === 'storefront') return 'storefront';
     return 'landing';
   });
   const [devicePreview, setDevicePreview] = useState<DevicePreviewMode>('desktop');
 
   // Modals State
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  // Inject Dynamic SEO, Open Graph, Saudi GEO tags and JSON-LD structured data
+  useEffect(() => {
+    if (activeStore && settings) {
+      injectStoreSEO(
+        { ...activeStore, settings, products },
+        { activeProduct: selectedProduct }
+      );
+    }
+  }, [activeStore, settings, products, selectedProduct]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isTrackerOpen, setIsTrackerOpen] = useState(() => Boolean(initialRoute.trackOrderId));
@@ -271,7 +288,7 @@ export default function App() {
     const resolveStoreFromUrl = async () => {
       try {
         const route = parseStoreRouteFromLocation();
-        const { storeSlug, productId, trackOrderId, viewParam, driverOrderId } = route;
+        const { storeSlug, productId, trackOrderId, viewParam, driverOrderId, customDomainHostname } = route;
 
         setActiveDriverOrderId(driverOrderId);
 
@@ -282,11 +299,21 @@ export default function App() {
           setIsTrackerOpen(false);
         }
 
+        let targetSlugOrId = storeSlug;
+        if (!targetSlugOrId && customDomainHostname) {
+          const domainMatch =
+            StoreManager.getStoreByCustomDomain(customDomainHostname) ||
+            (await StoreManager.fetchStoreByCustomDomainFromFirestore(customDomainHostname));
+          if (domainMatch) {
+            targetSlugOrId = domainMatch.slug || domainMatch.id;
+          }
+        }
+
         if (viewParam === 'dashboard') {
           setViewMode('dashboard');
-        } else if (storeSlug || viewParam === 'storefront') {
+        } else if (targetSlugOrId || viewParam === 'storefront') {
           setViewMode('storefront');
-        } else if (viewParam === 'landing' || (!storeSlug && !viewParam)) {
+        } else if (viewParam === 'landing' || (!targetSlugOrId && !viewParam)) {
           setViewMode('landing');
         }
 
@@ -294,11 +321,11 @@ export default function App() {
           setSelectedProduct(null);
         }
 
-        if (!storeSlug) return;
+        if (!targetSlugOrId) return;
 
         // 1. Check local cache for instant render
         const localMatch =
-          StoreManager.getStoreBySlug(storeSlug) || StoreManager.getStoreById(storeSlug);
+          StoreManager.getStoreBySlug(targetSlugOrId) || StoreManager.getStoreById(targetSlugOrId);
 
         if (localMatch) {
           handleSelectStore(localMatch.id);
@@ -308,7 +335,7 @@ export default function App() {
             if (p) setSelectedProduct(p);
           }
           // Refresh catalog from Cloud Firestore in background so returning shoppers get latest prices/products
-          StoreManager.fetchStoreFromFirestore(storeSlug)
+          StoreManager.fetchStoreFromFirestore(targetSlugOrId)
             .then((freshStore) => {
               if (freshStore) {
                 setActiveStore((prev) => ({
@@ -334,7 +361,7 @@ export default function App() {
         // 2. First visit on this device -> Fetch from Cloud Firestore with skeleton loader
         setIsResolvingStore(true);
         setStoreNotFound(false);
-        const cloudStore = await StoreManager.fetchStoreFromFirestore(storeSlug);
+        const cloudStore = await StoreManager.fetchStoreFromFirestore(targetSlugOrId);
         setIsResolvingStore(false);
 
         if (cloudStore) {
@@ -571,6 +598,22 @@ export default function App() {
     StoreManager.updateStore(updatedStore);
     setActiveStore(updatedStore);
     setAllStores(StoreManager.getAllStores());
+  };
+
+  const handleUpdateStoreSlug = async (newSlug: string) => {
+    const res = await StoreManager.updateStoreSlug(activeStore.id, newSlug);
+    if (res.success && res.updatedStore) {
+      setActiveStore(res.updatedStore);
+      setAllStores(StoreManager.getAllStores());
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('store')) {
+          url.searchParams.set('store', res.updatedStore.slug);
+          window.history.replaceState({}, '', url.toString());
+        }
+      }
+    }
+    return res;
   };
 
   const handleResetDefault = () => {
@@ -879,6 +922,7 @@ export default function App() {
                 products={products}
                 orders={orders}
                 policies={policies}
+                onUpdateSlug={handleUpdateStoreSlug}
                 onUpdateSettings={handleUpdateSettings}
                 onUpdateProducts={handleUpdateProducts}
                 onUpdateOrders={handleUpdateOrders}

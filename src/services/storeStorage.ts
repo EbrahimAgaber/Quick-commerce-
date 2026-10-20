@@ -55,6 +55,12 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   notificationWebhookUrl: '',
   telegramBotToken: '',
   telegramChatId: '',
+  customDomain: '',
+  metaTitle: 'أورورا ريتيل | تسوق أرقى المنتجات العصرية الفاخرة في السعودية',
+  metaDescription: 'تسوق أحدث المنتجات العصرية الفاخرة من متجر أورورا مع شحن فوري لكافة مدن المملكة ودفع آمن عند الاستلام أو ببطاقات مدى وأبل باي.',
+  metaKeywords: ['متجر أورورا', 'تسوق أونلاين السعودية', 'ساعات فاخرة', 'إكسسوارات', 'الدفع عند الاستلام'],
+  geoCity: 'الرياض',
+  geoCoordinates: { lat: 24.7136, lng: 46.6753 },
 };
 
 export const DEFAULT_PRODUCTS: Product[] = [

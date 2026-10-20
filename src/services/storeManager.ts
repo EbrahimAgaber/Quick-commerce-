@@ -240,7 +240,9 @@ export class StoreManager {
         console.warn('Could not persist stores after LRU eviction:', retryErr);
       }
     }
-    window.dispatchEvent(new Event('storelink_stores_changed'));
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('storelink_stores_changed'));
+    }
   }
 
   static getActiveStore(): StoreInstance {
@@ -267,7 +269,9 @@ export class StoreManager {
     } catch (e) {
       console.warn('Could not set active store ID:', e);
     }
-    window.dispatchEvent(new Event('storelink_stores_changed'));
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('storelink_stores_changed'));
+    }
   }
 
   static getStoreById(storeId: string): StoreInstance | null {
@@ -279,6 +283,131 @@ export class StoreManager {
     const cleanSlug = slug.toLowerCase().trim();
     const all = this.getAllStores();
     return all.find((s) => s.slug.toLowerCase().trim() === cleanSlug) || null;
+  }
+
+  static getStoreByCustomDomain(domain: string): StoreInstance | null {
+    if (!domain) return null;
+    const clean = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '').trim();
+    const all = this.getAllStores();
+    return (
+      all.find(
+        (s) =>
+          (s.settings?.customDomain || '')
+            .toLowerCase()
+            .replace(/^https?:\/\//, '')
+            .replace(/\/$/, '')
+            .trim() === clean
+      ) || null
+    );
+  }
+
+  static async fetchStoreByCustomDomainFromFirestore(domain: string): Promise<StoreInstance | null> {
+    if (!domain || !isFirebaseConfigured) return null;
+    const clean = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '').trim();
+    try {
+      const storesCol = collection(db, 'stores');
+      const q = query(storesCol, where('settings.customDomain', '==', clean), limit(1));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        return await this.fetchStoreFromFirestore(d.id);
+      }
+    } catch (e) {
+      console.warn('Custom domain lookup notice:', e);
+    }
+    return null;
+  }
+
+  static validateSlugAvailability(
+    candidateSlug: string,
+    currentStoreId?: string
+  ): { valid: boolean; error?: string; normalizedSlug: string } {
+    const normalized = (candidateSlug || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    if (!normalized || normalized.length < 3) {
+      return {
+        valid: false,
+        error: 'يجب أن يتكون الرابط من 3 أحرف إنجليزية أو أرقام على الأقل.',
+        normalizedSlug: normalized,
+      };
+    }
+    if (normalized.length > 40) {
+      return {
+        valid: false,
+        error: 'الرابط طويل جداً (الحد الأقصى 40 حرفاً).',
+        normalizedSlug: normalized,
+      };
+    }
+    if (RESERVED_SLUGS.has(normalized)) {
+      return {
+        valid: false,
+        error: `الرابط "${normalized}" محجوز للنظام، يرجى اختيار رابط آخر.`,
+        normalizedSlug: normalized,
+      };
+    }
+    const all = this.getAllStores();
+    const existing = all.find((s) => s.slug.toLowerCase().trim() === normalized);
+    if (existing && existing.id !== currentStoreId) {
+      return {
+        valid: false,
+        error: `الرابط "${normalized}" مستخدم بالفعل لمتجر آخر.`,
+        normalizedSlug: normalized,
+      };
+    }
+    return { valid: true, normalizedSlug: normalized };
+  }
+
+  static async updateStoreSlug(
+    storeId: string,
+    newSlug: string
+  ): Promise<{ success: boolean; error?: string; updatedStore?: StoreInstance }> {
+    const store = this.getStoreById(storeId);
+    if (!store) {
+      return { success: false, error: 'المتجر غير موجود.' };
+    }
+    const validation = this.validateSlugAvailability(newSlug, storeId);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+
+    const oldSlug = store.slug;
+    const cleanNewSlug = validation.normalizedSlug;
+
+    // Check remote slug registry if Firebase configured
+    if (isFirebaseConfigured) {
+      try {
+        const slugDocRef = doc(db, 'slugs', cleanNewSlug);
+        const snap = await getDoc(slugDocRef);
+        if (snap.exists() && snap.data()?.storeId !== storeId) {
+          return { success: false, error: `الرابط "${cleanNewSlug}" مسجل لمتجر آخر على السحابة.` };
+        }
+      } catch (checkErr) {
+        console.warn('Slug registry check notice:', checkErr);
+      }
+    }
+
+    // Update store slug
+    const updatedStore: StoreInstance = {
+      ...store,
+      slug: cleanNewSlug,
+    };
+    this.updateStore(updatedStore, { immediateSync: true });
+
+    // Clean up old slug from registry if applicable
+    if (isFirebaseConfigured && oldSlug && oldSlug !== 'aurora' && oldSlug !== cleanNewSlug) {
+      try {
+        await deleteDoc(doc(db, 'slugs', oldSlug.toLowerCase()));
+      } catch (delErr) {
+        console.warn('Old slug cleanup notice:', delErr);
+      }
+    }
+
+    return { success: true, updatedStore };
   }
 
   /**

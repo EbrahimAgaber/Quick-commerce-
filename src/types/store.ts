@@ -94,6 +94,12 @@ export interface StoreSettings {
   enableEmailNotifications?: boolean;
   telegramBotToken?: string;
   telegramChatId?: string;
+  customDomain?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string[];
+  geoCity?: string;
+  geoCoordinates?: { lat: number; lng: number };
 }
 
 export interface Product {

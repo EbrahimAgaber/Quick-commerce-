@@ -52,8 +52,14 @@ import {
   Volume2,
   Send,
   CheckCircle2,
-  Radio
+  Radio,
+  Globe,
+  ExternalLink,
+  Share2,
+  Smartphone
 } from 'lucide-react';
+import { buildShareableStoreUrl } from '../../utils/urlRouter';
+import { generateAIOptimizedSEO, SAUDI_CITIES_GEO } from '../../utils/seoManager';
 
 interface StoreDashboardProps {
   storeId?: string;
@@ -62,6 +68,7 @@ interface StoreDashboardProps {
   products: Product[];
   orders: Order[];
   policies: StorePolicy[];
+  onUpdateSlug?: (newSlug: string) => Promise<{ success: boolean; error?: string }>;
   onUpdateSettings: (newSettings: StoreSettings) => void;
   onUpdateProducts: (newProducts: Product[]) => void;
   onUpdateOrders: (newOrders: Order[]) => void;
@@ -79,6 +86,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   products,
   orders,
   policies,
+  onUpdateSlug,
   onUpdateSettings,
   onUpdateProducts,
   onUpdateOrders,
@@ -282,14 +290,102 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   };
 
   const cleanSlug = storeSlug || 'aurora';
-  const storeUrl = typeof window !== 'undefined' && window.location.origin 
-    ? `${window.location.origin}/?store=${encodeURIComponent(cleanSlug)}` 
-    : `https://quick-ecommerce-saas-app.web.app/?store=${encodeURIComponent(cleanSlug)}`;
+  const storeUrl = buildShareableStoreUrl(cleanSlug, undefined, settings.customDomain);
+
+  const [customSlugInput, setCustomSlugInput] = useState(storeSlug || 'aurora');
+  const [slugFeedback, setSlugFeedback] = useState<{ status: 'idle' | 'valid' | 'error'; message?: string }>({ status: 'idle' });
+  const [isSavingSlug, setIsSavingSlug] = useState(false);
+  const [copiedDnsKey, setCopiedDnsKey] = useState<string | null>(null);
+  const [isAiOptimizingSeo, setIsAiOptimizingSeo] = useState(false);
+  const [previewModeTab, setPreviewModeTab] = useState<'google' | 'whatsapp'>('google');
+
+  useEffect(() => {
+    if (storeSlug) {
+      setCustomSlugInput(storeSlug);
+    }
+  }, [storeSlug]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(storeUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleSaveCustomSlug = async () => {
+    const clean = customSlugInput
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    if (!clean || clean.length < 3) {
+      setSlugFeedback({
+        status: 'error',
+        message: 'الرابط يجب أن يتكون من 3 أحرف إنجليزية أو أرقام على الأقل.',
+      });
+      return;
+    }
+    if (clean === storeSlug) {
+      setSlugFeedback({ status: 'valid', message: 'هذا هو رابط متجرك الحالي بالفعل.' });
+      return;
+    }
+
+    setIsSavingSlug(true);
+    setSlugFeedback({ status: 'idle' });
+    try {
+      if (onUpdateSlug) {
+        const res = await onUpdateSlug(clean);
+        if (res.success) {
+          setSlugFeedback({ status: 'valid', message: '🎉 تم تحديث رابط المتجر بنجاح!' });
+          setSyncMessage('🎉 تم تحديث وتفعيل رابط متجرك الجديد!');
+          setTimeout(() => setSyncMessage(null), 3000);
+        } else {
+          setSlugFeedback({ status: 'error', message: res.error || 'تعذر تحديث الرابط.' });
+        }
+      }
+    } catch (e: any) {
+      setSlugFeedback({ status: 'error', message: e?.message || 'تعذر تحديث الرابط.' });
+    } finally {
+      setIsSavingSlug(false);
+    }
+  };
+
+  const handleAiOptimizeSeo = () => {
+    setIsAiOptimizingSeo(true);
+    setTimeout(() => {
+      const optimized = generateAIOptimizedSEO({
+        id: storeId || 'store',
+        slug: storeSlug,
+        ownerId: currentUser?.id || 'merchant',
+        createdAt: new Date().toISOString(),
+        settings: editableSettings,
+        products,
+        orders,
+        policies,
+      });
+
+      setEditableSettings((prev) => ({
+        ...prev,
+        metaTitle: optimized.metaTitle,
+        metaDescription: optimized.metaDescription,
+        metaKeywords: optimized.metaKeywords,
+        heroTitle: optimized.heroTitle,
+        heroSubtitle: optimized.heroSubtitle,
+        announcementText: optimized.announcementText,
+        geoCity: optimized.geoCity,
+      }));
+
+      setIsAiOptimizingSeo(false);
+      setSyncMessage('✨ تم توليد وضبط محركات البحث (SEO) والظهور الجغرافي بالذكاء الاصطناعي بنجاح!');
+      setTimeout(() => setSyncMessage(null), 3500);
+    }, 400);
+  };
+
+  const handleCopyDns = (key: string, value: string) => {
+    navigator.clipboard.writeText(value);
+    setCopiedDnsKey(key);
+    setTimeout(() => setCopiedDnsKey(null), 2000);
   };
 
   // Accurate Metrics (Excludes Cancelled orders from Revenue)
@@ -889,6 +985,15 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
             >
               {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copiedLink ? 'تم النسخ!' : 'نسخ الرابط'}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('settings')}
+              className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#2563EB] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer border border-blue-200"
+              title="تخصيص الرابط أو ربط دومين خاص"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>تخصيص الرابط / دومين خاص</span>
             </button>
           </div>
         </div>
@@ -1602,6 +1707,358 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       {activeTab === 'settings' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-200">
           <div className="lg:col-span-2 space-y-6">
+            {/* SECTION: STORE URL & CUSTOM DOMAIN */}
+            <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-[#2563EB]" />
+                    <span>رابط المتجر والنطاق المخصص (Custom Domain & URL)</span>
+                  </h3>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    خصص رابط متجرك الفريد أو اربط نطاقك ودومينك الخاص (مثل shop.mybrand.sa)
+                  </p>
+                </div>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 self-start sm:self-auto">
+                  شهادة SSL مجانية وتوجيه فوري
+                </span>
+              </div>
+
+              {/* 1. Custom Store Slug */}
+              <div className="p-4 bg-stone-50 rounded-2xl border border-stone-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                    <Link2 className="w-3.5 h-3.5 text-[#2563EB]" />
+                    <span>معرف ورابط المتجر (Store Slug)</span>
+                  </label>
+                  <span className="text-[10px] text-stone-500 font-mono">حروف إنجليزية وأرقام وشرطات فقط</span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex-1 flex items-center bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-mono text-stone-500 focus-within:border-[#2563EB] focus-within:ring-2 focus-within:ring-blue-100" dir="ltr">
+                    <span className="text-stone-400 select-none">https://quick-ecommerce-saas-app.web.app/?store=</span>
+                    <input
+                      type="text"
+                      value={customSlugInput}
+                      onChange={(e) => {
+                        const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                        setCustomSlugInput(val);
+                        setSlugFeedback({ status: 'idle' });
+                      }}
+                      placeholder="my-brand"
+                      className="flex-1 bg-transparent border-0 outline-hidden text-stone-900 font-bold p-0 ml-0.5"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveCustomSlug}
+                    disabled={isSavingSlug || customSlugInput === storeSlug}
+                    className="px-4 py-2 bg-[#0F172A] hover:bg-stone-800 disabled:opacity-50 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    {isSavingSlug ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    <span>{isSavingSlug ? 'جاري الحفظ...' : 'تحديث الرابط'}</span>
+                  </button>
+                </div>
+
+                {slugFeedback.message && (
+                  <div
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
+                      slugFeedback.status === 'valid'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                    }`}
+                  >
+                    {slugFeedback.status === 'valid' ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span>{slugFeedback.message}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Custom Domain Input */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-800 mb-1">
+                    النطاق الخاص بالمتجر (Custom Domain)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={editableSettings.customDomain || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          customDomain: e.target.value.toLowerCase().trim().replace(/^https?:\/\//, '').replace(/\/$/, ''),
+                        })
+                      }
+                      placeholder="shop.mybrand.sa أو store.com"
+                      className="flex-1 px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-1">
+                    اكتب نطاقك الخاص وسيتم توجيه عملائك مباشرة لواجهة متجرك مع شهادة أمان SSL تلقائية.
+                  </p>
+                </div>
+
+                {/* DNS Records Guide */}
+                {editableSettings.customDomain && (
+                  <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-100 space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-blue-950 flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-[#2563EB]" />
+                        <span>إعدادات سجلات الـ DNS المطلوبة في مزود نطاقك:</span>
+                      </span>
+                      <span className="text-[10px] text-blue-700 bg-white px-2 py-0.5 rounded-full border border-blue-200">
+                        Cloudflare / GoDaddy / منصات النطاقات
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* CNAME Record */}
+                      <div className="p-3 bg-white rounded-xl border border-blue-100 space-y-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-stone-800">1. سجل فرعي (CNAME Record)</span>
+                          <span className="text-blue-600 font-mono font-bold">للنطاقات مثل shop.xxx</span>
+                        </div>
+                        <div className="space-y-1 font-mono text-[11px]">
+                          <div className="flex items-center justify-between text-stone-600 bg-stone-50 px-2 py-1 rounded-md">
+                            <span>الاسم (Host): <b>{editableSettings.customDomain.includes('.') ? editableSettings.customDomain.split('.')[0] : 'shop'}</b></span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyDns('cname_host', editableSettings.customDomain?.split('.')[0] || 'shop')}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              {copiedDnsKey === 'cname_host' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between text-stone-600 bg-stone-50 px-2 py-1 rounded-md">
+                            <span>الهدف (Target): <b>quick-ecommerce-saas-app.web.app</b></span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyDns('cname_val', 'quick-ecommerce-saas-app.web.app')}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              {copiedDnsKey === 'cname_val' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* A Record */}
+                      <div className="p-3 bg-white rounded-xl border border-blue-100 space-y-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-stone-800">2. سجل رئيسي (A Record)</span>
+                          <span className="text-blue-600 font-mono font-bold">للنطاق المباشر @</span>
+                        </div>
+                        <div className="space-y-1 font-mono text-[11px]">
+                          <div className="flex items-center justify-between text-stone-600 bg-stone-50 px-2 py-1 rounded-md">
+                            <span>الاسم (Host): <b>@</b></span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyDns('a_host', '@')}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              {copiedDnsKey === 'a_host' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between text-stone-600 bg-stone-50 px-2 py-1 rounded-md">
+                            <span>عنوان الآي بي (IP): <b>199.36.158.100</b></span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyDns('a_val', '199.36.158.100')}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              {copiedDnsKey === 'a_val' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* SECTION: SEO, SAUDI GEO & SOCIAL EXPOSURE HUB */}
+            <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#F59E0B]" />
+                    <span>تحسين محركات البحث والظهور الجغرافي (SEO & Saudi GEO Exposure)</span>
+                  </h3>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    ارفع تصدر متجرك في نتائج قوقل المحلية بالسعودية وتخصيص بطاقات المشاركة على واتساب ومواقع التواصل.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAiOptimizeSeo}
+                  disabled={isAiOptimizingSeo}
+                  className="px-3.5 py-2 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer self-start sm:self-auto"
+                >
+                  {isAiOptimizingSeo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5 text-amber-300" />}
+                  <span>{isAiOptimizingSeo ? 'جاري التحسين الذكي...' : 'تحسين ذكي بالذكاء الاصطناعي'}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                {/* Meta Title */}
+                <div className="sm:col-span-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-stone-700">عنوان الصفحة في قوقل (Meta Title)</label>
+                    <span className={`text-[10px] font-mono ${(editableSettings.metaTitle?.length || 0) > 60 ? 'text-rose-500 font-bold' : 'text-stone-400'}`}>
+                      {editableSettings.metaTitle?.length || 0} / 60 حرف (الموصى به: 50-60)
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={editableSettings.metaTitle || ''}
+                    onChange={(e) => setEditableSettings({ ...editableSettings, metaTitle: e.target.value })}
+                    placeholder={`${editableSettings.storeName} | تسوق أفضل المنتجات مع شحن فوري في السعودية`}
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                  />
+                </div>
+
+                {/* Meta Description */}
+                <div className="sm:col-span-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-stone-700">وصف المتجر في نتائج البحث (Meta Description)</label>
+                    <span className={`text-[10px] font-mono ${(editableSettings.metaDescription?.length || 0) > 160 ? 'text-rose-500 font-bold' : 'text-stone-400'}`}>
+                      {editableSettings.metaDescription?.length || 0} / 160 حرف (الموصى به: 120-160)
+                    </span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={editableSettings.metaDescription || ''}
+                    onChange={(e) => setEditableSettings({ ...editableSettings, metaDescription: e.target.value })}
+                    placeholder="وصف مشوق يظهر تحت عنوان متجرك في قوقل وواتساب يشجع المتسوقين على الضغط والشراء..."
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl resize-none"
+                  />
+                </div>
+
+                {/* Target City for Local GEO */}
+                <div className="space-y-1">
+                  <label className="block font-bold text-stone-700">المدينة المستهدفة (Saudi GEO Location)</label>
+                  <select
+                    value={editableSettings.geoCity || 'الرياض'}
+                    onChange={(e) => setEditableSettings({ ...editableSettings, geoCity: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-bold text-stone-800"
+                  >
+                    {Object.keys(SAUDI_CITIES_GEO).map((c) => (
+                      <option key={c} value={c}>
+                        {c} ({SAUDI_CITIES_GEO[c].cityEn})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-stone-400">
+                    يتم توليد وسوم الإحداثيات الجغرافية (ICBM & Schema.org) آلياً لمحركات البحث.
+                  </p>
+                </div>
+
+                {/* SEO Keywords */}
+                <div className="space-y-1">
+                  <label className="block font-bold text-stone-700">الكلمات المفتاحية (مفصولة بفاصلة)</label>
+                  <input
+                    type="text"
+                    value={Array.isArray(editableSettings.metaKeywords) ? editableSettings.metaKeywords.join(', ') : ''}
+                    onChange={(e) =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        metaKeywords: e.target.value
+                          .split(',')
+                          .map((k) => k.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                    placeholder="متجر عطور, تسوق أونلاين الرياض, الدفع عند الاستلام"
+                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                  />
+                  <p className="text-[10px] text-stone-400">تساعد أدوات الذكاء الاصطناعي على فهرسة منتجاتك.</p>
+                </div>
+              </div>
+
+              {/* LIVE PREVIEWS TABS (Google vs WhatsApp) */}
+              <div className="mt-4 pt-4 border-t border-stone-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-stone-800">المعاينة المباشرة للظهور:</span>
+                  <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewModeTab('google')}
+                      className={`px-3 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        previewModeTab === 'google' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500'
+                      }`}
+                    >
+                      <Search className="w-3 h-3 text-[#2563EB]" />
+                      <span>بحث قوقل</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewModeTab('whatsapp')}
+                      className={`px-3 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+                        previewModeTab === 'whatsapp' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500'
+                      }`}
+                    >
+                      <MessageCircle className="w-3 h-3 text-emerald-600" />
+                      <span>بطاقة واتساب</span>
+                    </button>
+                  </div>
+                </div>
+
+                {previewModeTab === 'google' ? (
+                  <div className="p-4 bg-white rounded-2xl border border-stone-200 shadow-xs space-y-1.5 text-right font-sans" dir="rtl">
+                    <div className="flex items-center gap-2 text-xs text-stone-600">
+                      <div className="w-5 h-5 rounded-full bg-stone-100 flex items-center justify-center text-[10px] font-bold text-stone-700">
+                        {editableSettings.logoLetter || 'S'}
+                      </div>
+                      <div className="flex flex-col text-[11px] leading-tight font-sans">
+                        <span className="font-bold text-stone-900">{editableSettings.storeName}</span>
+                        <span className="text-stone-400 font-mono text-[10px]" dir="ltr">
+                          {editableSettings.customDomain
+                            ? `https://${editableSettings.customDomain}`
+                            : `https://quick-ecommerce-saas-app.web.app › s › ${customSlugInput}`}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-base text-[#1a0dab] hover:underline font-medium cursor-pointer line-clamp-1">
+                      {editableSettings.metaTitle || `${editableSettings.storeName} | المتجر الرسمي في ${editableSettings.geoCity || 'السعودية'}`}
+                    </div>
+                    <p className="text-xs text-[#4d5156] line-clamp-2 leading-relaxed">
+                      {editableSettings.metaDescription ||
+                        `${editableSettings.storeName}: ${editableSettings.tagline || 'تسوق أفضل المنتجات مع شحن فوري لكافة مدن المملكة ودفع آمن عند الاستلام أو ببطاقات مدى وأبل باي.'}`}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-stone-100 rounded-2xl border border-stone-200 max-w-md">
+                    <div className="bg-[#DCF8C6]/70 p-3 rounded-2xl shadow-xs space-y-2 border border-emerald-200/40">
+                      {editableSettings.logoUrl && (
+                        <div className="w-full h-32 rounded-xl overflow-hidden bg-white flex items-center justify-center border border-stone-200">
+                          <img src={editableSettings.logoUrl} alt="Preview" className="w-full h-full object-contain p-2" />
+                        </div>
+                      )}
+                      <div className="space-y-1 text-right" dir="rtl">
+                        <h4 className="font-bold text-stone-900 text-xs">
+                          {editableSettings.metaTitle || editableSettings.storeName}
+                        </h4>
+                        <p className="text-[11px] text-stone-600 line-clamp-2 leading-snug">
+                          {editableSettings.metaDescription || editableSettings.tagline}
+                        </p>
+                        <span className="text-[10px] text-stone-400 font-mono block pt-0.5" dir="ltr">
+                          {editableSettings.customDomain || 'quick-ecommerce-saas-app.web.app'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             <form onSubmit={handleSaveSettingsForm} className="space-y-6">
               {/* Basic Info & Logo */}
               <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
