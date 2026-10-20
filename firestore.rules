@@ -85,14 +85,18 @@ service cloud.firestore {
       // Orders Subcollection:
       // - Shoppers can no longer create, get, or update orders directly from the browser!
       // - Orders are created strictly via Admin SDK inside serverless createOrder transaction
-      // - Store owners can read their orders list and update only fulfillment/tracking fields
+      // - Store owners can read their orders list and update fulfillment, tracking, driver settlement, and return fields
       match /orders/{orderId} {
         allow create: if false;
         allow get, list: if isStoreOwner(storeId);
         allow update: if isStoreOwner(storeId) &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                            'status', 'trackingNotes', 'courierName', 'courierPhone',
-                           'trackingNumber', 'trackingUrl', 'updatedAt'
+                           'trackingNumber', 'trackingUrl', 'driverCashCollected',
+                           'driverDeliveredAt', 'driverSettled', 'driverSettledAt',
+                           'returnEligibleUntil', 'returnRequestedAt', 'returnReason',
+                           'returnNotes', 'returnStatus', 'returnItems', 'returnedAt',
+                           'refundedAmount', 'refundReason', 'refundedAt', 'updatedAt'
                          ]);
         allow delete: if false;
       }

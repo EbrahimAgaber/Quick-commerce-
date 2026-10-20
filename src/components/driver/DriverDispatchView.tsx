@@ -14,7 +14,8 @@ import {
   Clock, 
   Check, 
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
 
@@ -95,21 +96,37 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
   const storeMapUrl = settings.storeLocationUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${settings.storeName} ${settings.city || ''}`)}`;
   const customerMapUrl = order.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${order.city} ${order.deliveryAddress}`)}`;
 
-  const handleUpdateStatus = (newStatus: 'Out for Delivery' | 'Delivered') => {
+  const handleUpdateStatus = async (newStatus: 'Out for Delivery' | 'Delivered' | 'Cancelled') => {
     setUpdating(true);
     const store = StoreManager.getStoreById(storeId) || StoreManager.getStoreBySlug(storeId) || StoreManager.getActiveStore();
+    const targetStoreId = store?.id || storeId || 'aurora';
+    const nowIso = new Date().toISOString();
+
     const updatedOrder: Order = {
       ...order,
       status: newStatus,
-      driverDeliveredAt: newStatus === 'Delivered' ? new Date().toISOString() : order.driverDeliveredAt,
-      driverCashCollected: newStatus === 'Delivered' && isCOD ? order.grandTotal : order.driverCashCollected,
+      driverDeliveredAt: newStatus === 'Delivered' ? nowIso : order.driverDeliveredAt,
+      driverCashCollected: newStatus === 'Delivered' && isCOD ? order.grandTotal : (newStatus === 'Cancelled' ? 0 : order.driverCashCollected),
+      returnEligibleUntil: newStatus === 'Delivered'
+        ? new Date(new Date(nowIso).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : order.returnEligibleUntil,
+      trackingNotes: newStatus === 'Cancelled' ? 'تعذر التوصيل: تم إرجاع الشحنة للمتجر بواسطة المندوب' : order.trackingNotes,
     };
 
     if (store) {
       const updatedOrders = (store.orders || []).map((o) => (o.id === order.id ? updatedOrder : o));
       StoreManager.updateStore({ ...store, orders: updatedOrders });
-      StoreManager.updateOrderInStore(store.id, updatedOrder).catch(console.warn);
     }
+
+    try {
+      await StoreManager.updateOrderInStore(targetStoreId, updatedOrder, {
+        source: 'driver',
+        restockItems: newStatus === 'Cancelled',
+      });
+    } catch (err) {
+      console.warn('Driver cloud update notice:', err);
+    }
+
     setOrder(updatedOrder);
     setUpdating(false);
 
@@ -330,6 +347,22 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
                 {isCOD ? `تم تسليم الطلب واستلام ${order.grandTotal} ${settings.currency} كاش` : 'تم تسليم الطلب للعميل بنجاح'}
               </span>
             </button>
+
+            {order.status !== 'Cancelled' && (
+              <button
+                type="button"
+                disabled={updating}
+                onClick={() => {
+                  if (window.confirm('هل أنت متأكد من تعذر التوصيل وإرجاع الشحنة للمتجر؟')) {
+                    handleUpdateStatus('Cancelled');
+                  }
+                }}
+                className="w-full py-2.5 px-3 bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-stone-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-stone-800"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>تعذر التوصيل / رفض العميل الاستلام (إرجاع للمتجر)</span>
+              </button>
+            )}
           </div>
         )}
       </div>

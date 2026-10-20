@@ -51,75 +51,99 @@ export default async function handler(req: any, res: any) {
     }
 
     const orderData = orderSnap.data() || {};
-    if (orderData.status !== 'Paid' && orderData.status !== 'Partially Refunded') {
-      return res.status(400).json({ error: 'Only paid orders can be refunded.', success: false });
-    }
-
-    const paymentId = orderData.paymentId;
-    if (!paymentId) {
-      return res.status(400).json({ error: 'Order does not have an associated electronic payment ID.', success: false });
-    }
-
-    // Resolve merchant Moyasar secret key
-    const privatePaymentRef = storeRef.collection('private').doc('payment');
-    const privatePaymentSnap = await privatePaymentRef.get();
-    let secretKey = process.env.MOYASAR_SECRET_KEY || '';
-    if (privatePaymentSnap.exists) {
-      const pData = privatePaymentSnap.data() || {};
-      if (pData.secretKey) secretKey = pData.secretKey;
-    }
-
-    if (!secretKey) {
-      return res.status(500).json({ error: 'Merchant Moyasar secret key is not configured.', success: false });
-    }
-
-    // Amount to refund in halalas (if not specified, full refund)
-    const refundAmountHalalas = amount ? Math.round(Number(amount) * 100) : Math.round(orderData.grandTotal * 100);
-
-    const moyasarApiUrl = process.env.MOYASAR_API_URL || 'https://api.moyasar.com/v1';
-    const authHeaderMoyasar = 'Basic ' + Buffer.from(`${secretKey}:`).toString('base64');
-
-    const moyasarRes = await fetch(`${moyasarApiUrl}/payments/${paymentId}/refund`, {
-      method: 'POST',
-      headers: {
-        Authorization: authHeaderMoyasar,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount: refundAmountHalalas,
-        description: reason || 'Merchant requested refund',
-      }),
-    });
-
-    if (!moyasarRes.ok) {
-      const errData = await moyasarRes.json();
+    const refundableStatuses = ['Paid', 'Delivered', 'Return Requested', 'Partially Refunded'];
+    if (!refundableStatuses.includes(orderData.status)) {
       return res.status(400).json({
-        error: errData?.message || 'Moyasar gateway rejected the refund request.',
-        success: false,
+        error: 'يمكن استرداد قيمة الطلبات المدفوعة، المستلمة، أو التي عليها طلب استرجاع فقط.',
+        success: false
       });
     }
 
-    const refundResult = await moyasarRes.json();
+    const paymentId = orderData.paymentId;
+    const isElectronicPayment = Boolean(paymentId);
+
+    // Amount to refund in halalas (if not specified, full refund)
+    const refundAmountHalalas = amount ? Math.round(Number(amount) * 100) : Math.round(orderData.grandTotal * 100);
+    let refundResultId = `manual_refund_${Date.now()}`;
+
+    // If electronic payment ID exists, trigger gateway refund via Moyasar
+    if (isElectronicPayment) {
+      // Resolve merchant Moyasar secret key
+      const privatePaymentRef = storeRef.collection('private').doc('payment');
+      const privatePaymentSnap = await privatePaymentRef.get();
+      let secretKey = process.env.MOYASAR_SECRET_KEY || '';
+      if (privatePaymentSnap.exists) {
+        const pData = privatePaymentSnap.data() || {};
+        if (pData.secretKey) secretKey = pData.secretKey;
+      }
+
+      if (!secretKey) {
+        return res.status(500).json({ error: 'Merchant Moyasar secret key is not configured.', success: false });
+      }
+
+      const moyasarApiUrl = process.env.MOYASAR_API_URL || 'https://api.moyasar.com/v1';
+      const authHeaderMoyasar = 'Basic ' + Buffer.from(`${secretKey}:`).toString('base64');
+
+      const moyasarRes = await fetch(`${moyasarApiUrl}/payments/${paymentId}/refund`, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeaderMoyasar,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: refundAmountHalalas,
+          description: reason || 'Merchant requested refund',
+        }),
+      });
+
+      if (!moyasarRes.ok) {
+        const errData = await moyasarRes.json();
+        return res.status(400).json({
+          error: errData?.message || 'Moyasar gateway rejected the refund request.',
+          success: false,
+        });
+      }
+
+      const refundResult = await moyasarRes.json();
+      refundResultId = refundResult.id || refundResultId;
+    }
+
     const isFullRefund = refundAmountHalalas >= Math.round(orderData.grandTotal * 100);
     const newStatus = isFullRefund ? 'Refunded' : 'Partially Refunded';
+    const nowIso = new Date().toISOString();
 
     await orderRef.update({
       status: newStatus,
+      returnStatus: 'completed',
       refundedAmount: (orderData.refundedAmount || 0) + refundAmountHalalas / 100,
       refundReason: reason || '',
-      refundedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      refundedAt: nowIso,
+      updatedAt: nowIso,
     });
 
     // Record in immutable refunds subcollection
     const refundDocRef = orderRef.collection('refunds').doc();
     await refundDocRef.set({
-      id: refundResult.id || refundDocRef.id,
+      id: refundResultId,
       amountHalalas: refundAmountHalalas,
       amountSar: refundAmountHalalas / 100,
       reason: reason || '',
-      createdAt: new Date().toISOString(),
+      paymentMethod: orderData.paymentMethod || 'Manual / Cash',
+      createdAt: nowIso,
     });
+
+    // Synchronize minimal public tracking projection
+    try {
+      const trackingRef = db.collection('tracking').doc(orderId);
+      await trackingRef.update({
+        status: newStatus,
+        returnStatus: 'completed',
+        trackingNotes: `تم استرداد المبلغ (${refundAmountHalalas / 100} ريال) بنجاح.`,
+        updatedAt: nowIso,
+      });
+    } catch (trackErr) {
+      console.warn('Tracking projection refund update notice:', trackErr);
+    }
 
     return res.status(200).json({
       success: true,

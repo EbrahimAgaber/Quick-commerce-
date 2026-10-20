@@ -15,10 +15,13 @@ import {
   Calendar,
   CreditCard,
   Loader2,
-  FileText
+  FileText,
+  RotateCcw,
+  ShieldCheck
 } from 'lucide-react';
 import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
 import { InvoiceModal } from './InvoiceModal';
+import { ReturnRequestModal } from './ReturnRequestModal';
 
 interface OrderTrackerModalProps {
   isOpen: boolean;
@@ -69,6 +72,7 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
   const [hasSearched, setHasSearched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
 
   useEffect(() => {
     // Only auto-search if the customer just completed an order and clicked "Track This Order"
@@ -105,6 +109,10 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
       case 'Out for Delivery':
         return 2;
       case 'Delivered':
+      case 'Return Requested':
+      case 'Returned':
+      case 'Refunded':
+      case 'Partially Refunded':
         return 3;
       case 'Cancelled':
         return -1;
@@ -112,6 +120,24 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
         return 0;
     }
   };
+
+  const isReturnEligible = useMemo(() => {
+    if (!searchedOrder || searchedOrder.status !== 'Delivered') return false;
+    const deliveryDate = searchedOrder.driverDeliveredAt || searchedOrder.timestamp;
+    const eligibleTime = searchedOrder.returnEligibleUntil
+      ? new Date(searchedOrder.returnEligibleUntil).getTime()
+      : new Date(deliveryDate).getTime() + 7 * 24 * 60 * 60 * 1000;
+    return Date.now() <= eligibleTime;
+  }, [searchedOrder]);
+
+  const eligibleUntilFormatted = useMemo(() => {
+    if (!searchedOrder) return '';
+    const deliveryDate = searchedOrder.driverDeliveredAt || searchedOrder.timestamp;
+    const eligibleTime = searchedOrder.returnEligibleUntil
+      ? new Date(searchedOrder.returnEligibleUntil)
+      : new Date(new Date(deliveryDate).getTime() + 7 * 24 * 60 * 60 * 1000);
+    return eligibleTime.toLocaleDateString('ar-SA');
+  }, [searchedOrder]);
 
   const currentStepIdx = searchedOrder ? getStepIndex(searchedOrder.status) : 0;
 
@@ -215,6 +241,10 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                     className={`px-3 py-1 rounded-full text-xs font-bold ${
                       searchedOrder.status === 'Delivered'
                         ? 'bg-emerald-100 text-emerald-800'
+                        : searchedOrder.status === 'Return Requested'
+                        ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-300'
+                        : searchedOrder.status === 'Returned' || searchedOrder.status === 'Refunded'
+                        ? 'bg-purple-100 text-purple-800 ring-1 ring-purple-300'
                         : searchedOrder.status === 'Out for Delivery'
                         ? 'bg-blue-100 text-blue-800'
                         : searchedOrder.status === 'In Progress'
@@ -225,7 +255,15 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                     }`}
                   >
                     {searchedOrder.status === 'Delivered'
-                      ? 'تم التوصيل'
+                      ? 'تم التوصيل بنجاح'
+                      : searchedOrder.status === 'Return Requested'
+                      ? 'طلب استرجاع قيد المراجعة'
+                      : searchedOrder.status === 'Returned'
+                      ? 'تم الإرجاع'
+                      : searchedOrder.status === 'Refunded'
+                      ? 'تم الاسترداد'
+                      : searchedOrder.status === 'Partially Refunded'
+                      ? 'استرداد جزئي'
                       : searchedOrder.status === 'Out for Delivery'
                       ? 'جاري التوصيل'
                       : searchedOrder.status === 'In Progress'
@@ -236,6 +274,31 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* Return Status Alerts if Applicable */}
+              {searchedOrder.status === 'Return Requested' && (
+                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    <RotateCcw className="w-4 h-4 text-amber-600" />
+                    <span>تم تقديم طلب استرجاع لهذا الطلب</span>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    السبب المسجل: <span className="font-semibold">{searchedOrder.returnReason || 'طلب استرجاع أو استبدال'}</span>. يقوم فريق المتجر بمراجعة الطلب وترتيب الاستلام أو الاستبدال معك.
+                  </p>
+                </div>
+              )}
+
+              {(searchedOrder.status === 'Returned' || searchedOrder.status === 'Refunded') && (
+                <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 text-purple-900 space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    <CheckCircle2 className="w-4 h-4 text-purple-600" />
+                    <span>تم إنهاء استرجاع الطلب</span>
+                  </div>
+                  <p className="text-xs text-purple-800 leading-relaxed">
+                    تم استلام المنتجات المرتجعة ومعالجة تسوية المبلغ بنجاح وفق سياسة المتجر.
+                  </p>
+                </div>
+              )}
 
               {/* Milestone Progress Stepper */}
               {searchedOrder.status !== 'Cancelled' ? (
@@ -341,6 +404,36 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                 </p>
               </div>
 
+              {/* Return / Exchange Action Card for Delivered Orders */}
+              {searchedOrder.status === 'Delivered' && (
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-amber-600" />
+                      سياسة الاسترجاع والاستبدال (وزارة التجارة)
+                    </span>
+                    <span className="text-[11px] text-amber-800 font-medium">
+                      {isReturnEligible ? `متاح حتى ${eligibleUntilFormatted}` : 'انتهت فترة الاسترجاع'}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-stone-600 leading-relaxed">
+                    يحق لك طلب استرجاع أو استبدال المنتج في حال وجود عيب مصنعي أو رغبة في استبدال المقاس وفق الشروط والأنظمة.
+                  </p>
+
+                  {isReturnEligible && (
+                    <button
+                      type="button"
+                      onClick={() => setShowReturnModal(true)}
+                      className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>تقديم طلب استرجاع أو استبدال للمنتجات</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* View Tax Invoice Button */}
               <button
                 type="button"
@@ -385,6 +478,21 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
         order={searchedOrder}
         settings={settings}
       />
+
+      {/* Return Request Modal */}
+      {searchedOrder && (
+        <ReturnRequestModal
+          isOpen={showReturnModal}
+          onClose={() => setShowReturnModal(false)}
+          order={searchedOrder}
+          settings={settings}
+          storeId={storeId}
+          onSuccess={() => {
+            setShowReturnModal(false);
+            handleSearch(searchedOrder.id);
+          }}
+        />
+      )}
     </div>
   );
 };

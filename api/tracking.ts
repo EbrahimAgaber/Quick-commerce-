@@ -51,6 +51,10 @@ export default async function handler(req: any, res: any) {
       courierName: trackingData.courierName,
       trackingNumber: trackingData.trackingNumber,
       trackingUrl: trackingData.trackingUrl,
+      driverDeliveredAt: trackingData.driverDeliveredAt,
+      returnEligibleUntil: trackingData.returnEligibleUntil,
+      returnStatus: trackingData.returnStatus,
+      returnReason: trackingData.returnReason,
     };
 
     // 3. If customer provides phoneLast4 and it matches, return verified order details

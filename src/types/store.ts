@@ -119,7 +119,18 @@ export interface Product {
   colorName?: string;
 }
 
-export type OrderStatus = 'Received' | 'In Progress' | 'Out for Delivery' | 'Delivered' | 'Cancelled' | 'Paid' | 'Payment Failed';
+export type OrderStatus =
+  | 'Received'
+  | 'In Progress'
+  | 'Out for Delivery'
+  | 'Delivered'
+  | 'Return Requested'
+  | 'Returned'
+  | 'Cancelled'
+  | 'Paid'
+  | 'Payment Failed'
+  | 'Refunded'
+  | 'Partially Refunded';
 
 export interface OrderItem {
   productId: string;
@@ -128,6 +139,13 @@ export interface OrderItem {
   price: number;
   quantity: number;
   imageUrl?: string;
+}
+
+export interface ReturnClaimItem {
+  productId: string;
+  name: string;
+  quantity: number;
+  reason?: string;
 }
 
 export interface Order {
@@ -163,6 +181,17 @@ export interface Order {
   vatRate?: number;
   paymentId?: string;
   paidAt?: string;
+  // Return & Refund Fields
+  returnEligibleUntil?: string;
+  returnRequestedAt?: string;
+  returnReason?: string;
+  returnNotes?: string;
+  returnStatus?: 'pending' | 'approved' | 'rejected' | 'completed';
+  returnItems?: ReturnClaimItem[];
+  returnedAt?: string;
+  refundedAmount?: number;
+  refundReason?: string;
+  refundedAt?: string;
 }
 
 export interface StorePolicy {

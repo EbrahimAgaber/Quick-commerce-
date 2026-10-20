@@ -318,6 +318,8 @@ export default async function handler(req: any, res: any) {
         deliveryType: customer.deliveryType === 'pickup' ? 'pickup' : 'delivery',
         utm: utm || {},
         createdAt: timestamp,
+        returnStatus: null,
+        returnEligibleUntil: null,
       };
 
       // 10. Persist Full Order
@@ -349,6 +351,8 @@ export default async function handler(req: any, res: any) {
         paymentMethod,
         trackingNotes: fullOrderRecord.trackingNotes,
         phoneLast4: cleanPhone.slice(-4),
+        returnStatus: null,
+        returnEligibleUntil: null,
       });
 
       return {

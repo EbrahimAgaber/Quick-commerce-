@@ -437,11 +437,56 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     });
   }, [orders, orderStatusFilter, orderSearchQuery]);
 
-  const handleOrderStatusChange = (orderId: string, newStatus: OrderStatus) => {
-    const updated = orders.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o));
+  const handleOrderStatusChange = (orderId: string, newStatus: OrderStatus, restockOnReturn?: boolean) => {
+    const nowIso = new Date().toISOString();
+    const updated = orders.map((o) => {
+      if (o.id !== orderId) return o;
+      const isDelivered = newStatus === 'Delivered';
+      const isReturned = newStatus === 'Returned';
+      const isCOD = o.paymentMethod.toLowerCase().includes('cod') || o.paymentMethod.includes('استلام');
+
+      return {
+        ...o,
+        status: newStatus,
+        driverDeliveredAt: isDelivered ? (o.driverDeliveredAt || nowIso) : o.driverDeliveredAt,
+        driverCashCollected: isDelivered && isCOD ? o.grandTotal : o.driverCashCollected,
+        returnEligibleUntil: isDelivered
+          ? new Date(new Date(nowIso).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          : o.returnEligibleUntil,
+        returnedAt: isReturned ? nowIso : o.returnedAt,
+        returnStatus: isReturned ? 'completed' : o.returnStatus,
+      };
+    });
+
     onUpdateOrders(updated);
-    setSyncMessage('📦 تم تحديث حالة الطلب بنجاح');
-    setTimeout(() => setSyncMessage(null), 2000);
+
+    // If restock requested on return, also increment product stock in state
+    if (newStatus === 'Returned' && restockOnReturn) {
+      const targetOrder = orders.find((o) => o.id === orderId);
+      if (targetOrder && Array.isArray(targetOrder.items)) {
+        const updatedProds = products.map((prod) => {
+          const item = targetOrder.items.find((i) => i.productId === prod.id);
+          if (item && typeof prod.stockQuantity === 'number') {
+            const newStock = prod.stockQuantity + item.quantity;
+            return {
+              ...prod,
+              stockQuantity: newStock,
+              inStock: newStock > 0,
+            };
+          }
+          return prod;
+        });
+        onUpdateProducts(updatedProds);
+      }
+    }
+
+    if (selectedOrderDetail && selectedOrderDetail.id === orderId) {
+      const updatedItem = updated.find((o) => o.id === orderId);
+      if (updatedItem) setSelectedOrderDetail(updatedItem);
+    }
+
+    setSyncMessage(newStatus === 'Delivered' ? '✅ تم تأكيد توصيل الطلب وتحديث التتبع السحابي' : '📦 تم تحديث حالة الطلب بنجاح');
+    setTimeout(() => setSyncMessage(null), 2500);
   };
 
   const handleCommitTrackingNote = (orderId: string) => {
@@ -547,12 +592,24 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
         alert(`فشل الاسترجاع: ${data.error || 'حدث خطأ أثناء معالجة الاسترجاع'}`);
         return;
       }
-      const updated = orders.map((o) => (o.id === order.id ? { ...o, status: 'Cancelled' as OrderStatus } : o));
+      const updated = orders.map((o) => (o.id === order.id ? {
+        ...o,
+        status: 'Refunded' as OrderStatus,
+        returnStatus: 'completed',
+        returnedAt: new Date().toISOString(),
+        refundedAmount: order.grandTotal,
+        refundedAt: new Date().toISOString(),
+      } : o));
       onUpdateOrders(updated);
       if (selectedOrderDetail && selectedOrderDetail.id === order.id) {
-        setSelectedOrderDetail({ ...selectedOrderDetail, status: 'Cancelled' });
+        setSelectedOrderDetail({
+          ...selectedOrderDetail,
+          status: 'Refunded',
+          returnStatus: 'completed',
+          returnedAt: new Date().toISOString(),
+        });
       }
-      alert('تم استرجاع المبلغ بنجاح عبر ميسر وتحديث حالة الطلب إلى ملغي.');
+      alert('تم استرجاع المبلغ بنجاح عبر ميسر وتحديث حالة الطلب إلى مسترد.');
     } catch (err: any) {
       alert(`فشل الاسترجاع: ${err?.message || 'خطأ في الاتصال بالسيرفر'}`);
     } finally {
@@ -622,6 +679,10 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       Cancelled: 'تم إلغاء الطلب',
       Paid: 'تم استلام وتأكيد الدفع الإلكتروني بنجاح',
       'Payment Failed': 'تعذر استلام الدفع الإلكتروني للطلب',
+      'Return Requested': 'طلب الاسترجاع قيد المراجعة لدى المتجر',
+      Returned: 'تم استلام المنتجات المرتجعة بنجاح',
+      Refunded: 'تم استرداد مبلغ طلبك بنجاح',
+      'Partially Refunded': 'تم استرداد جزء من مبلغ طلبك',
     };
     const msg = `مرحباً ${ord.customerName} 🌟\nبخصوص طلبك رقم #${ord.id} من *${settings.storeName}*:\nالحالة الحالية: *${statusMap[ord.status]}*${
       ord.trackingNotes ? `\nملاحظات الشحن: ${ord.trackingNotes}` : ''
@@ -1237,7 +1298,9 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                     { id: 'Received', label: 'تم الاستلام' },
                     { id: 'In Progress', label: 'قيد التجهيز' },
                     { id: 'Out for Delivery', label: 'جاري التوصيل' },
-                    { id: 'Delivered', label: 'مكتمل' },
+                    { id: 'Delivered', label: `مكتمل (${orders.filter(o => o.status === 'Delivered').length})` },
+                    { id: 'Return Requested', label: `طلبات استرجاع (${orders.filter(o => o.status === 'Return Requested').length})` },
+                    { id: 'Returned', label: `مرتجع (${orders.filter(o => o.status === 'Returned' || o.status === 'Refunded').length})` },
                     { id: 'Cancelled', label: 'ملغي' },
                   ] as const
                 ).map((st) => (
@@ -1300,6 +1363,10 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                         className={`px-2.5 py-1 rounded-xl text-xs font-bold border focus:outline-none ${
                           ord.status === 'Delivered'
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                            : ord.status === 'Return Requested'
+                            ? 'bg-amber-50 text-amber-800 border-amber-300'
+                            : ord.status === 'Returned' || ord.status === 'Refunded'
+                            ? 'bg-purple-50 text-purple-800 border-purple-300'
                             : ord.status === 'Out for Delivery'
                             ? 'bg-blue-50 text-blue-800 border-blue-300'
                             : ord.status === 'In Progress'
@@ -1313,6 +1380,9 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                         <option value="In Progress">قيد التجهيز</option>
                         <option value="Out for Delivery">جاري التوصيل</option>
                         <option value="Delivered">تم التوصيل بنجاح</option>
+                        <option value="Return Requested">طلب استرجاع</option>
+                        <option value="Returned">تم الإرجاع</option>
+                        <option value="Refunded">مسترد</option>
                         <option value="Cancelled">ملغي</option>
                       </select>
                     </div>
@@ -1430,6 +1500,10 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                             className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border focus:outline-none ${
                               ord.status === 'Delivered'
                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                : ord.status === 'Return Requested'
+                                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                : ord.status === 'Returned' || ord.status === 'Refunded'
+                                ? 'bg-purple-50 text-purple-800 border-purple-300'
                                 : ord.status === 'Out for Delivery'
                                 ? 'bg-blue-50 text-blue-800 border-blue-300'
                                 : ord.status === 'In Progress'
@@ -1443,6 +1517,9 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                             <option value="In Progress">قيد التجهيز</option>
                             <option value="Out for Delivery">جاري التوصيل</option>
                             <option value="Delivered">تم التوصيل بنجاح</option>
+                            <option value="Return Requested">طلب استرجاع</option>
+                            <option value="Returned">تم الإرجاع</option>
+                            <option value="Refunded">مسترد</option>
                             <option value="Cancelled">ملغي</option>
                           </select>
                         </td>
@@ -3215,6 +3292,73 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                 <span className="font-mono">{selectedOrderDetail.grandTotal.toLocaleString('en-US')} {settings.currency}</span>
               </div>
             </div>
+
+            {/* Customer Return Request Details & Actions */}
+            {(selectedOrderDetail.status === 'Return Requested' || selectedOrderDetail.returnReason || selectedOrderDetail.status === 'Returned' || selectedOrderDetail.status === 'Refunded') && (
+              <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-300 text-xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                    <RotateCcw className="w-4 h-4 text-amber-700" />
+                    <span>تفاصيل طلب الاسترجاع / الاستبدال:</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900">
+                    {selectedOrderDetail.status === 'Return Requested' ? 'بانتظار قرار المتجر' : 'تمت المعالجة'}
+                  </span>
+                </div>
+
+                <div className="space-y-1 text-stone-700 bg-white p-3 rounded-xl border border-amber-200">
+                  <div><strong>سبب الاسترجاع:</strong> {selectedOrderDetail.returnReason || 'غير محدد'}</div>
+                  {selectedOrderDetail.returnNotes && <div><strong>ملاحظات العميل:</strong> {selectedOrderDetail.returnNotes}</div>}
+                  {selectedOrderDetail.returnRequestedAt && (
+                    <div className="text-[11px] text-stone-500">
+                      تاريخ الطلب: {new Date(selectedOrderDetail.returnRequestedAt).toLocaleString('ar-SA')}
+                    </div>
+                  )}
+                  {selectedOrderDetail.returnItems && selectedOrderDetail.returnItems.length > 0 && (
+                    <div className="pt-1">
+                      <strong>المنتجات المطلوب إرجاعها:</strong>
+                      <ul className="list-disc list-inside mt-0.5 text-[11px] text-stone-600">
+                        {selectedOrderDetail.returnItems.map((ri, rIdx) => (
+                          <li key={rIdx}>{ri.name} ({ri.quantity} قطعة)</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {selectedOrderDetail.status === 'Return Requested' && (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOrderStatusChange(selectedOrderDetail.id, 'Returned', true)}
+                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-xs"
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>قبول الاسترجاع وإعادة للمخزون</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOrderStatusChange(selectedOrderDetail.id, 'Delivered')}
+                        className="py-2 px-3 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        رفض الطلب
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleContactCustomerWhatsApp(selectedOrderDetail)}
+                      className="w-full py-2 bg-white hover:bg-stone-50 border border-amber-300 text-amber-900 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      <span>التواصل مع العميل لتنسيق استلام الشحنة</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Courier & Delivery Assignment */}
             <div className="space-y-2.5 text-xs bg-stone-50 p-4 rounded-2xl border border-stone-200">

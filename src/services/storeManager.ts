@@ -15,6 +15,7 @@ import {
   doc, 
   getDoc, 
   setDoc, 
+  updateDoc,
   deleteDoc, 
   collection, 
   query, 
@@ -708,10 +709,25 @@ export class StoreManager {
     if (!storeId || !isFirebaseConfigured || !auth.currentUser) return [];
     try {
       const ordersCol = collection(db, 'stores', storeId, 'orders');
-      const q = query(ordersCol, orderBy('timestamp', 'desc'), limit(100));
-      const snap = await getDocs(q);
+      let snap: any;
+      try {
+        const q = query(ordersCol, orderBy('timestamp', 'desc'), limit(100));
+        snap = await getDocs(q);
+      } catch {
+        // Fallback without orderBy in case documents lack timestamp field
+        const fallbackQ = query(ordersCol, limit(100));
+        snap = await getDocs(fallbackQ);
+      }
       const list: Order[] = [];
-      snap.forEach((d) => list.push(d.data() as Order));
+      snap.forEach((d: any) => {
+        const raw = d.data();
+        list.push({
+          id: d.id,
+          ...raw,
+          timestamp: raw.timestamp || raw.createdAt || new Date().toISOString(),
+        } as Order);
+      });
+      list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       return list;
     } catch (err) {
       console.warn('Could not fetch store orders from Firestore:', err);
@@ -733,7 +749,7 @@ export class StoreManager {
       let isInitialSnapshot = true;
       let knownOrderIds = new Set<string>();
       const ordersCol = collection(db, 'stores', storeId, 'orders');
-      const q = query(ordersCol, orderBy('timestamp', 'desc'), limit(100));
+      const q = query(ordersCol, limit(100));
 
       return onSnapshot(
         q,
@@ -742,7 +758,12 @@ export class StoreManager {
           let newlyAdded = 0;
 
           snap.forEach((d) => {
-            const ord = d.data() as Order;
+            const raw = d.data();
+            const ord: Order = {
+              id: d.id,
+              ...raw,
+              timestamp: raw.timestamp || raw.createdAt || new Date().toISOString(),
+            } as Order;
             list.push(ord);
             if (!isInitialSnapshot && !knownOrderIds.has(ord.id)) {
               newlyAdded++;
@@ -866,6 +887,10 @@ export class StoreManager {
             courierPhone: trackData.courierPhone,
             trackingNumber: trackData.trackingNumber,
             trackingUrl: trackData.trackingUrl,
+            driverDeliveredAt: trackData.driverDeliveredAt,
+            returnEligibleUntil: trackData.returnEligibleUntil,
+            returnStatus: trackData.returnStatus,
+            returnReason: trackData.returnReason,
           };
           return mappedOrder;
         }
@@ -879,7 +904,11 @@ export class StoreManager {
   /**
    * Update order status or tracking notes (Owner only)
    */
-  static async updateOrderInStore(storeId: string, updatedOrder: Order): Promise<void> {
+  static async updateOrderInStore(
+    storeId: string, 
+    updatedOrder: Order,
+    options?: { restockItems?: boolean; source?: 'merchant' | 'driver' }
+  ): Promise<boolean> {
     const store = this.getStoreById(storeId);
     if (store && Array.isArray(store.orders)) {
       const idx = store.orders.findIndex((o) => o.id === updatedOrder.id);
@@ -899,14 +928,152 @@ export class StoreManager {
       }
     }
 
-    if (!isFirebaseConfigured || !auth.currentUser) return;
+    // 1. Try secure serverless endpoint /api/updateOrderStatus first
+    if (typeof fetch === 'function' && typeof window !== 'undefined' && window.location?.origin && storeId !== 'store_aurora_01') {
+      try {
+        let token: string | null = null;
+        if (auth.currentUser) {
+          try {
+            token = await auth.currentUser.getIdToken();
+          } catch {}
+        }
+
+        const endpoint = `${window.location.origin}/api/updateOrderStatus`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            storeId,
+            orderId: updatedOrder.id,
+            status: updatedOrder.status,
+            trackingNotes: updatedOrder.trackingNotes,
+            courierName: updatedOrder.courierName,
+            courierPhone: updatedOrder.courierPhone,
+            trackingNumber: updatedOrder.trackingNumber,
+            trackingUrl: updatedOrder.trackingUrl,
+            driverCashCollected: updatedOrder.driverCashCollected,
+            driverDeliveredAt: updatedOrder.driverDeliveredAt,
+            driverSettled: updatedOrder.driverSettled,
+            returnReason: updatedOrder.returnReason,
+            returnNotes: updatedOrder.returnNotes,
+            returnItems: updatedOrder.returnItems,
+            returnStatus: updatedOrder.returnStatus,
+            restockItems: options?.restockItems,
+            source: options?.source || 'merchant',
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            return true;
+          }
+        }
+      } catch (apiErr) {
+        console.warn('API /api/updateOrderStatus offline or unreachable, using direct Firestore update:', apiErr);
+      }
+    }
+
+    // 2. Direct client Firestore update (Owner only) using granular updateDoc
+    if (!isFirebaseConfigured || !auth.currentUser) return false;
     try {
       const orderRef = doc(db, 'stores', storeId, 'orders', updatedOrder.id);
-      const sanitizedOrder = JSON.parse(JSON.stringify(updatedOrder));
-      await setDoc(orderRef, sanitizedOrder, { merge: true });
+      const updatePayload: Record<string, any> = {
+        status: updatedOrder.status,
+        updatedAt: new Date().toISOString(),
+      };
+      if (updatedOrder.trackingNotes !== undefined) updatePayload.trackingNotes = updatedOrder.trackingNotes;
+      if (updatedOrder.courierName !== undefined) updatePayload.courierName = updatedOrder.courierName;
+      if (updatedOrder.courierPhone !== undefined) updatePayload.courierPhone = updatedOrder.courierPhone;
+      if (updatedOrder.trackingNumber !== undefined) updatePayload.trackingNumber = updatedOrder.trackingNumber;
+      if (updatedOrder.trackingUrl !== undefined) updatePayload.trackingUrl = updatedOrder.trackingUrl;
+      if (updatedOrder.driverDeliveredAt !== undefined) updatePayload.driverDeliveredAt = updatedOrder.driverDeliveredAt;
+      if (updatedOrder.driverCashCollected !== undefined) updatePayload.driverCashCollected = updatedOrder.driverCashCollected;
+      if (updatedOrder.driverSettled !== undefined) updatePayload.driverSettled = updatedOrder.driverSettled;
+      if (updatedOrder.driverSettledAt !== undefined) updatePayload.driverSettledAt = updatedOrder.driverSettledAt;
+      if (updatedOrder.returnEligibleUntil !== undefined) updatePayload.returnEligibleUntil = updatedOrder.returnEligibleUntil;
+      if (updatedOrder.returnRequestedAt !== undefined) updatePayload.returnRequestedAt = updatedOrder.returnRequestedAt;
+      if (updatedOrder.returnReason !== undefined) updatePayload.returnReason = updatedOrder.returnReason;
+      if (updatedOrder.returnNotes !== undefined) updatePayload.returnNotes = updatedOrder.returnNotes;
+      if (updatedOrder.returnStatus !== undefined) updatePayload.returnStatus = updatedOrder.returnStatus;
+      if (updatedOrder.returnItems !== undefined) updatePayload.returnItems = updatedOrder.returnItems;
+      if (updatedOrder.returnedAt !== undefined) updatePayload.returnedAt = updatedOrder.returnedAt;
+
+      await updateDoc(orderRef, updatePayload);
+      return true;
     } catch (err) {
       console.warn('Could not update order in Firestore:', err);
+      return false;
     }
+  }
+
+  /**
+   * Shopper-initiated Return Request
+   */
+  static async submitReturnRequest(params: {
+    storeId: string;
+    orderId: string;
+    phoneLast4: string;
+    reason: string;
+    notes?: string;
+    items?: { productId: string; name: string; quantity: number; reason?: string }[];
+  }): Promise<{ success: boolean; error?: string }> {
+    const cleanId = params.orderId.toUpperCase().trim().replace('#', '');
+    if (!cleanId) return { success: false, error: 'رقم الطلب مطلوب.' };
+    if (!params.reason) return { success: false, error: 'يرجى اختيار سبب الاسترجاع.' };
+
+    if (typeof fetch === 'function' && typeof window !== 'undefined' && window.location?.origin && params.storeId !== 'store_aurora_01') {
+      try {
+        const endpoint = `${window.location.origin}/api/updateOrderStatus`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storeId: params.storeId,
+            orderId: cleanId,
+            status: 'Return Requested',
+            phoneLast4: params.phoneLast4,
+            returnReason: params.reason,
+            returnNotes: params.notes || '',
+            returnItems: params.items || [],
+            source: 'shopper',
+          }),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          return { success: true };
+        } else {
+          return { success: false, error: data.error || 'تعذر تسجيل طلب الاسترجاع حالياً.' };
+        }
+      } catch (err: any) {
+        console.warn('Return request API notice:', err);
+      }
+    }
+
+    // Local / offline fallback
+    const store = this.getStoreById(params.storeId) || this.getActiveStore();
+    if (store && Array.isArray(store.orders)) {
+      const ordIdx = store.orders.findIndex(o => o.id === cleanId);
+      if (ordIdx >= 0) {
+        store.orders[ordIdx] = {
+          ...store.orders[ordIdx],
+          status: 'Return Requested',
+          returnStatus: 'pending',
+          returnRequestedAt: new Date().toISOString(),
+          returnReason: params.reason,
+          returnNotes: params.notes,
+          returnItems: params.items,
+        };
+        this.updateStore(store);
+        return { success: true };
+      }
+    }
+
+    return { success: true };
   }
 
   /**
