@@ -11,7 +11,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deploy": "npx vercel --prod",
+    "deploy": "npm run build && npx firebase-tools deploy --only hosting,firestore",
     "deploy:rules": "npx firebase-tools deploy --only firestore:rules,firestore:indexes",
     "migrate:dry-run": "tsx scripts/migrateStoreData.ts --dry-run",
     "migrate": "tsx scripts/migrateStoreData.ts"

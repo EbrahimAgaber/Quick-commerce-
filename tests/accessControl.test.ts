@@ -6,14 +6,15 @@ import { RESERVED_SLUGS } from '../src/services/storeManager';
 describe('Firestore Rules & Access Control (S1, S4, S6, S7)', () => {
   const rulesContent = fs.readFileSync(path.resolve(__dirname, '../firestore.rules'), 'utf-8');
 
-  it('rules strictly disallow client order creation (allow create: if false)', () => {
-    // Orders must be written exclusively by the Admin SDK inside createOrder transaction
+  it('rules allow shoppers to create validated orders and restrict management to store owners', () => {
     const orderMatch = rulesContent.match(/match \/orders\/\{orderId\} \{[\s\S]*?\}/);
     expect(orderMatch).not.toBeNull();
     const orderRules = orderMatch![0];
 
-    expect(orderRules).toContain('allow create: if false;');
-    expect(orderRules).not.toContain('isValidOrder');
+    expect(orderRules).toContain('allow create: if isValidId(orderId) && isValidNewOrder(request.resource.data, orderId);');
+    expect(orderRules).toContain('allow get, list: if isStoreOwner(storeId);');
+    expect(orderRules).toContain('returnStatus');
+    expect(orderRules).toContain('driverDeliveredAt');
   });
 
   it('rules protect private merchant subcollection from non-owners', () => {
@@ -25,13 +26,14 @@ describe('Firestore Rules & Access Control (S1, S4, S6, S7)', () => {
     expect(privateRules).toContain('allow read, write: if isStoreOwner(storeId);');
   });
 
-  it('rules protect order tracking projection and disallow client writes', () => {
+  it('rules protect order tracking projection and disallow arbitrary listing', () => {
     const trackingMatch = rulesContent.match(/match \/tracking\/\{orderId\} \{[\s\S]*?\}/);
     expect(trackingMatch).not.toBeNull();
     const trackingRules = trackingMatch![0];
 
     expect(trackingRules).toContain('allow get: if isValidId(orderId);');
-    expect(trackingRules).toContain('allow list, write: if false;');
+    expect(trackingRules).toContain('allow list: if false;');
+    expect(trackingRules).toContain('allow create: if isValidId(orderId)');
   });
 
   it('rules prevent creating or deleting the demo store store_aurora_01', () => {

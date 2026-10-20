@@ -836,6 +836,28 @@ export class StoreManager {
         const orderRef = doc(db, 'stores', storeId, 'orders', order.id);
         const sanitizedOrder = JSON.parse(JSON.stringify(order));
         await setDoc(orderRef, sanitizedOrder);
+
+        // Also persist minimal public tracking projection directly to Firestore
+        try {
+          const trackingRef = doc(db, 'tracking', order.id);
+          const cleanPhone = (order.customerPhone || '').replace(/\D/g, '');
+          await setDoc(trackingRef, {
+            orderId: order.id,
+            storeId,
+            status: order.status || 'Received',
+            timestamp: order.timestamp || new Date().toISOString(),
+            itemsSummary: order.itemsSummary || '',
+            grandTotal: order.grandTotal || 0,
+            shippingFee: order.shippingFee || 0,
+            paymentMethod: order.paymentMethod || '',
+            phoneLast4: cleanPhone.slice(-4),
+            returnStatus: null,
+            returnEligibleUntil: null,
+          });
+        } catch (trackErr) {
+          console.warn('Tracking projection write notice:', trackErr);
+        }
+
         return true;
       } catch (err) {
         console.warn('Could not write customer order to Firestore:', err);
@@ -977,8 +999,8 @@ export class StoreManager {
       }
     }
 
-    // 2. Direct client Firestore update (Owner only) using granular updateDoc
-    if (!isFirebaseConfigured || !auth.currentUser) return false;
+    // 2. Direct client Firestore update (Owner or Driver) using granular updateDoc
+    if (!isFirebaseConfigured || (!auth.currentUser && options?.source !== 'driver')) return false;
     try {
       const orderRef = doc(db, 'stores', storeId, 'orders', updatedOrder.id);
       const updatePayload: Record<string, any> = {
@@ -1003,6 +1025,24 @@ export class StoreManager {
       if (updatedOrder.returnedAt !== undefined) updatePayload.returnedAt = updatedOrder.returnedAt;
 
       await updateDoc(orderRef, updatePayload);
+
+      // Also sync minimal public tracking projection directly in Firestore
+      try {
+        const trackingRef = doc(db, 'tracking', updatedOrder.id);
+        const trackingPayload: Record<string, any> = {
+          status: updatedOrder.status,
+          updatedAt: new Date().toISOString(),
+        };
+        if (updatedOrder.trackingNotes !== undefined) trackingPayload.trackingNotes = updatedOrder.trackingNotes;
+        if (updatedOrder.driverDeliveredAt !== undefined) trackingPayload.driverDeliveredAt = updatedOrder.driverDeliveredAt;
+        if (updatedOrder.returnEligibleUntil !== undefined) trackingPayload.returnEligibleUntil = updatedOrder.returnEligibleUntil;
+        if (updatedOrder.returnStatus !== undefined) trackingPayload.returnStatus = updatedOrder.returnStatus;
+        if (updatedOrder.returnReason !== undefined) trackingPayload.returnReason = updatedOrder.returnReason;
+        await setDoc(trackingRef, trackingPayload, { merge: true });
+      } catch (trackErr) {
+        console.warn('Could not update tracking projection in Firestore:', trackErr);
+      }
+
       return true;
     } catch (err) {
       console.warn('Could not update order in Firestore:', err);
@@ -1043,14 +1083,50 @@ export class StoreManager {
           }),
         });
 
-        const data = await res.json();
-        if (res.ok && data.success) {
-          return { success: true };
-        } else {
-          return { success: false, error: data.error || 'تعذر تسجيل طلب الاسترجاع حالياً.' };
+        // Only parse if JSON (not HTML SPA rewrite)
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (res.ok && data.success) {
+            return { success: true };
+          } else {
+            return { success: false, error: data.error || 'تعذر تسجيل طلب الاسترجاع حالياً.' };
+          }
         }
       } catch (err: any) {
         console.warn('Return request API notice:', err);
+      }
+    }
+
+    // Direct Firestore update for shopper return request on Firebase Hosting
+    if (isFirebaseConfigured && params.storeId && params.storeId !== 'store_aurora_01') {
+      try {
+        const orderRef = doc(db, 'stores', params.storeId, 'orders', cleanId);
+        const nowIso = new Date().toISOString();
+        const returnPayload: Record<string, any> = {
+          status: 'Return Requested',
+          returnStatus: 'pending',
+          returnRequestedAt: nowIso,
+          returnReason: params.reason,
+          returnNotes: params.notes || '',
+          returnItems: params.items || [],
+          updatedAt: nowIso,
+        };
+        await updateDoc(orderRef, returnPayload);
+
+        try {
+          const trackingRef = doc(db, 'tracking', cleanId);
+          await setDoc(trackingRef, {
+            status: 'Return Requested',
+            returnStatus: 'pending',
+            returnReason: params.reason,
+            updatedAt: nowIso,
+          }, { merge: true });
+        } catch {}
+
+        return { success: true };
+      } catch (firestoreErr) {
+        console.warn('Direct Firestore return submission notice:', firestoreErr);
       }
     }
 

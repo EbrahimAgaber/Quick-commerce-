@@ -1,21 +1,20 @@
 # Production Deployment Guide (StoreLink)
 
-This guide provides step-by-step instructions for deploying StoreLink to **Vercel** (Vite frontend + serverless `/api/*`) and **Firebase** (Firestore, Auth, Storage, and Rules).
+This guide provides instructions for deploying StoreLink to **Firebase** (Firebase Hosting, Firestore, Auth, Storage, and Security Rules).
 
 ---
 
 ## 1. Prerequisites & Required Tools
 
 - **Node.js**: v20+ / v22 LTS
-- **Vercel CLI**: `npm i -g vercel`
-- **Firebase CLI**: `npm i -g firebase-tools`
+- **Firebase CLI**: `npm i -g firebase-tools` (or use `npx firebase-tools`)
 - **Git**: Installed and configured
 
 ---
 
 ## 2. Environment Variables Checklist
 
-Configure the following variables in Vercel Project Settings (or in `.env` for local testing):
+Configure client variables in `.env` or during the build process:
 
 ### Client Variables (`VITE_*`)
 ```env
