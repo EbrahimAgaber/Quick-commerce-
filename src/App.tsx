@@ -133,6 +133,14 @@ export default function App() {
   // Strict ownership check: merchant controls only appear if the logged-in user owns the active store
   const isStoreOwner = Boolean(currentUser && activeStore.ownerId === currentUser.id);
 
+  // Google Maps Platform Quota Exceeded In-App Banner State
+  const [isGmpQuotaExceeded, setIsGmpQuotaExceeded] = useState(false);
+  useEffect(() => {
+    const handler = () => setIsGmpQuotaExceeded(true);
+    window.addEventListener('gmp-quota-exceeded', handler);
+    return () => window.removeEventListener('gmp-quota-exceeded', handler);
+  }, []);
+
   // Emergency reset detection & Initial StoreStorage hydration
   useEffect(() => {
     if (typeof window !== 'undefined' && (window.location.search.includes('reset=true') || window.location.search.includes('repair=true'))) {
@@ -930,6 +938,24 @@ export default function App() {
         fontFamily: brand.fontFamily ? `'${brand.fontFamily}', sans-serif` : 'Cairo, sans-serif',
       }}
     >
+      {/* Google Maps Platform Quota Exceeded Sticky Notice Banner */}
+      {isGmpQuotaExceeded && (
+        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
+          <span>
+            Google Maps Platform quota reached. If you are the app owner, visit{' '}
+            <a
+              href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-semibold text-amber-950 hover:text-amber-800"
+            >
+              maps developer site
+            </a>{' '}
+            for instructions to update your account.
+          </span>
+        </div>
+      )}
+
       {/* Merchant Shopper Preview Toggle Toast (Strictly shown ONLY to the verified store owner) */}
       {isStoreOwner && (
         <div className="bg-stone-900 text-white text-xs px-4 py-1.5 flex items-center justify-between z-50">

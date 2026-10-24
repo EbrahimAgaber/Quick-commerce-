@@ -833,51 +833,71 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
                   {/* Detailed Address */}
                   <div>
-                    <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                    <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5">
                       <label className="block text-xs font-bold text-stone-800">
-                        الحي واسم الشارع أو العنوان الوطني <span className="text-red-500">*</span>
+                        الحي واسم الشارع أو تفاصيل العنوان <span className="text-red-500">*</span>
                       </label>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowLocationPickerModal(true)}
-                          className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                        >
-                          <Navigation className="w-3 h-3 text-emerald-600" />
-                          <span>تحديد بالدبوس على الخريطة</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleGetLocation}
-                          disabled={isLocating}
-                          className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
-                        >
-                          <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                          <span>{isLocating ? 'جاري التحديد...' : 'GPS تلقائي'}</span>
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={handleGetLocation}
+                        disabled={isLocating}
+                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                        <span>{isLocating ? 'جاري التحديد...' : 'تحديد بموقعي الحالي (GPS)'}</span>
+                      </button>
                     </div>
+
+                    {/* Prominent Delivery Map Pinning Card */}
+                    <div className="mb-2 p-3 bg-gradient-to-r from-blue-50/80 via-emerald-50/50 to-blue-50/80 border border-blue-200/80 rounded-2xl flex items-center justify-between gap-3 shadow-2xs">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Navigation className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-stone-900">
+                            {googleMapsUrl ? 'تم تحديد موقعك بدقة على الخريطة' : 'تحديد موقع التوصيل على الخريطة'}
+                          </p>
+                          <p className="text-[11px] text-stone-500">
+                            {googleMapsUrl
+                              ? 'جاهز للمندوب للوصول المباشر دون الحاجة للاتصال بك'
+                              : 'حرّك الخريطة أو ابحث عن حيك لتثبيت باب بيتك'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowLocationPickerModal(true)}
+                        style={{ backgroundColor: brand.accentColor }}
+                        className="px-3 py-2 text-white rounded-xl text-xs font-bold shrink-0 hover:opacity-90 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>{googleMapsUrl ? 'تعديل بالخريطة' : 'فتح الخريطة'}</span>
+                      </button>
+                    </div>
+
                     <input
                       type="text"
                       required
                       value={deliveryAddress}
                       onChange={(e) => setDeliveryAddress(e.target.value)}
                       placeholder="مثال: حي الياسمين، شارع أنس بن مالك، فيلا 12"
-                      className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm focus:outline-none"
+                      className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                     {googleMapsUrl && (
-                      <div className="mt-1.5 p-2 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center justify-between">
+                      <div className="mt-1.5 p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex items-center justify-between">
                         <span className="flex items-center gap-1.5 font-bold">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>تم ربط إحداثيات موقعك بالخريطة للمندوب</span>
+                          <span>إحداثيات التوصيل موثقة وجاهزة لمسار السائق المباشر</span>
                         </span>
                         <a
                           href={googleMapsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[11px] underline text-blue-700 font-bold"
+                          className="text-[11px] underline text-emerald-800 font-bold"
                         >
-                          معاينة
+                          معاينة الموقع
                         </a>
                       </div>
                     )}
@@ -1336,18 +1356,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         />
       )}
 
-      {/* Interactive Map Pin Location Picker (Permission-Free) */}
+      {/* Interactive Map Pin Location Picker */}
       {showLocationPickerModal && (
         <LocationPickerModal
           isOpen={showLocationPickerModal}
           onClose={() => setShowLocationPickerModal(false)}
           city={city === 'مدينة أخرى' && customCity.trim() ? customCity.trim() : city}
           initialAddress={deliveryAddress}
+          primaryColor={brand.primaryColor}
+          accentColor={brand.accentColor}
           onConfirm={(loc) => {
             setGoogleMapsUrl(loc.googleMapsUrl);
-            if (!deliveryAddress.trim() || deliveryAddress.startsWith('موقع محدد')) {
-              setDeliveryAddress(loc.address || `موقع محدد بالدبوس (${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)})`);
-            }
+            setDeliveryAddress(loc.address);
             setShowLocationPickerModal(false);
           }}
         />
