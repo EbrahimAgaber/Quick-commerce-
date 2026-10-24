@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Product, StoreSettings } from '../../types/store';
+import { Product, StoreSettings, getProductUnitLabel } from '../../types/store';
 import { Plus, Eye, Check, Flame, Package } from 'lucide-react';
 import { getZatcaComplianceType } from '../../utils/zatca';
 import { getOptimizedImageUrl } from '../../utils/imageOptimizer';
@@ -158,11 +158,16 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
         {/* Price & Action row */}
         <div className="pt-2 border-t flex items-center justify-between gap-2" style={{ borderColor: brand.neutralColor }}>
           <div className="flex flex-col">
-            <div className="flex items-baseline gap-1">
+            <div className="flex items-baseline gap-1 flex-wrap">
               <span className="text-base sm:text-lg font-black font-mono" style={{ color: brand.primaryColor }}>
                 {currentPrice.toLocaleString('en-US')}
               </span>
               <span className="text-xs font-semibold text-stone-500">{settings.currency}</span>
+              {product.unit && product.unit !== 'piece' && (
+                <span className="text-[11px] font-bold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded-md">
+                  / {getProductUnitLabel(product.unit, product.unitLabel)}
+                </span>
+              )}
             </div>
             {hasDiscount && (
               <span className="text-[11px] text-stone-400 line-through">

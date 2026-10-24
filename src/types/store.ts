@@ -108,6 +108,63 @@ export interface StoreSettings {
   geoCoordinates?: { lat: number; lng: number };
 }
 
+export type ProductUnit =
+  | 'piece'
+  | 'kg'
+  | 'g'
+  | 'meter'
+  | 'cm'
+  | 'liter'
+  | 'ml'
+  | 'dozen'
+  | 'box'
+  | 'pack'
+  | 'tola'
+  | 'waqiyyah'
+  | string;
+
+export interface StandardUnitMeta {
+  id: string;
+  label: string;
+  zatcaCode: string;
+  defaultStep: number;
+  defaultMin: number;
+  allowDecimal: boolean;
+}
+
+export const STANDARD_UNITS: StandardUnitMeta[] = [
+  { id: 'piece', label: 'حبة', zatcaCode: 'PCE', defaultStep: 1, defaultMin: 1, allowDecimal: false },
+  { id: 'kg', label: 'كجم', zatcaCode: 'KGM', defaultStep: 0.5, defaultMin: 0.5, allowDecimal: true },
+  { id: 'g', label: 'جرام', zatcaCode: 'GRM', defaultStep: 50, defaultMin: 50, allowDecimal: false },
+  { id: 'meter', label: 'متر', zatcaCode: 'MTR', defaultStep: 0.5, defaultMin: 0.5, allowDecimal: true },
+  { id: 'cm', label: 'سم', zatcaCode: 'CMT', defaultStep: 10, defaultMin: 10, allowDecimal: false },
+  { id: 'liter', label: 'لتر', zatcaCode: 'LTR', defaultStep: 0.5, defaultMin: 0.5, allowDecimal: true },
+  { id: 'ml', label: 'مل', zatcaCode: 'MLT', defaultStep: 50, defaultMin: 50, allowDecimal: false },
+  { id: 'dozen', label: 'درزن', zatcaCode: 'DZN', defaultStep: 1, defaultMin: 1, allowDecimal: false },
+  { id: 'box', label: 'كرتون', zatcaCode: 'BX', defaultStep: 1, defaultMin: 1, allowDecimal: false },
+  { id: 'pack', label: 'طقم / باقة', zatcaCode: 'PK', defaultStep: 1, defaultMin: 1, allowDecimal: false },
+  { id: 'tola', label: 'تولة', zatcaCode: 'GRM', defaultStep: 0.5, defaultMin: 0.5, allowDecimal: true },
+  { id: 'waqiyyah', label: 'أوقية', zatcaCode: 'GRM', defaultStep: 1, defaultMin: 1, allowDecimal: false },
+];
+
+export function getProductUnitMeta(unit?: string): StandardUnitMeta | undefined {
+  if (!unit) return undefined;
+  return STANDARD_UNITS.find((u) => u.id === unit || u.label === unit);
+}
+
+export function getProductUnitLabel(unit?: string, customLabel?: string): string {
+  if (customLabel && customLabel.trim()) return customLabel.trim();
+  if (!unit) return '';
+  const found = getProductUnitMeta(unit);
+  return found ? found.label : unit;
+}
+
+export function getProductZatcaUnitCode(unit?: string): string {
+  if (!unit) return 'PCE';
+  const found = getProductUnitMeta(unit);
+  return found ? found.zatcaCode : 'PCE';
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -125,6 +182,10 @@ export interface Product {
   colorName?: string;
   rating?: number;
   reviewsCount?: number;
+  unit?: ProductUnit;
+  unitLabel?: string;
+  minQuantity?: number;
+  quantityStep?: number;
 }
 
 export type OrderStatus =
@@ -147,6 +208,8 @@ export interface OrderItem {
   price: number;
   quantity: number;
   imageUrl?: string;
+  unit?: string;
+  unitLabel?: string;
 }
 
 export interface ReturnClaimItem {
@@ -226,6 +289,7 @@ export interface CartItem {
   product: Product;
   selectedVariant: string;
   quantity: number;
+  unit?: string;
 }
 
 export interface MerchantUser {

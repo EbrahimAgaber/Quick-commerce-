@@ -36,6 +36,7 @@ export interface ZatcaPhase2InvoiceInput {
     quantity: number;
     unitPrice: number;
     vatRate: number; // 0.15
+    unitCode?: string;
   }[];
   previousInvoiceHash?: string; // If null/empty, uses ZATCA_GENESIS_PIH_BASE64
 }
@@ -65,7 +66,7 @@ export class ZatcaPhase2Engine {
         (item, idx) => `
     <cac:InvoiceLine>
         <cbc:ID>${idx + 1}</cbc:ID>
-        <cbc:InvoicedQuantity unitCode="PCE">${item.quantity}</cbc:InvoicedQuantity>
+        <cbc:InvoicedQuantity unitCode="${item.unitCode || 'PCE'}">${Number(item.quantity).toFixed(item.quantity % 1 === 0 ? 0 : 2)}</cbc:InvoicedQuantity>
         <cbc:LineExtensionAmount currencyID="SAR">${(item.unitPrice * item.quantity).toFixed(2)}</cbc:LineExtensionAmount>
         <cac:TaxTotal>
             <cbc:TaxAmount currencyID="SAR">${(item.unitPrice * item.quantity * item.vatRate).toFixed(2)}</cbc:TaxAmount>

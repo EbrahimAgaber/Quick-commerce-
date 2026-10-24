@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CartItem, Order, PromoCode, StoreSettings } from '../../types/store';
+import { CartItem, Order, PromoCode, StoreSettings, getProductUnitLabel } from '../../types/store';
 import { StoreManager } from '../../services/storeManager';
 import { normalizeArabicDigits, normalizeSaudiPhoneNumber } from '../../utils/digits';
 import { trackBeginCheckout, trackPurchase } from '../../utils/analytics';
@@ -286,14 +286,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   // Pricing calculations
   const validItems = (items || []).filter((item) => item && item.product && typeof item.product === 'object' && item.product.id);
-  const subtotal = validItems.reduce((sum, item) => {
-    const hasSale =
-      typeof item.product.salePrice === 'number' &&
-      item.product.salePrice > 0 &&
-      item.product.salePrice < item.product.price;
-    const price = hasSale ? item.product.salePrice! : (item.product.price || 0);
-    return sum + price * (item.quantity || 1);
-  }, 0);
+  const subtotal = Math.round(
+    validItems.reduce((sum, item) => {
+      const hasSale =
+        typeof item.product.salePrice === 'number' &&
+        item.product.salePrice > 0 &&
+        item.product.salePrice < item.product.price;
+      const price = hasSale ? item.product.salePrice! : (item.product.price || 0);
+      const lineTotal = Math.round(price * (item.quantity || 1) * 100) / 100;
+      return sum + lineTotal;
+    }, 0) * 100
+  ) / 100;
 
   let discountAmount = 0;
   if (appliedPromo && appliedPromo.active && subtotal > 0) {
@@ -1163,17 +1166,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {/* Order items preview */}
               <div className="border border-stone-200 rounded-2xl p-3.5 bg-stone-50 space-y-2">
                 <span className="text-xs font-bold text-stone-800 block">
-                  المنتجات المطلوبة ({items.reduce((s, i) => s + i.quantity, 0)} قطع):
+                  المنتجات المطلوبة ({items.length} أصناف):
                 </span>
                 <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                  {items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-xs text-stone-700">
-                      <span>{item.quantity}× {item.product.name} {item.selectedVariant ? `(${item.selectedVariant})` : ''}</span>
-                      <span className="font-mono font-bold">
-                        {((item.product.salePrice || item.product.price) * item.quantity).toLocaleString('en-US')} {settings.currency}
-                      </span>
-                    </div>
-                  ))}
+                  {items.map((item, idx) => {
+                    const price = (item.product.salePrice && item.product.salePrice > 0) ? item.product.salePrice : item.product.price;
+                    const lineTotal = Math.round(price * item.quantity * 100) / 100;
+                    const unitLabel = getProductUnitLabel(item.product.unit, item.product.unitLabel);
+                    return (
+                      <div key={idx} className="flex justify-between text-xs text-stone-700">
+                        <span>
+                          <span className="font-semibold text-stone-900">{item.quantity} {unitLabel}</span>
+                          {' • '}
+                          {item.product.name} {item.selectedVariant ? `(${item.selectedVariant})` : ''}
+                        </span>
+                        <span className="font-mono font-bold">
+                          {lineTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} {settings.currency}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

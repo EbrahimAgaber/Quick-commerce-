@@ -204,9 +204,12 @@ export default async function handler(req: any, res: any) {
       const stockUpdatesToApply: { ref?: any; prodId: string; newStock?: number; inStock: boolean }[] = [];
 
       for (const item of items) {
-        if (typeof item.qty !== 'number' || item.qty <= 0 || !Number.isInteger(item.qty)) {
+        const rawQty = Number(item.qty);
+        if (typeof rawQty !== 'number' || isNaN(rawQty) || rawQty <= 0 || !Number.isFinite(rawQty)) {
           throw new Error('الكمية المحددة لبعض المنتجات غير صالحة.');
         }
+        // Clean quantity rounded to max 3 decimals (e.g., grams or fractional meters)
+        const cleanQty = Math.round(rawQty * 1000) / 1000;
 
         const prod = productMap.get(item.productId);
         if (!prod) {
@@ -219,12 +222,12 @@ export default async function handler(req: any, res: any) {
 
         // Check stock quantity if tracked
         if (typeof prod.stockQuantity === 'number') {
-          if (prod.stockQuantity < item.qty) {
+          if (prod.stockQuantity < cleanQty) {
             throw new Error(
-              `الكمية المطلوبة من "${prod.name}" (${item.qty}) غير متوفرة. المتبقي: ${prod.stockQuantity}`
+              `الكمية المطلوبة من "${prod.name}" (${cleanQty}) غير متوفرة. المتبقي: ${prod.stockQuantity}`
             );
           }
-          const remainingStock = prod.stockQuantity - item.qty;
+          const remainingStock = Math.round((prod.stockQuantity - cleanQty) * 1000) / 1000;
           const stillInStock = remainingStock > 0;
           prod.stockQuantity = remainingStock;
           prod.inStock = stillInStock;
@@ -247,15 +250,17 @@ export default async function handler(req: any, res: any) {
           prod.salePrice < prod.price;
         const unitPrice = hasSale ? prod.salePrice : prod.price;
 
-        subtotal += unitPrice * item.qty;
+        const lineTotal = Math.round(unitPrice * cleanQty * 100) / 100;
+        subtotal = Math.round((subtotal + lineTotal) * 100) / 100;
 
         verifiedOrderItems.push({
           productId: prod.id,
           name: prod.name,
           variant: item.variant || '',
           price: unitPrice,
-          quantity: item.qty,
+          quantity: cleanQty,
           imageUrl: prod.imageUrl || '',
+          unit: prod.unit || undefined,
         });
       }
 

@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Product, StoreSettings } from '../../types/store';
+import { 
+  Product, 
+  StoreSettings, 
+  getProductUnitLabel, 
+  getProductUnitMeta 
+} from '../../types/store';
 import { X, Check, ShoppingBag, MessageCircle, Sparkles, Share2, Flame, Package } from 'lucide-react';
 import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
 import { buildShareableStoreUrl } from '../../utils/urlRouter';
 import { getZatcaComplianceType } from '../../utils/zatca';
+import { normalizeArabicDigits } from '../../utils/digits';
 
 interface ProductModalProps {
   product: Product | null;
@@ -31,23 +37,35 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     textColor: '#0B253F',
   };
 
+  const unitLabel = getProductUnitLabel(product.unit, product.unitLabel);
+  const unitMeta = getProductUnitMeta(product.unit);
+  const isFractional = Boolean(unitMeta?.allowDecimal || ['kg', 'meter', 'liter', 'tola'].includes(product.unit || ''));
+  const step = product.quantityStep || (unitMeta?.defaultStep ?? (isFractional ? 0.5 : 1));
+  const minQty = product.minQuantity || (unitMeta?.defaultMin ?? (isFractional ? 0.5 : 1));
+
   const [selectedImage, setSelectedImage] = useState<string>(product.imageUrl);
   const [imgError, setImgError] = useState<boolean>(false);
   const realVariants = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي');
   const [selectedVariant, setSelectedVariant] = useState<string>(
     realVariants.length > 0 ? realVariants[0] : ''
   );
-  const [quantity, setQuantity] = useState<number>(1);
+  const [quantity, setQuantity] = useState<number>(minQty);
+  const [quantityInput, setQuantityInput] = useState<string>(String(minQty));
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [copiedShareLink, setCopiedShareLink] = useState<boolean>(false);
 
   // Sync state if product changes
   useEffect(() => {
     const realVars = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي');
+    const uMeta = getProductUnitMeta(product.unit);
+    const isFrac = Boolean(uMeta?.allowDecimal || ['kg', 'meter', 'liter', 'tola'].includes(product.unit || ''));
+    const initialMin = product.minQuantity || (uMeta?.defaultMin ?? (isFrac ? 0.5 : 1));
+
     setSelectedImage(product.imageUrl);
     setImgError(false);
     setSelectedVariant(realVars.length > 0 ? realVars[0] : '');
-    setQuantity(1);
+    setQuantity(initialMin);
+    setQuantityInput(String(initialMin));
     setIsSuccess(false);
   }, [product]);
 
@@ -74,9 +92,38 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const maxStock = typeof product.stockQuantity === 'number' ? product.stockQuantity : undefined;
   const isOutOfStock = !product.inStock || (maxStock !== undefined && maxStock <= 0);
 
+  const handleQuantityInputChange = (val: string) => {
+    const norm = normalizeArabicDigits(val).replace(/[^0-9.]/g, '');
+    setQuantityInput(norm);
+    const parsed = parseFloat(norm);
+    if (!isNaN(parsed) && parsed > 0) {
+      const clean = Math.round(parsed * 1000) / 1000;
+      setQuantity(clean);
+    }
+  };
+
+  const handleAdjustQuantity = (delta: number) => {
+    const current = typeof quantity === 'number' && quantity > 0 ? quantity : minQty;
+    let next = Math.round((current + delta) * 1000) / 1000;
+    if (next < minQty) next = minQty;
+    if (maxStock !== undefined && next > maxStock) next = maxStock;
+    setQuantity(next);
+    setQuantityInput(String(next));
+  };
+
+  const handleSetQuickQuantity = (val: number) => {
+    let next = val;
+    if (maxStock !== undefined && next > maxStock) next = maxStock;
+    setQuantity(next);
+    setQuantityInput(String(next));
+  };
+
+  const calculatedLineTotal = Math.round(currentPrice * quantity * 100) / 100;
+
   const handleAdd = () => {
     if (isOutOfStock) return;
-    onAddToCart(product, selectedVariant, quantity);
+    const finalQty = typeof quantity === 'number' && quantity > 0 ? quantity : minQty;
+    onAddToCart(product, selectedVariant, finalQty);
     setIsSuccess(true);
     setTimeout(() => {
       setIsSuccess(false);
@@ -85,7 +132,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   };
 
   const handleAskOnWhatsApp = () => {
-    const text = `مرحباً، أود الاستفسار عن: *${product.name}* عبر متجر ${settings.storeName}`;
+    const text = `مرحباً، أود الاستفسار عن: *${product.name}* (الكمية: ${quantity} ${unitLabel || 'حبة'}) عبر متجر ${settings.storeName}`;
     const url = createWhatsAppUrl(settings.whatsappNumber, text);
     window.open(url, '_blank');
   };
@@ -224,6 +271,11 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 {currentPrice.toLocaleString('en-US')}
               </span>
               <span className="text-sm font-bold text-stone-600">{settings.currency}</span>
+              {unitLabel && (
+                <span className="text-xs font-bold text-stone-700 bg-stone-100 px-2 py-0.5 rounded-lg border border-stone-200">
+                  / {unitLabel}
+                </span>
+              )}
               {hasDiscount && (
                 <span className="text-sm text-stone-400 line-through mr-2">
                   {product.price.toLocaleString('en-US')} {settings.currency}
@@ -282,30 +334,82 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               </div>
             )}
 
-            {/* Quantity Selector */}
-            <div className="mt-5 flex items-center justify-between">
-              <span className="text-xs font-bold text-stone-800">الكمية:</span>
-              <div className="flex items-center gap-3 bg-stone-100 rounded-xl p-1 border border-stone-200">
+            {/* Quantity Selector with Custom Amount & Quick Chips */}
+            <div className="mt-5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-stone-800">
+                  الكمية المطلوبة {unitLabel ? `(${unitLabel})` : ''}:
+                </span>
+                <span className="text-[11px] text-stone-500">
+                  (الخطوة: {step} {unitLabel} · الحد الأدنى: {minQty})
+                </span>
+              </div>
+
+              {/* Stepper with direct editable text input */}
+              <div className="flex items-center justify-between p-1.5 bg-stone-100 rounded-2xl border border-stone-200">
                 <button
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center shadow-xs cursor-pointer text-base"
+                  type="button"
+                  onClick={() => handleAdjustQuantity(-step)}
+                  disabled={quantity <= minQty}
+                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-xl bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center shadow-xs cursor-pointer text-lg"
                   aria-label="تقليل الكمية"
                 >
                   -
                 </button>
-                <span className="w-8 text-center text-sm font-mono font-bold text-stone-900">
-                  {quantity}
-                </span>
+
+                <div className="flex items-center justify-center gap-1.5 flex-1 px-2">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    dir="ltr"
+                    value={quantityInput}
+                    onChange={(e) => handleQuantityInputChange(e.target.value)}
+                    onBlur={() => {
+                      if (!quantity || quantity < minQty) {
+                        setQuantity(minQty);
+                        setQuantityInput(String(minQty));
+                      }
+                    }}
+                    className="w-20 text-center text-base sm:text-lg font-mono font-bold text-stone-900 bg-white border border-stone-200 rounded-lg py-1 px-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
+                  />
+                  {unitLabel && (
+                    <span className="text-xs font-semibold text-stone-600">
+                      {unitLabel}
+                    </span>
+                  )}
+                </div>
+
                 <button
-                  onClick={() =>
-                    setQuantity(maxStock !== undefined ? Math.min(maxStock, quantity + 1) : quantity + 1)
-                  }
+                  type="button"
+                  onClick={() => handleAdjustQuantity(step)}
                   disabled={maxStock !== undefined && quantity >= maxStock}
-                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center shadow-xs cursor-pointer text-base"
+                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-xl bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center shadow-xs cursor-pointer text-lg"
                   aria-label="زيادة الكمية"
                 >
                   +
                 </button>
+              </div>
+
+              {/* Quick Preset Amount Chips */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-[10px] text-stone-400 font-bold ml-1">كميات سريعة:</span>
+                {(isFractional ? [0.5, 1, 1.5, 2, 3] : [1, 2, 3, 5, 10]).map((preset) => {
+                  const isSelected = Math.abs(quantity - preset) < 0.001;
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => handleSetQuickQuantity(preset)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-white text-stone-700 hover:bg-stone-50 border-stone-200'
+                      }`}
+                    >
+                      {preset === 0.5 ? '½' : preset === 1.5 ? '1.5' : preset} {unitLabel || 'حبة'}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -331,7 +435,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 <>
                   <ShoppingBag className="w-5 h-5" style={{ color: brand.highlightColor || '#A5F3B6' }} />
                   <span>
-                    إضافة للسلة · {(currentPrice * quantity).toLocaleString('en-US')} {settings.currency}
+                    إضافة للسلة · {calculatedLineTotal.toLocaleString('en-US')} {settings.currency}
+                    {unitLabel ? ` (${quantity} ${unitLabel})` : ''}
                   </span>
                 </>
               ) : (

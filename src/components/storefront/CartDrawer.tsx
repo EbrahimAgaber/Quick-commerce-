@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CartItem, PromoCode, StoreSettings } from '../../types/store';
+import { CartItem, PromoCode, StoreSettings, getProductUnitLabel, getProductUnitMeta } from '../../types/store';
 import { X, Trash2, ShoppingBag, ArrowLeft, Sparkles, Truck, Tag, Check, Package, Loader2 } from 'lucide-react';
 
 interface CartDrawerProps {
@@ -237,11 +237,31 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 item.product.salePrice > 0 &&
                 item.product.salePrice < item.product.price;
               const unitPrice = hasSale ? item.product.salePrice! : item.product.price;
-              const itemTotal = unitPrice * item.quantity;
+              const itemTotal = Math.round(unitPrice * item.quantity * 100) / 100;
               const maxStock =
                 typeof item.product.stockQuantity === 'number'
                   ? item.product.stockQuantity
                   : undefined;
+
+              const uLabel = getProductUnitLabel(item.unit || item.product.unit, item.product.unitLabel);
+              const uMeta = getProductUnitMeta(item.unit || item.product.unit);
+              const isFrac = Boolean(uMeta?.allowDecimal || ['kg', 'meter', 'liter', 'tola'].includes(item.product.unit || ''));
+              const step = item.product.quantityStep || (uMeta?.defaultStep ?? (isFrac ? 0.5 : 1));
+              const minQty = item.product.minQuantity || (uMeta?.defaultMin ?? (isFrac ? 0.5 : 1));
+
+              const handleDecrease = () => {
+                const next = Math.round((item.quantity - step) * 1000) / 1000;
+                if (next < minQty || next <= 0) {
+                  onRemoveItem(index);
+                } else {
+                  onUpdateQuantity(index, next);
+                }
+              };
+
+              const handleIncrease = () => {
+                const next = Math.round((item.quantity + step) * 1000) / 1000;
+                onUpdateQuantity(index, maxStock !== undefined ? Math.min(maxStock, next) : next);
+              };
 
               return (
                 <div key={`${item.product.id}-${item.selectedVariant}-${index}`} className="pt-3 first:pt-0 flex gap-3">
@@ -290,27 +310,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                     {/* Quantity & Item Total */}
                     <div className="flex items-center justify-between pt-2">
-                      <div className="flex items-center gap-2 bg-stone-100 rounded-lg p-0.5 border border-stone-200">
+                      <div className="flex items-center gap-1.5 bg-stone-100 rounded-lg p-0.5 border border-stone-200">
                         <button
-                          onClick={() => onUpdateQuantity(index, item.quantity - 1)}
-                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center text-xs cursor-pointer"
+                          onClick={handleDecrease}
+                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center text-xs cursor-pointer shadow-2xs"
+                          aria-label="تقليل الكمية"
                         >
                           -
                         </button>
-                        <span className="w-6 text-center text-xs font-mono font-bold text-stone-900">
-                          {item.quantity}
+                        <span className="px-1 text-center text-xs font-mono font-bold text-stone-900 whitespace-nowrap">
+                          {item.quantity}{uLabel ? ` ${uLabel}` : ''}
                         </span>
                         <button
-                          onClick={() =>
-                            onUpdateQuantity(
-                              index,
-                              maxStock !== undefined
-                                ? Math.min(maxStock, item.quantity + 1)
-                                : item.quantity + 1
-                            )
-                          }
+                          onClick={handleIncrease}
                           disabled={maxStock !== undefined && item.quantity >= maxStock}
-                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center text-xs cursor-pointer"
+                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center text-xs cursor-pointer shadow-2xs"
+                          aria-label="زيادة الكمية"
                         >
                           +
                         </button>

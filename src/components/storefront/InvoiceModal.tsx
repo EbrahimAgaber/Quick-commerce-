@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
-import { Order, StoreSettings } from '../../types/store';
+import { Order, StoreSettings, getProductUnitLabel } from '../../types/store';
 import { 
   generateZatcaTLVBase64, 
   calculateVatBreakdown, 
@@ -388,7 +388,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                             <p className="text-[10px] text-stone-400">({item.variant})</p>
                           )}
                         </td>
-                        <td className="py-2 text-center font-mono">{item.quantity}</td>
+                        <td className="py-2 text-center font-mono">
+                          {item.quantity}{item.unit ? ` ${getProductUnitLabel(item.unit)}` : ''}
+                        </td>
                         <td className="py-2 text-left font-mono">{item.price.toFixed(2)}</td>
                         <td className="py-2 text-left font-mono font-bold">
                           {(item.price * item.quantity).toFixed(2)}

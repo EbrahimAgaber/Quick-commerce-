@@ -73,14 +73,14 @@ export class DistributedReservationEngine {
     const { tenantId, sku, quantity, customerId, ttlSeconds = 900 } = req;
     const token = req.idempotencyKey || `res_${crypto.randomUUID()}`;
 
-    // 1. Validate requested quantity (must be a positive integer)
-    if (!quantity || quantity <= 0 || !Number.isInteger(quantity)) {
+    // 1. Validate requested quantity (must be a positive number)
+    if (!quantity || quantity <= 0 || !Number.isFinite(quantity)) {
       return {
         success: false,
         reservationToken: token,
         remainingStock: this.getAvailableStock(tenantId, sku),
         status: 'INVALID_QUANTITY',
-        errorMessage: 'Quantity must be a positive integer.',
+        errorMessage: 'Quantity must be a positive number.',
       };
     }
 

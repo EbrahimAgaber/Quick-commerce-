@@ -169,7 +169,10 @@ export function handleCors(req: any, res: any): boolean {
   let finalOrigin = '*';
   if (allowedOriginEnv) {
     const allowedList = allowedOriginEnv.split(',').map((o) => o.trim().toLowerCase());
-    if (requestOrigin && allowedList.includes(requestOrigin.toLowerCase())) {
+    if (!requestOrigin) {
+      // Non-browser or same-origin request without Origin header
+      finalOrigin = allowedList[0] || '*';
+    } else if (allowedList.includes(requestOrigin.toLowerCase())) {
       finalOrigin = requestOrigin;
     } else if (allowedList.includes('*')) {
       finalOrigin = '*';

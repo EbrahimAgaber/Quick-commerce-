@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Product, StoreSettings } from '../../../types/store';
+import { 
+  Product, 
+  StoreSettings, 
+  STANDARD_UNITS, 
+  getProductUnitMeta, 
+  getProductUnitLabel, 
+  ProductUnit 
+} from '../../../types/store';
 import { compressImageFile } from '../../../utils/imageUploader';
 import { requestAIGeneration } from '../../../services/aiService';
 import { normalizeArabicDigits } from '../../../utils/digits';
@@ -13,7 +20,8 @@ import {
   Upload, 
   Plus, 
   Star, 
-  Tag 
+  Tag,
+  Scale
 } from 'lucide-react';
 
 interface ProductEditorModalProps {
@@ -41,6 +49,10 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
     category: 'منتجات مميزة',
     price: 150 as string | number,
     salePrice: 0 as string | number,
+    unit: 'piece' as ProductUnit,
+    unitLabel: '',
+    minQuantity: '' as string | number,
+    quantityStep: '' as string | number,
     variants: '',
     imageUrl: '',
     galleryImages: [] as string[],
@@ -61,6 +73,10 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
         category: editingProduct.category,
         price: editingProduct.price,
         salePrice: editingProduct.salePrice || 0,
+        unit: editingProduct.unit || 'piece',
+        unitLabel: editingProduct.unitLabel || '',
+        minQuantity: editingProduct.minQuantity !== undefined ? editingProduct.minQuantity : '',
+        quantityStep: editingProduct.quantityStep !== undefined ? editingProduct.quantityStep : '',
         variants: (editingProduct.variants || []).filter((v) => v && v !== 'الخيار الافتراضي').join(', '),
         imageUrl: editingProduct.imageUrl,
         galleryImages: editingProduct.galleryImages && editingProduct.galleryImages.length > 0 ? editingProduct.galleryImages : [editingProduct.imageUrl],
@@ -75,6 +91,10 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
         category: 'عام',
         price: 100,
         salePrice: 0,
+        unit: 'piece',
+        unitLabel: '',
+        minQuantity: '',
+        quantityStep: '',
         variants: '',
         imageUrl: '',
         galleryImages: [],
@@ -169,10 +189,13 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
     const normStock = productForm.stockQuantity !== '' ? normalizeArabicDigits(String(productForm.stockQuantity)) : '';
     const parsedStockQty =
       normStock !== '' && !isNaN(Number(normStock))
-        ? Math.max(0, Number(normStock))
+        ? Math.max(0, Math.round(Number(normStock) * 1000) / 1000)
         : undefined;
 
     const finalInStock = parsedStockQty !== undefined ? parsedStockQty > 0 && productForm.inStock : productForm.inStock;
+
+    const normMin = productForm.minQuantity !== '' ? Number(normalizeArabicDigits(String(productForm.minQuantity))) : undefined;
+    const normStep = productForm.quantityStep !== '' ? Number(normalizeArabicDigits(String(productForm.quantityStep))) : undefined;
 
     onSaveProduct({
       id: editingProduct?.id,
@@ -180,6 +203,10 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
       category: productForm.category.trim() || 'عام',
       price: basePrice,
       salePrice: discountPrice,
+      unit: productForm.unit,
+      unitLabel: productForm.unitLabel?.trim() || undefined,
+      minQuantity: normMin && normMin > 0 ? normMin : undefined,
+      quantityStep: normStep && normStep > 0 ? normStep : undefined,
       variants: variantsArray,
       imageUrl: primaryImg,
       galleryImages: finalGallery,
@@ -314,6 +341,104 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
                 placeholder="غير محدود"
                 className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
               />
+            </div>
+          </div>
+
+          {/* Unit of Measurement & Increments */}
+          <div className="p-3.5 bg-stone-50 border border-stone-200 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-stone-800">
+                <Scale className="w-4 h-4 text-[#2563EB]" />
+                <span>وحدة القياس وخيارات الشراء</span>
+              </div>
+              <span className="text-[11px] text-stone-500 font-medium">
+                تسمح للمتسوق بطلب كميات مخصصة (مثل 0.5 كجم أو 1.5 متر)
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">وحدة البيع</label>
+                <select
+                  value={productForm.unit}
+                  onChange={(e) => {
+                    const newUnit = e.target.value as ProductUnit;
+                    const meta = getProductUnitMeta(newUnit);
+                    setProductForm((prev) => ({
+                      ...prev,
+                      unit: newUnit,
+                      minQuantity: meta ? meta.defaultMin : (newUnit === 'piece' ? 1 : 0.5),
+                      quantityStep: meta ? meta.defaultStep : (newUnit === 'piece' ? 1 : 0.5),
+                    }));
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30 cursor-pointer"
+                >
+                  {STANDARD_UNITS.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.label} ({u.id})
+                    </option>
+                  ))}
+                  <option value="custom">وحدة مخصصة...</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">أقل كمية للطلب</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  dir="ltr"
+                  value={productForm.minQuantity}
+                  onChange={(e) => {
+                    const norm = normalizeArabicDigits(e.target.value);
+                    setProductForm({ ...productForm, minQuantity: norm });
+                  }}
+                  placeholder={productForm.unit === 'piece' ? '1' : '0.5'}
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">خطوة الزيادة (Step)</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  dir="ltr"
+                  value={productForm.quantityStep}
+                  onChange={(e) => {
+                    const norm = normalizeArabicDigits(e.target.value);
+                    setProductForm({ ...productForm, quantityStep: norm });
+                  }}
+                  placeholder={productForm.unit === 'piece' ? '1' : '0.5'}
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 font-mono focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
+                />
+              </div>
+            </div>
+
+            {productForm.unit === 'custom' && (
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">تسمية الوحدة المخصصة</label>
+                <input
+                  type="text"
+                  value={productForm.unitLabel}
+                  onChange={(e) => setProductForm({ ...productForm, unitLabel: e.target.value })}
+                  placeholder="مثال: لفة، عبوة، حزمة..."
+                  className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
+                />
+              </div>
+            )}
+
+            {/* Price display preview */}
+            <div className="flex items-center gap-2 text-[11px] text-stone-600 bg-white p-2.5 rounded-xl border border-stone-200/80">
+              <span className="font-bold text-stone-700">معاينة العرض:</span>
+              <span className="font-mono font-bold text-[#2563EB]">
+                {productForm.salePrice && Number(productForm.salePrice) > 0 ? productForm.salePrice : (productForm.price || 0)} {settings.currency}
+              </span>
+              <span>/ {getProductUnitLabel(productForm.unit, productForm.unitLabel) || 'حبة'}</span>
+              <span className="text-stone-400">|</span>
+              <span className="text-stone-500">
+                (أقل طلب: {productForm.minQuantity || (productForm.unit === 'piece' ? '1' : '0.5')}، الزيادة: {productForm.quantityStep || (productForm.unit === 'piece' ? '1' : '0.5')})
+              </span>
             </div>
           </div>
 

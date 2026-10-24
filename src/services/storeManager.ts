@@ -1,4 +1,4 @@
-import { StoreInstance, Product, Order, StoreSettings } from '../types/store';
+import { StoreInstance, Product, Order, OrderItem, StoreSettings, getProductUnitLabel } from '../types/store';
 import { 
   StoreStorage,
   DEFAULT_SETTINGS, 
@@ -925,10 +925,10 @@ export class StoreManager {
           store.products = store.products.map((prod) => {
             const orderedQty = order.items
               .filter((item) => item.productId === prod.id)
-              .reduce((sum, item) => sum + item.quantity, 0);
+              .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
             if (orderedQty > 0 && typeof prod.stockQuantity === 'number') {
               stockChanged = true;
-              const remaining = Math.max(0, prod.stockQuantity - orderedQty);
+              const remaining = Math.max(0, Math.round((prod.stockQuantity - orderedQty) * 1000) / 1000);
               return {
                 ...prod,
                 stockQuantity: remaining,
@@ -1390,17 +1390,11 @@ export class StoreManager {
 
       // Verify each item, check stock, and calculate true subtotal
       let subtotal = 0;
-      const verifiedItems: {
-        productId: string;
-        name: string;
-        variant?: string;
-        price: number;
-        quantity: number;
-        imageUrl?: string;
-      }[] = [];
+      const verifiedItems: OrderItem[] = [];
 
       for (const item of params.items) {
-        const qty = Math.max(1, Math.floor(Number(item.qty) || 1));
+        const rawQty = Number(item.qty);
+        const qty = Number.isFinite(rawQty) && rawQty > 0 ? Math.round(rawQty * 1000) / 1000 : 1;
         const prod = storeProducts.find((p) => p.id === item.productId);
 
         if (prod) {
@@ -1431,7 +1425,8 @@ export class StoreManager {
         const unitPrice = hasSale ? prod.salePrice! : prod.price;
         const prodName = prod.name;
 
-        subtotal += unitPrice * qty;
+        const lineTotal = Math.round(unitPrice * qty * 100) / 100;
+        subtotal = Math.round((subtotal + lineTotal) * 100) / 100;
 
         verifiedItems.push({
           productId: item.productId,
@@ -1440,6 +1435,7 @@ export class StoreManager {
           price: unitPrice,
           quantity: qty,
           imageUrl: prod?.imageUrl || '',
+          unit: prod?.unit || undefined,
         });
       }
 
@@ -1491,7 +1487,11 @@ export class StoreManager {
 
       const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee);
       const itemsSummary = verifiedItems
-        .map((i) => `${i.quantity}x ${i.name}${i.variant ? ` (${i.variant})` : ''}`)
+        .map((i) => {
+          const uLabel = getProductUnitLabel(i.unit);
+          const uStr = uLabel ? ` ${uLabel}` : 'x';
+          return `${i.quantity}${uStr} ${i.name}${i.variant ? ` (${i.variant})` : ''}`;
+        })
         .join('، ');
 
       const complianceType = getZatcaComplianceType(storeSettings);

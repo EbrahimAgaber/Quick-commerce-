@@ -274,7 +274,7 @@ export const CsvProductImportModal: React.FC<CsvProductImportModalProps> = ({
                   rows={8}
                   value={rawText}
                   onChange={(e) => handlePasteChange(e.target.value)}
-                  placeholder={`name,price,sale_price,category,stock,variants\nعطر اللافندر الملكي,250,199,عطور,40,"50ml, 100ml"\nساعة يد كلاسيكية,380,,إكسسوارات,15,جلد بني`}
+                  placeholder={`name,price,sale_price,category,stock,unit,min_quantity,quantity_step,variants\nعسل سدر جبلي,180,160,أغذية,30,kg,0.5,0.5,\nقماش كتان فاخر,45,,أقمشة,120,meter,1,0.5,"بيج, كحلي"\nساعة يد كلاسيكية,380,,إكسسوارات,15,piece,1,1,جلد بني`}
                   className="w-full p-3.5 text-xs font-mono bg-stone-50 border border-stone-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white resize-y"
                   dir="auto"
                 />

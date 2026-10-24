@@ -10,6 +10,7 @@ import {
   Edit3,
 } from 'lucide-react';
 import type { Product, StoreSettings } from '../../../types/store';
+import { getProductUnitLabel } from '../../../types/store';
 
 interface ProductsTabProps {
   products: Product[];
@@ -181,7 +182,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       >
                         {prod.inStock
                           ? prod.stockQuantity !== undefined
-                            ? `متوفر (${prod.stockQuantity})`
+                            ? `متوفر (${prod.stockQuantity} ${getProductUnitLabel(prod.unit, prod.unitLabel)})`
                             : 'متوفر'
                           : 'نفذت الكمية'}
                       </span>
@@ -191,12 +192,17 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                       {prod.name}
                     </h4>
 
-                    <div className="flex items-baseline gap-2 mt-1">
+                    <div className="flex items-baseline gap-1.5 mt-1">
                       <span className="font-black text-sm text-[#0F172A] font-mono">
                         {(prod.salePrice ?? prod.price).toLocaleString('en-US')} {settings.currency}
                       </span>
+                      {prod.unit && prod.unit !== 'piece' && (
+                        <span className="text-[11px] font-medium text-stone-500">
+                          / {getProductUnitLabel(prod.unit, prod.unitLabel)}
+                        </span>
+                      )}
                       {Boolean(prod.salePrice && prod.salePrice < prod.price) && (
-                        <span className="text-xs text-stone-400 line-through font-mono">
+                        <span className="text-xs text-stone-400 line-through font-mono mr-1">
                           {prod.price.toLocaleString('en-US')} {settings.currency}
                         </span>
                       )}

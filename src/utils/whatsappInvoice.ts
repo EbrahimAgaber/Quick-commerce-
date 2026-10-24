@@ -1,4 +1,4 @@
-import { Order, StoreSettings } from '../types/store';
+import { Order, StoreSettings, getProductUnitLabel } from '../types/store';
 import { normalizeArabicDigits, toWhatsAppNumber } from './digits';
 import { getZatcaComplianceType } from './zatca';
 
@@ -76,10 +76,12 @@ export function formatPaymentMethodLabel(method?: string): string {
  */
 export function buildWhatsAppInvoiceMessage(order: Order, settings: StoreSettings, storeSlug?: string): string {
   const lineItemsText = (order.items || [])
-    .map(
-      item =>
-        `• ${item.quantity}x ${item.name}${item.variant ? ` (الخيار: ${item.variant})` : ''} - ${(item.price * item.quantity).toLocaleString('en-US')} ${settings.currency}`
-    )
+    .map(item => {
+      const uLabel = getProductUnitLabel(item.unit);
+      const qtyStr = uLabel ? `${item.quantity} ${uLabel}` : `${item.quantity}x`;
+      const itemTotal = Math.round(item.price * item.quantity * 100) / 100;
+      return `• ${qtyStr} ${item.name}${item.variant ? ` (الخيار: ${item.variant})` : ''} - ${itemTotal.toLocaleString('en-US')} ${settings.currency}`;
+    })
     .join('\n');
 
   const shippingText =
