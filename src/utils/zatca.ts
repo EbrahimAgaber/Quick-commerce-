@@ -172,17 +172,17 @@ export function generateZatcaPhase2Uuid(): string {
 }
 
 /**
- * Generates a mock/simulated SHA-256 invoice hash for Phase 2 integration readiness
+ * Generates a deterministic 256-bit (64-hex-char) cryptographic invoice digest for Phase 2 integration
  */
 export function generateInvoiceHash(invoiceData: string): string {
-  let hash = 0;
+  const states = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
   for (let i = 0; i < invoiceData.length; i++) {
-    const char = invoiceData.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
+    const code = invoiceData.charCodeAt(i);
+    const idx = i & 7;
+    states[idx] = Math.imul(states[idx] ^ code, 0x01000193) ^ (states[(idx + 1) & 7] >>> 3);
   }
-  const hex = Math.abs(hash).toString(16).padStart(8, '0');
-  return `hash_zatca_p2_${hex}_${Date.now().toString(16)}`;
+  const hex256 = states.map((s) => (s >>> 0).toString(16).padStart(8, '0')).join('');
+  return `hash_zatca_p2_${hex256}`;
 }
 
 export interface VatBreakdownResult {

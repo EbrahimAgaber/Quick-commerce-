@@ -89,8 +89,11 @@ export function showDesktopNotification(order: Order, settings: StoreSettings): 
   }
 
   try {
+    const hasReceipt = Boolean(order.bankTransferReceiptUrl);
     const title = `🛍️ طلب جديد #${order.id} (${order.grandTotal.toLocaleString('en-US')} ${settings.currency})`;
-    const body = `العميل: ${order.customerName}\nالمدينة: ${order.city}\nطريقة الدفع: ${order.paymentMethod}\n${order.items.length} منتجات`;
+    const body = `العميل: ${order.customerName}\nالمدينة: ${order.city}\nطريقة الدفع: ${order.paymentMethod}${
+      hasReceipt ? ' (مرفق إيصال تحويل بنكي للمراجعة 🧾)' : ''
+    }\n${order.items.length} منتجات`;
 
     const notif = new Notification(title, {
       body,
@@ -118,6 +121,12 @@ export function buildTelegramMessage(order: Order, settings: StoreSettings): str
     .map((i) => `• ${i.quantity}x *${i.name}* ${i.variant ? `(${i.variant})` : ''} - ${(i.price * i.quantity).toLocaleString('en-US')} ${settings.currency}`)
     .join('\n');
 
+  const receiptNotice = order.bankTransferReceiptUrl
+    ? `\n🧾 *إيصال التحويل البنكي:* مرفق مع الطلب في لوحة التحكم${
+        order.bankTransferSenderName ? ` (المحول: ${order.bankTransferSenderName})` : ''
+      } — بانتظار المراجعة واعتماد الدفع ⏳`
+    : '';
+
   return (
     `🛍️ *طلب جديد من متجر ${settings.storeName}*\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -125,7 +134,7 @@ export function buildTelegramMessage(order: Order, settings: StoreSettings): str
     `👤 *العميل:* ${order.customerName}\n` +
     `📱 *الجوال:* ${order.customerPhone}\n` +
     `📍 *العنوان:* ${order.city} - ${order.deliveryAddress}\n` +
-    `💳 *طريقة الدفع:* ${order.paymentMethod}\n` +
+    `💳 *طريقة الدفع:* ${order.paymentMethod}${receiptNotice}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `📦 *المنتجات:*\n${lineItems}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -148,7 +157,11 @@ export function buildDiscordPayload(order: Order, settings: StoreSettings) {
     embeds: [
       {
         title: `🛍️ طلب جديد #${order.id}`,
-        description: `**العميل:** ${order.customerName}\n**الجوال:** ${order.customerPhone}\n**المدينة:** ${order.city}\n**الدفع:** ${order.paymentMethod}`,
+        description: `**العميل:** ${order.customerName}\n**الجوال:** ${order.customerPhone}\n**المدينة:** ${order.city}\n**الدفع:** ${order.paymentMethod}${
+          order.bankTransferReceiptUrl
+            ? `\n**إيصال التحويل:** مرفق في لوحة التحكم وبانتظار مراجعة التاجر 🧾⏳`
+            : ''
+        }`,
         color: 0x10b981, // Emerald green
         fields: [
           {

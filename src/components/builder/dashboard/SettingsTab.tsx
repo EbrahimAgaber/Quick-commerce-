@@ -681,6 +681,162 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 />
               </div>
 
+              {/* Payment Methods Visibility Toggles */}
+              <div className="sm:col-span-2 pt-3 border-t border-stone-100 space-y-3">
+                <div>
+                  <label className="block font-bold text-stone-900 text-xs sm:text-sm">
+                    تفعيل وتخصيص وسائل الدفع المتاحة للعملاء في المتجر
+                  </label>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    اختر وسائل الدفع التي ترغب بإظهارها للمتسوقين في صفحة إتمام الطلب (يجب تفعيل وسيلة واحدة على الأقل)
+                  </p>
+                </div>
+
+                {(() => {
+                  const currentMethods = Array.isArray(editableSettings.paymentMethods)
+                    ? editableSettings.paymentMethods
+                    : [
+                        'الدفع عند الاستلام (Cash on Delivery)',
+                        'تحويل بنكي فوري (Bank Transfer)',
+                        'بطاقات مدى / فيزا / Apple Pay',
+                      ];
+
+                  const hasCod = currentMethods.some(
+                    (m) => m.includes('الاستلام') || m.toLowerCase().includes('cod') || m.toLowerCase().includes('cash')
+                  );
+                  const hasBank = currentMethods.some(
+                    (m) => m.includes('بنكي') || m.includes('تحويل') || m.toLowerCase().includes('bank')
+                  );
+                  const hasCard = currentMethods.some(
+                    (m) =>
+                      m.includes('مدى') ||
+                      m.includes('بطاق') ||
+                      m.toLowerCase().includes('card') ||
+                      m.toLowerCase().includes('apple')
+                  );
+
+                  const togglePaymentOption = (
+                    type: 'cod' | 'bank' | 'card',
+                    canonicalLabel: string,
+                    checked: boolean
+                  ) => {
+                    const filtered = currentMethods.filter((m) => {
+                      if (type === 'cod') {
+                        return !(m.includes('الاستلام') || m.toLowerCase().includes('cod') || m.toLowerCase().includes('cash'));
+                      }
+                      if (type === 'bank') {
+                        return !(m.includes('بنكي') || m.includes('تحويل') || m.toLowerCase().includes('bank'));
+                      }
+                      return !(
+                        m.includes('مدى') ||
+                        m.includes('بطاق') ||
+                        m.toLowerCase().includes('card') ||
+                        m.toLowerCase().includes('apple')
+                      );
+                    });
+
+                    const nextMethods = checked ? [...filtered, canonicalLabel] : filtered;
+                    if (nextMethods.length === 0) {
+                      return; // Keep at least one payment method enabled
+                    }
+
+                    setEditableSettings({
+                      ...editableSettings,
+                      paymentMethods: nextMethods,
+                      ...(type === 'card' ? { enableOnlinePayments: checked } : {}),
+                    });
+                  };
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {/* 1. Cash on Delivery */}
+                      <label
+                        className={`flex items-start justify-between gap-2 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          hasCod
+                            ? 'bg-emerald-50/60 border-emerald-300 text-stone-900'
+                            : 'bg-stone-50 border-stone-200 text-stone-500'
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-xs block">💵 الدفع عند الاستلام</span>
+                          <span className="text-[10px] text-stone-500 block leading-relaxed">
+                            يدفع العميل نقداً أو بالشبكة للمندوب عند استلام الطلب
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={hasCod}
+                          onChange={(e) =>
+                            togglePaymentOption(
+                              'cod',
+                              'الدفع عند الاستلام (Cash on Delivery)',
+                              e.target.checked
+                            )
+                          }
+                          className="w-4 h-4 rounded text-emerald-600 cursor-pointer mt-0.5 shrink-0"
+                        />
+                      </label>
+
+                      {/* 2. Bank Transfer with Mandatory Receipt */}
+                      <label
+                        className={`flex items-start justify-between gap-2 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          hasBank
+                            ? 'bg-emerald-50/60 border-emerald-300 text-stone-900'
+                            : 'bg-stone-50 border-stone-200 text-stone-500'
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-xs block">🏦 التحويل البنكي (مع إيصال)</span>
+                          <span className="text-[10px] text-stone-500 block leading-relaxed">
+                            يحول العميل لحسابك البنكي ويلتزم بإرفاق الإيصال للمراجعة والاعتماد
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={hasBank}
+                          onChange={(e) =>
+                            togglePaymentOption(
+                              'bank',
+                              'تحويل بنكي فوري (Bank Transfer)',
+                              e.target.checked
+                            )
+                          }
+                          className="w-4 h-4 rounded text-emerald-600 cursor-pointer mt-0.5 shrink-0"
+                        />
+                      </label>
+
+                      {/* 3. Electronic Cards / Apple Pay */}
+                      <label
+                        className={`flex items-start justify-between gap-2 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          hasCard
+                            ? 'bg-emerald-50/60 border-emerald-300 text-stone-900'
+                            : 'bg-stone-50 border-stone-200 text-stone-500'
+                        }`}
+                      >
+                        <div className="space-y-0.5">
+                          <span className="font-bold text-xs block">💳 مدى / فيزا / Apple Pay</span>
+                          <span className="text-[10px] text-stone-500 block leading-relaxed">
+                            دفع إلكتروني فوري عبر بوابة الدفع المعتمدة
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={hasCard}
+                          onChange={(e) =>
+                            togglePaymentOption(
+                              'card',
+                              'بطاقات مدى / فيزا / Apple Pay',
+                              e.target.checked
+                            )
+                          }
+                          className="w-4 h-4 rounded text-emerald-600 cursor-pointer mt-0.5 shrink-0"
+                        />
+                      </label>
+                    </div>
+                  );
+                })()}
+              </div>
+
               <div>
                 <label className="block font-bold text-stone-700 mb-1">اسم البنك (للتحويل البنكي)</label>
                 <input
@@ -794,12 +950,35 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 <input
                   type="checkbox"
                   checked={editableSettings.enableOnlinePayments !== false}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    const currentMethods = Array.isArray(editableSettings.paymentMethods)
+                      ? editableSettings.paymentMethods
+                      : [
+                          'الدفع عند الاستلام (Cash on Delivery)',
+                          'تحويل بنكي فوري (Bank Transfer)',
+                          'بطاقات مدى / فيزا / Apple Pay',
+                        ];
+                    const withoutCard = currentMethods.filter(
+                      (m) =>
+                        !(
+                          m.includes('مدى') ||
+                          m.includes('بطاق') ||
+                          m.toLowerCase().includes('card') ||
+                          m.toLowerCase().includes('apple')
+                        )
+                    );
+                    const nextMethods = checked
+                      ? [...withoutCard, 'بطاقات مدى / فيزا / Apple Pay']
+                      : withoutCard.length > 0
+                      ? withoutCard
+                      : ['الدفع عند الاستلام (Cash on Delivery)'];
                     setEditableSettings({
                       ...editableSettings,
-                      enableOnlinePayments: e.target.checked,
-                    })
-                  }
+                      enableOnlinePayments: checked,
+                      paymentMethods: nextMethods,
+                    });
+                  }}
                   className="w-5 h-5 rounded text-emerald-600 cursor-pointer"
                 />
               </label>
@@ -1307,8 +1486,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
 
-          {/* Verified Captains Network */}
-          <MerchantCaptainsDirectory settings={editableSettings} storeSlug={storeSlug} />
+          {/* Verified Captains Network (Merchant View: Local Dispatch Only) */}
+          <MerchantCaptainsDirectory settings={editableSettings} storeSlug={storeSlug} isPlatformOwner={false} />
 
           {/* Store Pickup & ZATCA Tax Compliance */}
           <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">

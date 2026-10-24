@@ -137,15 +137,22 @@ service cloud.firestore {
     }
 
     // Delivery Captains Collection (Dynamic registration, owner activation, delivery stats)
+    function isPlatformOwner() {
+      return isSignedIn() && request.auth.token.role == 'platform_owner';
+    }
+
     match /captains/{captainId} {
-      allow read: if isSignedIn();
-      allow create: if isValidId(captainId) &&
+      allow get: if isPlatformOwner() || (isSignedIn() && request.auth.uid == captainId);
+      allow list: if isPlatformOwner();
+      allow create: if isSignedIn() && isValidId(captainId) &&
                     request.resource.data.keys().hasAll(['id', 'name', 'phone', 'city', 'status']) &&
                     request.resource.data.id == captainId &&
                     request.resource.data.name is string && request.resource.data.name.size() > 0 &&
                     request.resource.data.phone is string && request.resource.data.phone.size() >= 8 &&
-                    request.resource.data.status in ['pending_activation', 'active'];
-      allow update: if isSignedIn() && isValidId(captainId);
+                    request.resource.data.status == 'pending_activation';
+      allow update: if isPlatformOwner() ||
+                    (isSignedIn() && request.auth.uid == captainId && isValidId(captainId) &&
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['vehicleType', 'city', 'lastActiveAt']));
       allow delete: if false;
     }
   }

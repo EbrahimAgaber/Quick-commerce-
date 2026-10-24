@@ -33,6 +33,9 @@ interface CreateOrderRequest {
   paymentMethod: PaymentMethodType;
   promoCode?: string;
   utm?: Record<string, string>;
+  bankTransferReceiptUrl?: string;
+  bankTransferReceiptFileName?: string;
+  bankTransferSenderName?: string;
   hp?: string; // Honeypot field
   turnstileToken?: string;
 }
@@ -87,7 +90,17 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  const { storeId, items, customer, paymentMethod, promoCode, utm } = body;
+  const {
+    storeId,
+    items,
+    customer,
+    paymentMethod,
+    promoCode,
+    utm,
+    bankTransferReceiptUrl,
+    bankTransferReceiptFileName,
+    bankTransferSenderName,
+  } = body;
 
   if (!storeId || typeof storeId !== 'string' || storeId.length > 128) {
     return res.status(400).json({ error: 'معرف المتجر غير صالح.', success: false });
@@ -128,6 +141,13 @@ export default async function handler(req: any, res: any) {
   const validPaymentMethods: PaymentMethodType[] = ['cod', 'bank_transfer', 'card', 'apple_pay', 'stc_pay'];
   if (!validPaymentMethods.includes(paymentMethod)) {
     return res.status(400).json({ error: 'طريقة الدفع المختارة غير صالحة.', success: false });
+  }
+
+  if (paymentMethod === 'bank_transfer' && !bankTransferReceiptUrl?.trim()) {
+    return res.status(400).json({
+      error: 'يرجى إرفاق إيصال التحويل البنكي لإتمام الطلب.',
+      success: false,
+    });
   }
 
   const db = getAdminFirestore();
@@ -308,6 +328,7 @@ export default async function handler(req: any, res: any) {
 
       // 9. Initial Order Status
       const isOnlinePayment = ['card', 'apple_pay', 'stc_pay'].includes(paymentMethod);
+      const isBankTransfer = paymentMethod === 'bank_transfer';
       const initialStatus = isOnlinePayment ? 'Pending Payment' : 'Received';
 
       const itemsSummary = verifiedOrderItems
@@ -347,6 +368,10 @@ export default async function handler(req: any, res: any) {
         deliveryAddress: customer.address.trim(),
         landmarkNotes: customer.landmark?.trim() || '',
         paymentMethod,
+        paymentStatus: isBankTransfer ? 'pending_receipt_review' : 'pending_payment',
+        bankTransferReceiptUrl: isBankTransfer ? bankTransferReceiptUrl?.trim() || '' : null,
+        bankTransferReceiptFileName: isBankTransfer ? bankTransferReceiptFileName?.trim() || '' : null,
+        bankTransferSenderName: isBankTransfer ? bankTransferSenderName?.trim() || '' : null,
         itemsSummary,
         items: verifiedOrderItems,
         subtotal,
@@ -358,7 +383,11 @@ export default async function handler(req: any, res: any) {
         vatRate,
         zatcaComplianceType: complianceType,
         status: initialStatus,
-        trackingNotes: isOnlinePayment ? 'في انتظار استكمال الدفع الإلكتروني' : 'تم استلام الطلب وتأكيده بنجاح.',
+        trackingNotes: isBankTransfer
+          ? 'تحويل بنكي — تم إرفاق إيصال التحويل وبانتظار مراجعة التاجر واعتماد الدفع.'
+          : isOnlinePayment
+          ? 'في انتظار استكمال الدفع الإلكتروني'
+          : 'تم استلام الطلب وتأكيده بنجاح.',
         googleMapsUrl: customer.googleMapsUrl?.trim() || '',
         deliveryType: customer.deliveryType === 'pickup' ? 'pickup' : 'delivery',
         utm: utm || {},

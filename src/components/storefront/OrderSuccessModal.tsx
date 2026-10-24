@@ -85,11 +85,17 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
           </h3>
 
           <p className="text-xs text-stone-500 mt-1">
-            تم إشعار المتجر تلقائياً بطلبك وتسجيله بنجاح وجارٍ مراجعته وتجهيزه.
+            {order.paymentStatus === 'pending_receipt_review'
+              ? 'تم استلام طلبك وإيصال التحويل البنكي بنجاح، وحالة الدفع قيد المراجعة حتى يقوم التاجر بالتحقق من الإيصال واعتماده.'
+              : 'تم إشعار المتجر تلقائياً بطلبك وتسجيله بنجاح وجارٍ مراجعته وتجهيزه.'}
           </p>
           <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-            <span>تم إشعار صاحب المتجر مباشرة بدون الحاجة لإرسال أي رسالة</span>
+            <span>
+              {order.paymentStatus === 'pending_receipt_review'
+                ? 'تم إرسال إشعار الطلب ومرفق الإيصال للتاجر للمراجعة واعتماد الدفع 🧾⏳'
+                : 'تم إشعار صاحب المتجر مباشرة بدون الحاجة لإرسال أي رسالة'}
+            </span>
           </div>
         </div>
 

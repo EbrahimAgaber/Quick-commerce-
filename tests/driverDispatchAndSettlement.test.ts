@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractDriverOrderIdFromUrl } from '../src/utils/urlRouter';
+import { calculateDriverSettlement } from '../src/utils/driverDispatch';
 import { Order, StoreSettings } from '../src/types/store';
 
 describe('Local Shared Freelance Driver Dispatch & Settlement Engine', () => {
@@ -167,6 +168,31 @@ describe('Local Shared Freelance Driver Dispatch & Settlement Engine', () => {
 
       const unsettledOrder = updatedOrders.find((o) => o.id === 'ORD-104');
       expect(unsettledOrder?.driverSettled).toBeUndefined();
+    });
+
+    it('accurately tracks merchant debt to driver (netDueToDriver) when all delivered orders are prepaid online', () => {
+      const prepaidOrders = [
+        {
+          id: 'ORD-PRE-1',
+          paymentMethod: 'Moyasar (mada / Apple Pay)',
+          grandTotal: 220,
+          status: 'Delivered',
+        },
+        {
+          id: 'ORD-PRE-2',
+          paymentMethod: 'بطاقة مدى',
+          grandTotal: 180,
+          status: 'Delivered',
+        },
+      ] as unknown as Order[];
+
+      const settlement = calculateDriverSettlement(prepaidOrders, 20);
+      expect(settlement.totalDelivered).toBe(2);
+      expect(settlement.totalCodCash).toBe(0);
+      expect(settlement.totalDriverEarnings).toBe(40);
+      expect(settlement.netBalance).toBe(-40);
+      expect(settlement.netDueToMerchant).toBe(0);
+      expect(settlement.netDueToDriver).toBe(40);
     });
   });
 

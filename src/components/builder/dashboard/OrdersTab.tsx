@@ -10,6 +10,9 @@ import {
   MessageCircle,
   Eye,
   FileText,
+  CheckCircle2,
+  Clock,
+  X,
 } from 'lucide-react';
 import type { Order, OrderStatus, StoreSettings, OrderItem } from '../../../types/store';
 
@@ -50,6 +53,17 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
 }) => {
   const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
+  const [previewReceiptOrder, setPreviewReceiptOrder] = useState<Order | null>(null);
+
+  const isBankTransferOrder = (ord: Order) =>
+    Boolean(
+      ord.bankTransferReceiptUrl ||
+        (ord.paymentMethod || '').toLowerCase().includes('bank') ||
+        (ord.paymentMethod || '').includes('تحويل')
+    );
+
+  const isOrderPaid = (ord: Order) =>
+    ord.status === 'Paid' || ord.paymentStatus === 'paid' || Boolean(ord.paidAt);
 
   // Deduplicate orders by ID defensively
   const dedupedOrders = useMemo(() => {
@@ -64,9 +78,24 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
     return Array.from(map.values());
   }, [orders]);
 
-  // Accurate Metrics (Excludes Cancelled orders from Revenue)
-  const validOrders = useMemo(() => dedupedOrders.filter((o) => o.status !== 'Cancelled'), [dedupedOrders]);
-  const totalRevenue = useMemo(() => validOrders.reduce((sum, o) => sum + o.grandTotal, 0), [validOrders]);
+  // Accurate Metrics (Excludes Cancelled, Returned, and Refunded orders from Revenue)
+  const validOrders = useMemo(
+    () =>
+      dedupedOrders.filter(
+        (o) => o.status !== 'Cancelled' && o.status !== 'Returned' && o.status !== 'Refunded'
+      ),
+    [dedupedOrders]
+  );
+  const totalRevenue = useMemo(
+    () =>
+      Math.round(
+        validOrders.reduce((sum, o) => {
+          const net = (Number(o.grandTotal) || 0) - (Number(o.refundedAmount) || 0);
+          return sum + Math.max(0, net);
+        }, 0) * 100
+      ) / 100,
+    [validOrders]
+  );
   const deliveredOrders = useMemo(() => dedupedOrders.filter((o) => o.status === 'Delivered').length, [dedupedOrders]);
 
   const averageOrderValue = useMemo(() => {
@@ -276,7 +305,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                     value={ord.status}
                     onChange={(e) => onOrderStatusChange(ord.id, e.target.value as OrderStatus)}
                     className={`px-2.5 py-1 rounded-xl text-xs font-bold border focus:outline-none ${
-                      ord.status === 'Delivered'
+                      ord.status === 'Delivered' || ord.status === 'Paid'
                         ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                         : ord.status === 'Return Requested'
                         ? 'bg-amber-50 text-amber-800 border-amber-300'
@@ -292,6 +321,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                     }`}
                   >
                     <option value="Received">تم الاستلام</option>
+                    <option value="Paid">تم الدفع (مدفوع ✅)</option>
                     <option value="In Progress">قيد التجهيز</option>
                     <option value="Out for Delivery">جاري التوصيل</option>
                     <option value="Delivered">تم التوصيل بنجاح</option>
@@ -301,6 +331,58 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                     <option value="Cancelled">ملغي</option>
                   </select>
                 </div>
+
+                {/* Bank Transfer Receipt Status & Quick Verification */}
+                {isBankTransferOrder(ord) && (
+                  <div
+                    className={`p-2.5 rounded-xl border text-xs space-y-2 ${
+                      isOrderPaid(ord)
+                        ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                        : 'bg-amber-50/80 border-amber-200 text-amber-900'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold flex items-center gap-1.5">
+                        {isOrderPaid(ord) ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>تحويل بنكي — تم اعتماد الدفع ✅</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            <span>تحويل بنكي — بانتظار مراجعة الإيصال ⏳</span>
+                          </>
+                        )}
+                      </span>
+                      {ord.bankTransferSenderName && (
+                        <span className="text-[10px] opacity-80">المحوّل: {ord.bankTransferSenderName}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {ord.bankTransferReceiptUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewReceiptOrder(ord)}
+                          className="px-2.5 py-1.5 bg-white hover:bg-stone-50 text-stone-800 border border-stone-200 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>معاينة الإيصال المرفق</span>
+                        </button>
+                      )}
+                      {!isOrderPaid(ord) && (
+                        <button
+                          type="button"
+                          onClick={() => onOrderStatusChange(ord.id, 'Paid')}
+                          className="flex-1 py-1.5 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>اعتماد الإيصال وتأكيد الدفع</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-1 text-xs">
                   <div className="flex items-center justify-between">
@@ -405,13 +487,46 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                     <td className="p-3 font-black text-stone-900 font-mono">
                       <div>{ord.grandTotal.toLocaleString('en-US')} {settings.currency}</div>
                       <div className="text-[10px] font-normal text-stone-400">{ord.paymentMethod}</div>
+                      {isBankTransferOrder(ord) && (
+                        <div className="mt-1 space-y-1 font-sans">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isOrderPaid(ord)
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {isOrderPaid(ord) ? 'مدفوع - تم اعتماد الإيصال ✅' : 'بانتظار مراجعة الإيصال ⏳'}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {ord.bankTransferReceiptUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewReceiptOrder(ord)}
+                                className="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                عرض الإيصال 📄
+                              </button>
+                            )}
+                            {!isOrderPaid(ord) && (
+                              <button
+                                type="button"
+                                onClick={() => onOrderStatusChange(ord.id, 'Paid')}
+                                className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                تأكيد الدفع ✅
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </td>
                     <td className="p-3">
                       <select
                         value={ord.status}
                         onChange={(e) => onOrderStatusChange(ord.id, e.target.value as OrderStatus)}
                         className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border focus:outline-none ${
-                          ord.status === 'Delivered'
+                          ord.status === 'Delivered' || ord.status === 'Paid'
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                             : ord.status === 'Return Requested'
                             ? 'bg-amber-50 text-amber-800 border-amber-300'
@@ -427,6 +542,7 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         }`}
                       >
                         <option value="Received">تم الاستلام</option>
+                        <option value="Paid">تم الدفع (مدفوع ✅)</option>
                         <option value="In Progress">قيد التجهيز</option>
                         <option value="Out for Delivery">جاري التوصيل</option>
                         <option value="Delivered">تم التوصيل بنجاح</option>
@@ -492,6 +608,90 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
             </table>
           </div>
         </>
+      )}
+
+      {/* Bank Transfer Receipt Lightbox Modal */}
+      {previewReceiptOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/75 backdrop-blur-xs">
+          <div className="fixed inset-0" onClick={() => setPreviewReceiptOrder(null)} aria-hidden="true" />
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-stone-200 p-5 z-10 space-y-4">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-stone-900">
+                  إيصال التحويل البنكي — طلب #{previewReceiptOrder.id}
+                </h4>
+                <p className="text-xs text-stone-500">
+                  العميل: {previewReceiptOrder.customerName} • المبلغ: {previewReceiptOrder.grandTotal.toLocaleString('en-US')}{' '}
+                  {settings.currency}
+                </p>
+                {previewReceiptOrder.bankTransferSenderName && (
+                  <p className="text-[11px] text-stone-600 mt-0.5">
+                    اسم المحوّل: <strong>{previewReceiptOrder.bankTransferSenderName}</strong>
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewReceiptOrder(null)}
+                className="w-8 h-8 rounded-full bg-stone-100 text-stone-600 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-stone-50 rounded-2xl border border-stone-200 p-3 max-h-[60vh] overflow-auto flex items-center justify-center">
+              {previewReceiptOrder.bankTransferReceiptUrl?.startsWith('data:image/') ||
+              previewReceiptOrder.bankTransferReceiptUrl?.startsWith('http') ? (
+                <img
+                  src={previewReceiptOrder.bankTransferReceiptUrl}
+                  alt="إيصال التحويل البنكي"
+                  className="max-w-full max-h-[52vh] object-contain rounded-xl"
+                />
+              ) : (
+                <div className="text-center p-6 space-y-2 text-xs text-stone-600">
+                  <FileText className="w-8 h-8 text-stone-400 mx-auto" />
+                  <p>ملف إيصال مرفق ({previewReceiptOrder.bankTransferReceiptFileName || 'إيصال تحويل'})</p>
+                  {previewReceiptOrder.bankTransferReceiptUrl && (
+                    <a
+                      href={previewReceiptOrder.bankTransferReceiptUrl}
+                      download={previewReceiptOrder.bankTransferReceiptFileName || `receipt-${previewReceiptOrder.id}`}
+                      className="inline-block px-3 py-1.5 bg-stone-900 text-white rounded-lg font-bold"
+                    >
+                      تحميل ملف الإيصال
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              {!isOrderPaid(previewReceiptOrder) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOrderStatusChange(previewReceiptOrder.id, 'Paid');
+                    setPreviewReceiptOrder(null);
+                  }}
+                  className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>اعتماد الإيصال وتأكيد دفع الطلب الآن</span>
+                </button>
+              ) : (
+                <div className="flex-1 py-2 px-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold text-center">
+                  تم اعتماد هذا الإيصال وتأكيد الدفع بنجاح ✅
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setPreviewReceiptOrder(null)}
+                className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

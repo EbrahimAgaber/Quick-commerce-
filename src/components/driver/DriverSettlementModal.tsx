@@ -67,8 +67,10 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
     return isCOD ? sum + o.grandTotal : sum;
   }, 0);
 
-  const totalDriverEarnings = totalDeliveries * driverFeePerOrder;
-  const netDueToMerchant = Math.max(0, totalCodCash - totalDriverEarnings);
+  const totalDriverEarnings = Math.round(totalDeliveries * driverFeePerOrder * 100) / 100;
+  const netBalance = Math.round((totalCodCash - totalDriverEarnings) * 100) / 100;
+  const netDueToMerchant = netBalance > 0 ? netBalance : 0;
+  const netDueToDriver = netBalance < 0 ? Math.abs(netBalance) : 0;
 
   const handleSettleAndSendReceipt = () => {
     // Mark delivered orders as settled and deduplicate full order list
@@ -89,6 +91,11 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
     onUpdateOrders(updated);
     setSettledSuccess(true);
 
+    const netSettlementLine =
+      netDueToDriver > 0
+        ? `💳 *صافي المستحق للمندوب من إدارة المحل: ${netDueToDriver} ${settings.currency}*\n\n`
+        : `💰 *الصافي المستحق تسليمه لإدارة المحل: ${netDueToMerchant} ${settings.currency}*\n\n`;
+
     // Format settlement receipt for WhatsApp
     const message = 
       `📋 *تقرير تصفية الحساب اليومي للمندوب*\n` +
@@ -100,7 +107,7 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
       `• إجمالي الكاش المستلم من العملاء: ${totalCodCash} ${settings.currency}\n` +
       `• أتعاب التوصيل المستحقة للمندوب (${driverFeePerOrder} × ${totalDeliveries}): ${totalDriverEarnings} ${settings.currency}\n` +
       `--------------------------------\n` +
-      `💰 *الصافي المستحق تسليمه لإدارة المحل: ${netDueToMerchant} ${settings.currency}*\n\n` +
+      netSettlementLine +
       `✅ تمت المطابقة والتصفية بنجاح.`;
 
     const url = createWhatsAppUrl(driverPhone, message);
@@ -184,10 +191,21 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
           {/* Net Settlement Banner */}
           <div className="p-4 rounded-2xl bg-[#0B253F] text-white flex items-center justify-between shadow-md">
             <div>
-              <span className="text-xs text-blue-200 block">صافي الكاش المستحق تسليمه لإدارة المحل:</span>
-              <span className="text-2xl font-black font-mono text-emerald-300">
-                {netDueToMerchant.toLocaleString('en-US')} {settings.currency}
-              </span>
+              {netDueToDriver > 0 ? (
+                <>
+                  <span className="text-xs text-amber-200 block">صافي المستحق للمندوب من إدارة المحل:</span>
+                  <span className="text-2xl font-black font-mono text-amber-300">
+                    {netDueToDriver.toLocaleString('en-US')} {settings.currency}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs text-blue-200 block">صافي الكاش المستحق تسليمه لإدارة المحل:</span>
+                  <span className="text-2xl font-black font-mono text-emerald-300">
+                    {netDueToMerchant.toLocaleString('en-US')} {settings.currency}
+                  </span>
+                </>
+              )}
             </div>
             <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
               <ArrowDownLeft className="w-6 h-6 text-emerald-400" />

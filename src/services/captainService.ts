@@ -143,10 +143,9 @@ export class CaptainService {
     const all = this.getAllCaptains();
     const existing = all.find((c) => c.phone.replace(/\D/g, '') === cleanPhone);
     if (existing) {
-      this.setActiveSessionCaptain(existing.id);
       return {
-        success: true,
-        captain: existing,
+        success: false,
+        error: 'رقم الجوال مسجل مسبقاً. يرجى تسجيل الدخول باستخدام كود التفعيل المعتمد.',
       };
     }
 
@@ -219,14 +218,12 @@ export class CaptainService {
 
     const captain = all[captainIdx];
 
-    // Master activation codes for platform owners, or captain's designated activation code
-    const isMasterCode =
-      cleanCode === 'QUICK-CAPTAIN-2026' ||
-      cleanCode === 'SAMA-DELIVERY-2026' ||
-      cleanCode === 'CAPTAIN100';
-    const isSpecificCode = captain.activationCode && cleanCode === captain.activationCode.toUpperCase();
+    // Strict verification: only the captain's designated activation code issued by the platform owner is valid
+    const isSpecificCode = Boolean(
+      captain.activationCode && cleanCode === captain.activationCode.toUpperCase()
+    );
 
-    if (!isMasterCode && !isSpecificCode) {
+    if (!isSpecificCode) {
       return {
         success: false,
         error: 'كود التفعيل المدخل غير صحيح. يرجى التواصل مع إدارة المنصة للاتفاق على الرسوم والحصول على كود التفعيل المعتمد.',
@@ -368,9 +365,28 @@ export class CaptainService {
     const platformCommission = Number((deliveryFee * feeRate).toFixed(2));
     const captainNetEarnings = Number((deliveryFee - platformCommission).toFixed(2));
 
+    // Idempotency guard: prevent duplicate credit if orderId was already recorded
+    const completedIds: string[] = Array.isArray((captain as any).completedOrderIds)
+      ? (captain as any).completedOrderIds
+      : [];
+    if (orderId && completedIds.includes(orderId)) {
+      return {
+        success: true,
+        platformCommission,
+        captainNetEarnings,
+      };
+    }
+    if (orderId) {
+      (captain as any).completedOrderIds = [...completedIds, orderId];
+    }
+
     captain.completedDeliveries = (captain.completedDeliveries || 0) + 1;
-    captain.totalDeliveryFeesEarned = (captain.totalDeliveryFeesEarned || 0) + deliveryFee;
-    captain.totalPlatformCommission = (captain.totalPlatformCommission || 0) + platformCommission;
+    captain.totalDeliveryFeesEarned = Number(
+      ((captain.totalDeliveryFeesEarned || 0) + deliveryFee).toFixed(2)
+    );
+    captain.totalPlatformCommission = Number(
+      ((captain.totalPlatformCommission || 0) + platformCommission).toFixed(2)
+    );
     captain.lastActiveAt = new Date().toISOString();
 
     all[idx] = captain;

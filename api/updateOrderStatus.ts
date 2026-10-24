@@ -124,20 +124,26 @@ export default async function handler(req: any, res: any) {
         return res.status(403).json({ error: 'Driver not permitted to set this status.', success: false });
       }
 
-      // If driver is marking order as 'Delivered', verify delivery PIN!
-      if (status === 'Delivered') {
+      // If driver is marking order as 'Delivered' or 'Cancelled', verify delivery PIN or assigned courier phone!
+      if (status === 'Delivered' || status === 'Cancelled') {
         const expectedPin = existingOrder.deliveryPin || (existingOrder.id ? (existingOrder.id.replace(/\D/g, '').slice(-4) || '0000') : '');
         const providedPin = (req.body?.deliveryPin || req.body?.pin || '').toString().trim();
-        if (!isMerchantAuthenticated && (!providedPin || providedPin !== expectedPin)) {
+        const providedCourierPhone = (req.body?.courierPhone || '').toString().replace(/\D/g, '');
+        const assignedCourierPhone = (existingOrder.courierPhone || '').toString().replace(/\D/g, '');
+        const isAssignedCourier =
+          status === 'Cancelled' &&
+          Boolean(providedCourierPhone && assignedCourierPhone && assignedCourierPhone.endsWith(providedCourierPhone.slice(-8)));
+
+        if (!isMerchantAuthenticated && !isAssignedCourier && (!providedPin || providedPin !== expectedPin)) {
           return res.status(403).json({
-            error: 'رمز تأكيد التسليم (PIN) غير صحيح أو لم يتم إدخاله.',
+            error: 'رمز تأكيد التسليم (PIN) غير صحيح أو لم يتم التحقق من صلاحية المندوب.',
             success: false,
           });
         }
       }
     } else {
-      // Merchant actions require authentication if configured, or allow demo store updates
-      if (!isMerchantAuthenticated && cleanStoreId !== 'store_aurora_01' && process.env.NODE_ENV === 'production') {
+      // Strict merchant authentication required in production for all stores
+      if (!isMerchantAuthenticated && process.env.NODE_ENV === 'production') {
         return res.status(401).json({ error: 'Merchant authentication required.', success: false });
       }
     }
@@ -235,47 +241,60 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // 5. Restock inventory if requested upon order return or doorstep cancellation
+    // 5. Atomically restock inventory if requested upon order return or doorstep cancellation
     if (restockItems && (status === 'Returned' || status === 'Cancelled') && Array.isArray(existingOrder.items)) {
       try {
-        const storeData = storeSnap.data() || {};
-        let storeProducts = Array.isArray(storeData.products) ? [...storeData.products] : [];
-        let modified = false;
+        const applyRestock = async (tx?: any) => {
+          const freshStoreSnap = tx ? await tx.get(storeRef) : await storeRef.get();
+          const storeData = freshStoreSnap.data() || {};
+          const storeProducts = Array.isArray(storeData.products) ? [...storeData.products] : [];
+          let modified = false;
 
-        for (const item of existingOrder.items) {
-          const qtyToRestock = Number(item.quantity) || 1;
-          const prodIdx = storeProducts.findIndex((p: any) => p.id === item.productId);
-          if (prodIdx >= 0) {
-            const currentStock = Number(storeProducts[prodIdx].stockQuantity) || 0;
-            const newStock = currentStock + qtyToRestock;
-            storeProducts[prodIdx] = {
-              ...storeProducts[prodIdx],
-              stockQuantity: newStock,
-              inStock: newStock > 0,
-            };
-            modified = true;
-          }
-
-          // Also update subcollection doc if exists
-          try {
-            const pRef = storeRef.collection('products').doc(item.productId);
-            const pSnap = await pRef.get();
-            if (pSnap.exists) {
-              const pData = pSnap.data() || {};
-              const currentStock = Number(pData.stockQuantity) || 0;
+          for (const item of existingOrder.items) {
+            const qtyToRestock = Number(item.quantity) || 1;
+            const prodIdx = storeProducts.findIndex((p: any) => p.id === item.productId);
+            if (prodIdx >= 0) {
+              const currentStock = Number(storeProducts[prodIdx].stockQuantity) || 0;
               const newStock = currentStock + qtyToRestock;
-              await pRef.update({
+              storeProducts[prodIdx] = {
+                ...storeProducts[prodIdx],
                 stockQuantity: newStock,
                 inStock: newStock > 0,
-              });
+              };
+              modified = true;
             }
-          } catch (subErr) {
-            console.warn('Subcollection product restock notice:', subErr);
-          }
-        }
 
-        if (modified) {
-          await storeRef.update({ products: storeProducts, updatedAt: nowIso });
+            try {
+              const pRef = storeRef.collection('products').doc(item.productId);
+              const pSnap = tx ? await tx.get(pRef) : await pRef.get();
+              if (pSnap.exists) {
+                const pData = pSnap.data() || {};
+                const currentStock = Number(pData.stockQuantity) || 0;
+                const newStock = currentStock + qtyToRestock;
+                if (tx) {
+                  tx.update(pRef, { stockQuantity: newStock, inStock: newStock > 0 });
+                } else {
+                  await pRef.update({ stockQuantity: newStock, inStock: newStock > 0 });
+                }
+              }
+            } catch (subErr) {
+              console.warn('Subcollection product restock notice:', subErr);
+            }
+          }
+
+          if (modified) {
+            if (tx) {
+              tx.update(storeRef, { products: storeProducts, updatedAt: nowIso });
+            } else {
+              await storeRef.update({ products: storeProducts, updatedAt: nowIso });
+            }
+          }
+        };
+
+        if (typeof db.runTransaction === 'function') {
+          await db.runTransaction(async (tx: any) => applyRestock(tx));
+        } else {
+          await applyRestock();
         }
       } catch (restockErr) {
         console.warn('Restocking error:', restockErr);

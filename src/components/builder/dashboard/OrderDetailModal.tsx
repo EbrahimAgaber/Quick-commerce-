@@ -238,8 +238,70 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </div>
           )}
           <div><strong>طريقة الدفع:</strong> {order.paymentMethod}</div>
+          {order.bankTransferSenderName && (
+            <div><strong>اسم المحوّل (الحساب البنكي):</strong> {order.bankTransferSenderName}</div>
+          )}
           {order.landmarkNotes && <div><strong>ملاحظات العميل:</strong> {order.landmarkNotes}</div>}
         </div>
+
+        {/* Bank Transfer Receipt Inspection & Manual Payment Verification */}
+        {(order.bankTransferReceiptUrl ||
+          (order.paymentMethod || '').toLowerCase().includes('bank') ||
+          (order.paymentMethod || '').includes('تحويل')) && (
+          <div
+            className={`p-4 rounded-2xl border text-xs space-y-3 ${
+              order.status === 'Paid' || order.paymentStatus === 'paid' || order.paidAt
+                ? 'bg-emerald-50/80 border-emerald-300'
+                : 'bg-amber-50/80 border-amber-300'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-stone-900 flex items-center gap-1.5">
+                <FileText className="w-4 h-4 text-emerald-700" />
+                <span>إيصال التحويل البنكي وحالة الدفع</span>
+              </span>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  order.status === 'Paid' || order.paymentStatus === 'paid' || order.paidAt
+                    ? 'bg-emerald-200 text-emerald-900'
+                    : 'bg-amber-200 text-amber-900'
+                }`}
+              >
+                {order.status === 'Paid' || order.paymentStatus === 'paid' || order.paidAt
+                  ? 'مدفوع — تم اعتماد الإيصال ✅'
+                  : 'بانتظار مراجعة الإيصال ⏳'}
+              </span>
+            </div>
+
+            {order.bankTransferReceiptUrl && (
+              <div className="bg-white p-2.5 rounded-xl border border-stone-200 flex flex-col items-center gap-2">
+                {order.bankTransferReceiptUrl.startsWith('data:image/') ||
+                order.bankTransferReceiptUrl.startsWith('http') ? (
+                  <img
+                    src={order.bankTransferReceiptUrl}
+                    alt="إيصال التحويل البنكي"
+                    className="max-h-48 object-contain rounded-lg border border-stone-100"
+                  />
+                ) : (
+                  <div className="text-stone-600 py-2">
+                    ملف الإيصال المرفق: {order.bankTransferReceiptFileName || 'إيصال تحويل بنكي'}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!(order.status === 'Paid' || order.paymentStatus === 'paid' || order.paidAt) && (
+              <button
+                type="button"
+                onClick={() => onStatusChange(order.id, 'Paid')}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>اعتماد الإيصال وتحديد الطلب كمدفوع (Mark as Paid)</span>
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="space-y-2 max-h-60 overflow-y-auto">
           <div className="text-xs font-bold text-stone-700">المنتجات المطلوبة:</div>

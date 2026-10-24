@@ -197,6 +197,11 @@ export interface Order {
   invoiceHash?: string;
   paymentId?: string;
   paidAt?: string;
+  paymentStatus?: 'pending_payment' | 'pending_receipt_review' | 'paid' | 'failed' | 'refunded';
+  bankTransferReceiptUrl?: string;
+  bankTransferReceiptFileName?: string;
+  bankTransferSenderName?: string;
+  bankTransferVerifiedAt?: string;
   // Return & Refund Fields
   returnEligibleUntil?: string;
   returnRequestedAt?: string;

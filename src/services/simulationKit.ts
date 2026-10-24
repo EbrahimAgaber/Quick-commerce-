@@ -393,6 +393,9 @@ export class ShopperSimulator {
     deliveryType?: 'delivery' | 'pickup';
     paymentMethod: 'cod' | 'bank_transfer' | 'card' | 'apple_pay' | 'stc_pay';
     promoCode?: string;
+    bankTransferReceiptUrl?: string;
+    bankTransferReceiptFileName?: string;
+    bankTransferSenderName?: string;
   }): Promise<{ success: boolean; order?: Order; error?: string }> {
     if (!this.activeStore) throw new Error('No store loaded for shopper');
 
@@ -410,6 +413,13 @@ export class ShopperSimulator {
       },
       paymentMethod: params.paymentMethod,
       promoCode: params.promoCode,
+      bankTransferReceiptUrl:
+        params.bankTransferReceiptUrl ??
+        (params.paymentMethod === 'bank_transfer'
+          ? 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+          : undefined),
+      bankTransferReceiptFileName: params.bankTransferReceiptFileName,
+      bankTransferSenderName: params.bankTransferSenderName,
     });
 
     if (result.success && result.order) {

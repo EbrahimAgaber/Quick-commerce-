@@ -210,7 +210,7 @@ describe('Custom Domain, URL Customization, SEO/GEO & MCP Suite', () => {
       expect(dxbFallback.cityAr).toBe('الرياض');
     });
 
-    it('builds Google-compliant schema.org/Store JSON-LD structured data with aggregateRating and reviews', () => {
+    it('builds Google-compliant schema.org/Store JSON-LD structured data and omits fabricated reviews when unrated', () => {
       const store = StoreManager.getActiveStore();
       const jsonLd = buildStoreJsonLd(store, 'https://shop.mybrand.sa');
 
@@ -225,30 +225,33 @@ describe('Custom Domain, URL Customization, SEO/GEO & MCP Suite', () => {
       if (jsonLd.makesOffer && jsonLd.makesOffer.length > 0) {
         const firstProd = jsonLd.makesOffer[0];
         expect(firstProd['@type']).toBe('Product');
-        expect(firstProd.aggregateRating).toBeDefined();
-        expect(firstProd.aggregateRating['@type']).toBe('AggregateRating');
-        expect(firstProd.aggregateRating.ratingValue).toBeDefined();
-        expect(firstProd.aggregateRating.reviewCount).toBeGreaterThan(0);
-        expect(firstProd.review).toBeDefined();
-        expect(Array.isArray(firstProd.review)).toBe(true);
-        expect(firstProd.review[0]['@type']).toBe('Review');
         expect(firstProd.brand.name).toBe(store.settings.storeName);
         expect(firstProd.offers.priceValidUntil).toBeDefined();
         expect(firstProd.offers.itemCondition).toBe('https://schema.org/NewCondition');
       }
     });
 
-    it('builds standalone Google-compliant Product JSON-LD schema', () => {
+    it('builds standalone Google-compliant Product JSON-LD schema with genuine ratings and omits fabricated ones', () => {
       const store = StoreManager.getActiveStore();
-      const product = store.products[0];
-      const prodJsonLd = buildProductJsonLd(product, store.settings, 'https://shop.mybrand.sa');
+      const unratedProduct = { ...store.products[0], rating: undefined, reviewsCount: undefined };
+      const unratedJsonLd = buildProductJsonLd(unratedProduct, store.settings, 'https://shop.mybrand.sa');
+      expect(unratedJsonLd.aggregateRating).toBeUndefined();
+      expect(unratedJsonLd.review).toBeUndefined();
+
+      const ratedProduct = {
+        ...store.products[0],
+        rating: 4.9,
+        reviewsCount: 15,
+        reviews: [{ author: 'سارة', rating: 5, comment: 'ممتاز جداً', datePublished: '2026-10-01' }],
+      } as any;
+      const prodJsonLd = buildProductJsonLd(ratedProduct, store.settings, 'https://shop.mybrand.sa');
 
       expect(prodJsonLd['@context']).toBe('https://schema.org');
       expect(prodJsonLd['@type']).toBe('Product');
-      expect(prodJsonLd.name).toBe(product.name);
-      expect(prodJsonLd.sku).toBe(product.id);
+      expect(prodJsonLd.name).toBe(ratedProduct.name);
+      expect(prodJsonLd.sku).toBe(ratedProduct.id);
       expect(prodJsonLd.aggregateRating['@type']).toBe('AggregateRating');
-      expect(prodJsonLd.aggregateRating.ratingValue).toBeDefined();
+      expect(prodJsonLd.aggregateRating.ratingValue).toBe('4.9');
       expect(prodJsonLd.review[0]['@type']).toBe('Review');
       expect(prodJsonLd.offers.priceCurrency).toBe('SAR');
     });

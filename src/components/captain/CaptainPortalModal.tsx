@@ -44,6 +44,7 @@ export const CaptainPortalModal: React.FC<CaptainPortalModalProps> = ({ isOpen, 
 
   // Sign In / Activation
   const [loginPhone, setLoginPhone] = useState('');
+  const [loginActivationCode, setLoginActivationCode] = useState('');
   const [activationCodeInput, setActivationCodeInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -67,22 +68,23 @@ export const CaptainPortalModal: React.FC<CaptainPortalModalProps> = ({ isOpen, 
   }, [isOpen]);
 
   const loadOrdersForCaptain = (captain: DeliveryCaptain) => {
-    const allStores = StoreManager.getAllStores();
-    const allOrders: Order[] = [];
-    for (const store of allStores) {
-      if (Array.isArray(store.orders)) {
-        for (const order of store.orders) {
-          if (
-            order.status === 'Out for Delivery' ||
-            order.status === 'In Progress' ||
-            order.status === 'Received'
-          ) {
-            allOrders.push(order);
-          }
-        }
-      }
+    if (!captain || !captain.phone) {
+      setAssignedOrders([]);
+      return;
     }
-    setAssignedOrders(allOrders.slice(0, 8));
+    const cleanCaptainPhone = captain.phone.replace(/\D/g, '');
+    const activeStore = StoreManager.getActiveStore();
+    const storeOrders = Array.isArray(activeStore?.orders) ? activeStore.orders : [];
+    const assigned = storeOrders.filter((order) => {
+      const orderCourierPhone = (order.courierPhone || '').replace(/\D/g, '');
+      const isAssignedToCaptain =
+        Boolean(orderCourierPhone && cleanCaptainPhone && orderCourierPhone.endsWith(cleanCaptainPhone.slice(-8))) ||
+        (order as any).assignedCaptainId === captain.id;
+      const isActiveDeliveryStatus =
+        order.status === 'Out for Delivery' || order.status === 'In Progress';
+      return isAssignedToCaptain && isActiveDeliveryStatus;
+    });
+    setAssignedOrders(assigned.slice(0, 8));
   };
 
   if (!isOpen) return null;
@@ -116,6 +118,17 @@ export const CaptainPortalModal: React.FC<CaptainPortalModalProps> = ({ isOpen, 
     if (!captain) {
       setErrorMsg('لم يتم العثور على كابتن مسجل بهذا الرقم. يرجى التسجيل أولاً.');
       return;
+    }
+
+    // Security Gate: Active captains must verify their designated activation code to prevent phone-only takeover
+    if (captain.status === 'active') {
+      const cleanEnteredCode = loginActivationCode.trim().toUpperCase();
+      const expectedCode = (captain.activationCode || '').trim().toUpperCase();
+      if (!cleanEnteredCode || (expectedCode && cleanEnteredCode !== expectedCode)) {
+        setErrorMsg('يرجى إدخال كود التفعيل السري الخاص بحسابك للتحقق من هويتك.');
+        return;
+      }
+      CaptainService.setActiveSessionCaptain(captain.id);
     }
 
     setActiveCaptain(captain);
@@ -163,9 +176,12 @@ export const CaptainPortalModal: React.FC<CaptainPortalModalProps> = ({ isOpen, 
       source: 'driver',
     });
 
-    // Record commission
+    // Record commission using dynamic order/store shipping fee
     if (activeCaptain) {
-      CaptainService.recordDeliveryCompletion(activeCaptain.id, order.id, 25);
+      const activeStore = StoreManager.getActiveStore();
+      const deliveryFee =
+        order.shippingFee ?? activeStore?.settings.standardShippingRate ?? activeStore?.settings.driverFee ?? 15;
+      CaptainService.recordDeliveryCompletion(activeCaptain.id, order.id, deliveryFee);
       const updated = CaptainService.getCaptainById(activeCaptain.id);
       if (updated) setActiveCaptain(updated);
     }
@@ -256,6 +272,19 @@ export const CaptainPortalModal: React.FC<CaptainPortalModalProps> = ({ isOpen, 
                       onChange={(e) => setLoginPhone(e.target.value)}
                       placeholder="05XXXXXXXX"
                       className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-sm font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-700 mb-1">
+                      كود التفعيل السري (للحسابات المفعلة):
+                    </label>
+                    <input
+                      type="password"
+                      value={loginActivationCode}
+                      onChange={(e) => setLoginActivationCode(e.target.value.toUpperCase())}
+                      placeholder="CAP-XXXX (اتركه فارغاً إذا كان حسابك بانتظار التفعيل)"
+                      className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 text-xs font-mono uppercase tracking-wider"
                       dir="ltr"
                     />
                   </div>
@@ -373,7 +402,7 @@ export const CaptainPortalModal: React.FC<CaptainPortalModalProps> = ({ isOpen, 
                     required
                     value={activationCodeInput}
                     onChange={(e) => setActivationCodeInput(e.target.value.toUpperCase())}
-                    placeholder="مثال: QUICK-CAPTAIN-2026 أو كود مدينتك"
+                    placeholder="أدخل كود التفعيل المعتمد (مثال: CAP-XXXX)"
                     className="flex-1 px-3.5 py-2 bg-white border border-amber-300 rounded-xl text-stone-900 text-xs font-mono uppercase tracking-wider"
                     dir="ltr"
                   />
@@ -385,7 +414,7 @@ export const CaptainPortalModal: React.FC<CaptainPortalModalProps> = ({ isOpen, 
                   </button>
                 </div>
                 <p className="text-[10px] text-stone-500">
-                  كود تفعيل افتراضي معتمد للتجربة: <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-800 font-mono">QUICK-CAPTAIN-2026</code>
+                  يرجى إدخال كود التفعيل الخاص بك والممنوح من إدارة المنصة بعد اعتماد حسابك.
                 </p>
               </form>
 
@@ -448,12 +477,12 @@ export const CaptainPortalModal: React.FC<CaptainPortalModalProps> = ({ isOpen, 
                 <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200">
                   <span className="text-emerald-700 text-[10px] font-bold block mb-1">صافي الأرباح</span>
                   <span className="text-base font-black text-emerald-950">
-                    {(activeCaptain.totalDeliveryFeesEarned - activeCaptain.totalPlatformCommission).toFixed(1)} ر.س
+                    {(activeCaptain.totalDeliveryFeesEarned - activeCaptain.totalPlatformCommission).toFixed(2)} ر.س
                   </span>
                 </div>
                 <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200">
                   <span className="text-amber-700 text-[10px] font-bold block mb-1">عمولة المنصة ({activeCaptain.platformFeePercent}%)</span>
-                  <span className="text-base font-black text-amber-950">{activeCaptain.totalPlatformCommission.toFixed(1)} ر.س</span>
+                  <span className="text-base font-black text-amber-950">{activeCaptain.totalPlatformCommission.toFixed(2)} ر.س</span>
                 </div>
               </div>
 

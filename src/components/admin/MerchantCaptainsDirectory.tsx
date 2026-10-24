@@ -31,7 +31,7 @@ interface MerchantCaptainsDirectoryProps {
 export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps> = ({
   settings,
   storeSlug,
-  isPlatformOwner = true, // By default enabled so store owners can both dispatch & approve their couriers
+  isPlatformOwner = false, // Secure default: platform fee & approval controls restricted to platform owner
 }) => {
   const storeCity = settings.city || 'الرياض';
   const [activeTab, setActiveTab] = useState<'city_captains' | 'pending_approval' | 'all_network'>('city_captains');
@@ -96,8 +96,9 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
     window.open(`https://wa.me/${intlPhone}?text=${text}`, '_blank');
   };
 
-  // Owner Activates Captain with agreed fee percentage
+  // Owner Activates Captain with agreed fee percentage (restricted to Platform Owner)
   const handleOwnerActivate = (captain: DeliveryCaptain) => {
+    if (!isPlatformOwner) return;
     const feePct = customFees[captain.id] ?? captain.platformFeePercent ?? DEFAULT_PLATFORM_FEE_PERCENT;
     const res = CaptainService.ownerActivateCaptain(captain.id, feePct);
 
@@ -109,7 +110,9 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
     }
   };
 
-  const totalPlatformCommissionsEarned = captains.reduce((sum, c) => sum + (c.totalPlatformCommission || 0), 0);
+  const totalPlatformCommissionsEarned = isPlatformOwner
+    ? captains.reduce((sum, c) => sum + (c.totalPlatformCommission || 0), 0)
+    : 0;
 
   return (
     <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-5 shadow-sm">
@@ -123,7 +126,7 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
             <span>شبكة وبوابة كباتن التوصيل (On-Demand Captain Network)</span>
           </h3>
           <p className="text-xs text-stone-500 mt-0.5">
-            نظام ديناميكي متكامل لتسجيل الكباتن، اعتماد وتفعيل الحسابات بأكواد رسمية، وإسناد الطلبات مع تحصيل نسبة المنصة (1% - 2.5%)
+            نظام ديناميكي متكامل لتسجيل الكباتن، وإسناد وتوصيل طلبات المتجر بكفاءة وموثوقية
           </p>
         </div>
 
@@ -165,36 +168,40 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
           <span>كباتن مدينتك النشطين ({activeInCity.length})</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('pending_approval')}
-          className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'pending_approval'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : 'text-amber-800 bg-amber-50 hover:bg-amber-100'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5" />
-          <span>طلبات بانتظار تفعيل المالك</span>
-          {pendingCaptains.length > 0 && (
-            <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-black">
-              {pendingCaptains.length}
-            </span>
-          )}
-        </button>
+        {isPlatformOwner && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('pending_approval')}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'pending_approval'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'text-amber-800 bg-amber-50 hover:bg-amber-100'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>طلبات بانتظار تفعيل المالك</span>
+            {pendingCaptains.length > 0 && (
+              <span className="w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center font-black">
+                {pendingCaptains.length}
+              </span>
+            )}
+          </button>
+        )}
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('all_network')}
-          className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'all_network'
-              ? 'bg-stone-900 text-white shadow-xs'
-              : 'text-stone-600 hover:bg-stone-100'
-          }`}
-        >
-          <UserCheck className="w-3.5 h-3.5" />
-          <span>إجمالي شبكة الكباتن ({allActive.length})</span>
-        </button>
+        {isPlatformOwner && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('all_network')}
+            className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'all_network'
+                ? 'bg-stone-900 text-white shadow-xs'
+                : 'text-stone-600 hover:bg-stone-100'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>إجمالي شبكة الكباتن ({allActive.length})</span>
+          </button>
+        )}
       </div>
 
       {activatedNotice && (
@@ -235,7 +242,7 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
                   لا يوجد كباتن مسجلين حالياً في مدينة ({selectedCityFilter})
                 </p>
                 <p className="text-[11px] text-stone-500 max-w-md mx-auto leading-relaxed">
-                  يمكن لأي سائق في منطقتك التسجيل مباشرة عبر رابط بوابة الكباتن. بعد تسجيله سيظهر في قائمة "طلبات بانتظار تفعيل المالك" لتتفق معه على الرسوم وتمنحه كود التفعيل المعتمد.
+                  يمكن لأي سائق في منطقتك التسجيل مباشرة عبر رابط بوابة الكباتن. بعد تسجيله واعتماد حسابه من إدارة المنصة سيظهر هنا لإسناد الطلبات إليه مباشرة.
                 </p>
               </div>
 
@@ -297,7 +304,7 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
       )}
 
       {/* TAB 2: Pending Approval Gate (Owner Gate) */}
-      {activeTab === 'pending_approval' && (
+      {activeTab === 'pending_approval' && isPlatformOwner && (
         <div className="space-y-4">
           <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
             <div className="flex items-center gap-1.5 font-bold text-amber-950">
@@ -391,7 +398,7 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
       )}
 
       {/* TAB 3: All Network & Platform Earnings Overview */}
-      {activeTab === 'all_network' && (
+      {activeTab === 'all_network' && isPlatformOwner && (
         <div className="space-y-4">
           {/* Platform Commission Summary Card */}
           <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 flex flex-wrap items-center justify-between gap-4">

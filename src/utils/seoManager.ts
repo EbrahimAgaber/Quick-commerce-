@@ -249,9 +249,8 @@ export function buildProductJsonLd(
   settings: StoreSettings,
   storeUrl?: string
 ): Record<string, any> {
-  const seed = (p.id || p.name).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const ratingValue = p.rating ? p.rating.toFixed(1) : (4.7 + ((seed % 4) * 0.1)).toFixed(1);
-  const reviewCount = p.reviewsCount || (12 + (seed % 28));
+  const hasGenuineRatings = typeof p.rating === 'number' && p.rating > 0 && typeof p.reviewsCount === 'number' && p.reviewsCount > 0;
+  const productReviews = Array.isArray((p as any).reviews) ? (p as any).reviews : [];
 
   const safeUrl = storeUrl || (typeof window !== 'undefined' && window.location?.href ? window.location.href : 'https://quick-ecommerce-saas-app.web.app');
   const cleanOrigin = safeUrl.split('?')[0].replace(/\/$/, '');
@@ -282,30 +281,36 @@ export function buildProductJsonLd(
         name: settings.storeName,
       },
     },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: ratingValue,
-      reviewCount: reviewCount,
-      bestRating: '5',
-      worstRating: '1',
-    },
-    review: [
-      {
-        '@type': 'Review',
-        reviewRating: {
-          '@type': 'Rating',
-          ratingValue: '5',
-          bestRating: '5',
-          worstRating: '1',
-        },
-        author: {
-          '@type': 'Person',
-          name: 'عميل موثق',
-        },
-        datePublished: '2026-03-20',
-        reviewBody: `منتج عالي الجودة وتجربة شراء ممتازة من متجر ${settings.storeName} وتوصيل سريع وموثوق.`,
-      },
-    ],
+    ...(hasGenuineRatings
+      ? {
+          aggregateRating: {
+            '@type': 'AggregateRating',
+            ratingValue: p.rating!.toFixed(1),
+            reviewCount: p.reviewsCount,
+            bestRating: '5',
+            worstRating: '1',
+          },
+        }
+      : {}),
+    ...(productReviews.length > 0
+      ? {
+          review: productReviews.map((r: any) => ({
+            '@type': 'Review',
+            reviewRating: {
+              '@type': 'Rating',
+              ratingValue: String(r.rating ?? p.rating ?? 5),
+              bestRating: '5',
+              worstRating: '1',
+            },
+            author: {
+              '@type': 'Person',
+              name: r.author || 'عميل المتجر',
+            },
+            datePublished: r.datePublished || new Date().toISOString().split('T')[0],
+            reviewBody: r.comment || r.reviewBody || '',
+          })),
+        }
+      : {}),
   };
 }
 

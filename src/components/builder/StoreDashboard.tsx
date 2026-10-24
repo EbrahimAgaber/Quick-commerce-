@@ -395,9 +395,24 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     return Array.from(map.values());
   }, [orders]);
 
-  // Accurate Metrics (Excludes Cancelled orders from Revenue)
-  const validOrders = useMemo(() => dedupedOrders.filter((o) => o.status !== 'Cancelled'), [dedupedOrders]);
-  const totalRevenue = useMemo(() => validOrders.reduce((sum, o) => sum + o.grandTotal, 0), [validOrders]);
+  // Accurate Metrics (Excludes Cancelled, Returned, and Refunded orders from Revenue)
+  const validOrders = useMemo(
+    () =>
+      dedupedOrders.filter(
+        (o) => o.status !== 'Cancelled' && o.status !== 'Returned' && o.status !== 'Refunded'
+      ),
+    [dedupedOrders]
+  );
+  const totalRevenue = useMemo(
+    () =>
+      Math.round(
+        validOrders.reduce((sum, o) => {
+          const net = (Number(o.grandTotal) || 0) - (Number(o.refundedAmount) || 0);
+          return sum + Math.max(0, net);
+        }, 0) * 100
+      ) / 100,
+    [validOrders]
+  );
   const deliveredOrders = useMemo(() => dedupedOrders.filter((o) => o.status === 'Delivered').length, [dedupedOrders]);
   const inStockProducts = useMemo(() => products.filter((p) => p.inStock).length, [products]);
 
@@ -407,11 +422,19 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       if (o.id !== orderId) return o;
       const isDelivered = newStatus === 'Delivered';
       const isReturned = newStatus === 'Returned';
+      const isPaid = newStatus === 'Paid';
       const isCOD = o.paymentMethod.toLowerCase().includes('cod') || o.paymentMethod.includes('استلام');
 
       return {
         ...o,
         status: newStatus,
+        paidAt: isPaid ? (o.paidAt || nowIso) : o.paidAt,
+        paymentStatus: isPaid ? ('paid' as const) : o.paymentStatus,
+        bankTransferVerifiedAt: isPaid && o.bankTransferReceiptUrl ? (o.bankTransferVerifiedAt || nowIso) : o.bankTransferVerifiedAt,
+        trackingNotes:
+          isPaid && o.bankTransferReceiptUrl
+            ? 'تم التحقق من إيصال التحويل البنكي واعتماد الدفع بنجاح — الطلب قيد التجهيز ✅'
+            : o.trackingNotes,
         driverDeliveredAt: isDelivered ? (o.driverDeliveredAt || nowIso) : o.driverDeliveredAt,
         driverCashCollected: isDelivered && isCOD ? o.grandTotal : o.driverCashCollected,
         returnEligibleUntil: isDelivered
@@ -449,7 +472,13 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       if (updatedItem) setSelectedOrderDetail(updatedItem);
     }
 
-    setSyncMessage(newStatus === 'Delivered' ? '✅ تم تأكيد توصيل الطلب وتحديث التتبع السحابي' : '📦 تم تحديث حالة الطلب بنجاح');
+    setSyncMessage(
+      newStatus === 'Delivered'
+        ? '✅ تم تأكيد توصيل الطلب وتحديث التتبع السحابي'
+        : newStatus === 'Paid'
+        ? '✅ تم اعتماد الإيصال وتأكيد دفع الطلب بنجاح!'
+        : '📦 تم تحديث حالة الطلب بنجاح'
+    );
     setTimeout(() => setSyncMessage(null), 2500);
   };
 

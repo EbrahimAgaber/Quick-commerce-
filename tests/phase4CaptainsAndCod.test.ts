@@ -149,8 +149,8 @@ describe('Phase 1-4 Core Capabilities: City Mapping, COD Restriction, and Delive
       const failRes = CaptainService.activateCaptain(captain.id, 'WRONG-CODE');
       expect(failRes.success).toBe(false);
 
-      // Master code succeeds
-      const successRes = CaptainService.activateCaptain(captain.id, 'QUICK-CAPTAIN-2026');
+      // Designated owner activation code succeeds
+      const successRes = CaptainService.activateCaptain(captain.id, captain.activationCode!);
       expect(successRes.success).toBe(true);
       expect(successRes.captain?.status).toBe('active');
 
@@ -167,7 +167,7 @@ describe('Phase 1-4 Core Capabilities: City Mapping, COD Restriction, and Delive
         vehicleType: 'car'
       });
       const captain = reg.captain!;
-      CaptainService.activateCaptain(captain.id, 'QUICK-CAPTAIN-2026');
+      CaptainService.activateCaptain(captain.id, captain.activationCode!);
 
       const deliveryFee = 25; // SAR
       const completionRes = CaptainService.recordDeliveryCompletion(captain.id, 'ORD-TEST-1234', deliveryFee);

@@ -53,12 +53,19 @@ export function generateDriverWhatsAppUrl(params: {
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(params.message)}`;
 }
 
-export function calculateDriverSettlement(orders: Order[], driverFeePerOrder: number = 15): {
+export interface DriverSettlementResult {
   totalDelivered: number;
   totalCodCash: number;
   totalDriverEarnings: number;
+  netBalance: number;
   netDueToMerchant: number;
-} {
+  netDueToDriver: number;
+}
+
+export function calculateDriverSettlement(
+  orders: Order[],
+  driverFeePerOrder: number = 15
+): DriverSettlementResult {
   const delivered = orders.filter((o) => o.status === 'Delivered');
   const totalDelivered = delivered.length;
 
@@ -69,13 +76,17 @@ export function calculateDriverSettlement(orders: Order[], driverFeePerOrder: nu
     })
     .reduce((sum, o) => sum + (o.grandTotal || 0), 0);
 
-  const totalDriverEarnings = totalDelivered * driverFeePerOrder;
-  const netDueToMerchant = Math.max(0, totalCodCash - totalDriverEarnings);
+  const totalDriverEarnings = Math.round(totalDelivered * driverFeePerOrder * 100) / 100;
+  const netBalance = Math.round((totalCodCash - totalDriverEarnings) * 100) / 100;
+  const netDueToMerchant = netBalance > 0 ? netBalance : 0;
+  const netDueToDriver = netBalance < 0 ? Math.abs(netBalance) : 0;
 
   return {
     totalDelivered,
     totalCodCash,
     totalDriverEarnings,
+    netBalance,
     netDueToMerchant,
+    netDueToDriver,
   };
 }

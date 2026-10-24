@@ -190,8 +190,8 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
 
     const paymentId = paymentData?.id || `pay_${Math.random().toString(36).substring(2, 9)}`;
 
-    // Ensure paymentData reported success or we are in test mode
-    if (paymentData?.status && paymentData.status !== 'paid' && !settings.moyasarTestMode) {
+    // Strict rejection of any non-paid status reported by the gateway
+    if (paymentData?.status && paymentData.status !== 'paid') {
       setIsVerifying(false);
       setStatusMessage('فشلت عملية الدفع أو تم رفضها من قبل البنك. يرجى استخدام بطاقة أخرى.');
       if (onPaymentFailed) onPaymentFailed('فشلت عملية الدفع أو تم رفضها من قبل البنك.');

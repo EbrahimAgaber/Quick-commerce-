@@ -107,6 +107,10 @@ export default async function handler(req: any, res: any) {
           const bldg = addr.BuildingNumber || buildingNum;
           const postCode = addr.PostCode || '';
           const formatted = `${city}${district ? ` - ${district}` : ''}${street ? ` - ${street}` : ''} - مبنى ${bldg}`;
+          const matchedRegion =
+            Object.values(SPL_REGIONS).find((r) => r.city === city || city.includes(r.city)) ||
+            SPL_REGIONS[prefix] ||
+            SPL_REGIONS['RIYD'];
 
           return res.status(200).json({
             success: true,
@@ -118,8 +122,8 @@ export default async function handler(req: any, res: any) {
             postalCode: postCode,
             formattedAddress: formatted,
             location: {
-              lat: parseFloat(addr.Latitude) || 24.7136,
-              lng: parseFloat(addr.Longitude) || 46.6753,
+              lat: parseFloat(addr.Latitude) || matchedRegion.lat,
+              lng: parseFloat(addr.Longitude) || matchedRegion.lng,
             },
           });
         }

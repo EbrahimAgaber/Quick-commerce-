@@ -589,7 +589,18 @@ export class StoreManager {
       this.dispatchSyncStatus('syncing');
 
       // 1. Separate public settings from private merchant config (S4)
-      const { promoCodes = [], orderNotificationEmail = '', googleWebAppUrl = '', ...publicSettings } = store.settings;
+      // Keep bankDetails in publicSettings so shoppers can view the merchant's IBAN at checkout when Bank Transfer is enabled
+      const {
+        promoCodes = [],
+        orderNotificationEmail = '',
+        googleWebAppUrl = '',
+        driverName = null,
+        driverPhone = null,
+        driverFee = null,
+        notificationWebhookUrl = null,
+        ...publicSettings
+      } = store.settings;
+      const bankDetails = store.settings.bankDetails ?? null;
       const { orders: _orders, products = [], ...publicStoreData } = store;
 
       // Clean products deeply to eliminate any undefined fields that cause Firestore setDoc() to throw
@@ -615,6 +626,11 @@ export class StoreManager {
           promoCodes,
           orderNotificationEmail,
           googleWebAppUrl,
+          bankDetails,
+          driverName,
+          driverPhone,
+          driverFee,
+          notificationWebhookUrl,
           updatedAt: new Date().toISOString(),
         })
       );
@@ -731,6 +747,11 @@ export class StoreManager {
                 promoCodes: privData.promoCodes || mergedSettings.promoCodes || [],
                 orderNotificationEmail: privData.orderNotificationEmail || mergedSettings.orderNotificationEmail || '',
                 googleWebAppUrl: privData.googleWebAppUrl || mergedSettings.googleWebAppUrl || '',
+                bankDetails: privData.bankDetails || mergedSettings.bankDetails,
+                driverName: privData.driverName || mergedSettings.driverName,
+                driverPhone: privData.driverPhone || mergedSettings.driverPhone,
+                driverFee: privData.driverFee !== undefined ? privData.driverFee : mergedSettings.driverFee,
+                notificationWebhookUrl: privData.notificationWebhookUrl || mergedSettings.notificationWebhookUrl,
               };
             }
           } catch (privErr) {
@@ -1282,6 +1303,9 @@ export class StoreManager {
     paymentMethod: 'cod' | 'bank_transfer' | 'card' | 'apple_pay' | 'stc_pay';
     promoCode?: string;
     utm?: Record<string, string>;
+    bankTransferReceiptUrl?: string;
+    bankTransferReceiptFileName?: string;
+    bankTransferSenderName?: string;
   }): Promise<{ success: boolean; order?: Order; error?: string }> {
     // 1. Basic validation of required fields
     if (!params.customer?.name?.trim()) {
@@ -1296,6 +1320,12 @@ export class StoreManager {
     }
     if (!Array.isArray(params.items) || params.items.length === 0) {
       return { success: false, error: 'يرجى اختيار منتج واحد على الأقل.' };
+    }
+    if (params.paymentMethod === 'bank_transfer' && !params.bankTransferReceiptUrl?.trim()) {
+      return {
+        success: false,
+        error: 'يرجى إرفاق إيصال التحويل البنكي لإتمام الطلب.',
+      };
     }
 
     // 2. Try hardened serverless endpoint /api/createOrder first (if configured and responding with JSON)
@@ -1446,6 +1476,8 @@ export class StoreManager {
         ? 0
         : typeof storeSettings.shippingFee === 'number'
         ? storeSettings.shippingFee
+        : typeof storeSettings.standardShippingRate === 'number'
+        ? storeSettings.standardShippingRate
         : 25;
 
       if (
@@ -1472,6 +1504,7 @@ export class StoreManager {
 
       const orderId = generateOrderId('ORD');
       const deliveryPin = generateDeliveryPin();
+      const isBankTransfer = params.paymentMethod === 'bank_transfer';
       const verifiedOrder: Order = {
         id: orderId,
         storeSlug: store?.slug || storeSettings.storeSlug || (typeof params.storeId === 'string' && !params.storeId.startsWith('store_') ? params.storeId : undefined),
@@ -1490,6 +1523,10 @@ export class StoreManager {
         googleMapsUrl: params.customer.googleMapsUrl || '',
         deliveryType: params.customer.deliveryType || 'delivery',
         paymentMethod: params.paymentMethod,
+        paymentStatus: isBankTransfer ? 'pending_receipt_review' : 'pending_payment',
+        bankTransferReceiptUrl: isBankTransfer ? params.bankTransferReceiptUrl : undefined,
+        bankTransferReceiptFileName: isBankTransfer ? params.bankTransferReceiptFileName : undefined,
+        bankTransferSenderName: isBankTransfer ? params.bankTransferSenderName : undefined,
         itemsSummary: itemsSummary || `${verifiedItems.length} منتجات`,
         items: verifiedItems,
         subtotal,
@@ -1501,7 +1538,9 @@ export class StoreManager {
         vatRate: vatCalc.vatRate,
         zatcaComplianceType: complianceType,
         status: 'Received',
-        trackingNotes: isPickup
+        trackingNotes: isBankTransfer
+          ? 'تحويل بنكي — تم إرفاق إيصال التحويل وبانتظار مراجعة التاجر واعتماد الدفع.'
+          : isPickup
           ? 'طلب استلام من الفرع - بانتظار التجهيز'
           : 'تم تسجيل الطلب وتأكيده بنجاح.',
       };

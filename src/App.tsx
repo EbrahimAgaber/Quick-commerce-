@@ -65,6 +65,9 @@ const StorePoliciesModal = lazy(() =>
 const CaptainPortalModal = lazy(() =>
   import('./components/captain/CaptainPortalModal').then((m) => ({ default: m.CaptainPortalModal }))
 );
+const PlatformOwnerPortalModal = lazy(() =>
+  import('./components/admin/PlatformOwnerPortalModal').then((m) => ({ default: m.PlatformOwnerPortalModal }))
+);
 
 export default function App() {
   // Merchant User & Multi-Store Management
@@ -309,6 +312,17 @@ export default function App() {
         params.get('captain') === 'true' ||
         params.get('driver') === 'register' ||
         window.location.pathname.startsWith('/captain')
+      );
+    }
+    return false;
+  });
+  const [isPlatformOwnerPortalOpen, setIsPlatformOwnerPortalOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return (
+        params.get('view') === 'platform-owner' ||
+        params.get('platform_owner') === 'true' ||
+        window.location.pathname.startsWith('/platform-admin')
       );
     }
     return false;
@@ -640,18 +654,22 @@ export default function App() {
   const handleUpdateSettings = (newSettings: StoreSettings) => {
     StoreStorage.saveSettings(newSettings);
     setSettings(newSettings);
-    const updatedStore: StoreInstance = { ...activeStore, settings: newSettings };
-    StoreManager.updateStore(updatedStore, { immediateSync: true });
-    setActiveStore(updatedStore);
+    setActiveStore((prev) => {
+      const updatedStore: StoreInstance = { ...prev, settings: newSettings };
+      StoreManager.updateStore(updatedStore, { immediateSync: true });
+      return updatedStore;
+    });
     setAllStores(StoreManager.getAllStores());
   };
 
   const handleUpdateProducts = (newProducts: Product[]) => {
     StoreStorage.saveProducts(newProducts);
     setProducts(newProducts);
-    const updatedStore: StoreInstance = { ...activeStore, products: newProducts };
-    StoreManager.updateStore(updatedStore, { immediateSync: true });
-    setActiveStore(updatedStore);
+    setActiveStore((prev) => {
+      const updatedStore: StoreInstance = { ...prev, products: newProducts };
+      StoreManager.updateStore(updatedStore, { immediateSync: true });
+      return updatedStore;
+    });
     setAllStores(StoreManager.getAllStores());
   };
 
@@ -664,18 +682,22 @@ export default function App() {
     });
     StoreStorage.saveOrders(newOrders);
     setOrders(newOrders);
-    const updatedStore: StoreInstance = { ...activeStore, orders: newOrders };
-    StoreManager.updateStore(updatedStore);
-    setActiveStore(updatedStore);
+    setActiveStore((prev) => {
+      const updatedStore: StoreInstance = { ...prev, orders: newOrders };
+      StoreManager.updateStore(updatedStore);
+      return updatedStore;
+    });
     setAllStores(StoreManager.getAllStores());
   };
 
   const handleUpdatePolicies = (newPolicies: StorePolicy[]) => {
     StoreStorage.savePolicies(newPolicies);
     setPolicies(newPolicies);
-    const updatedStore: StoreInstance = { ...activeStore, policies: newPolicies };
-    StoreManager.updateStore(updatedStore);
-    setActiveStore(updatedStore);
+    setActiveStore((prev) => {
+      const updatedStore: StoreInstance = { ...prev, policies: newPolicies };
+      StoreManager.updateStore(updatedStore);
+      return updatedStore;
+    });
     setAllStores(StoreManager.getAllStores());
   };
 
@@ -1296,6 +1318,16 @@ export default function App() {
           <CaptainPortalModal
             isOpen={isCaptainPortalOpen}
             onClose={() => setIsCaptainPortalOpen(false)}
+          />
+        )}
+
+        {/* 12. Dedicated Platform Owner Super-Admin Portal (Phase 3) */}
+        {isPlatformOwnerPortalOpen && (
+          <PlatformOwnerPortalModal
+            isOpen={isPlatformOwnerPortalOpen}
+            onClose={() => setIsPlatformOwnerPortalOpen(false)}
+            settings={settings}
+            storeSlug={activeStore.slug}
           />
         )}
       </Suspense>

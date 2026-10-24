@@ -119,6 +119,15 @@ export function buildWhatsAppInvoiceMessage(order: Order, settings: StoreSetting
     ? `\n🔑 *كود الاستلام من الفرع:* \`${pin}\``
     : `\n🔑 *كود تأكيد التسليم للمندوب:* \`${pin}\` (زوّد المندوب بهذا الكود عند الاستلام)`;
 
+  const isBankTransfer =
+    (order.paymentMethod || '').toLowerCase().includes('bank') ||
+    (order.paymentMethod || '').includes('تحويل');
+  const bankTransferNotice = isBankTransfer
+    ? `\n🧾 *حالة التحويل البنكي:* تم إرفاق إيصال التحويل البنكي مع الطلب في لوحة تحكم المتجر${
+        order.bankTransferSenderName ? ` (باسم المحوّل: ${order.bankTransferSenderName})` : ''
+      } — بانتظار مراجعتكم واعتماد الدفع ⏳`
+    : '';
+
   const message = `السلام عليكم ورحمة الله وبركاته 🌟
 أود تأكيد طلبي الجديد من متجر *${settings.storeName}* 🛍️
 ━━━━━━━━━━━━━━━━━━━━
@@ -140,7 +149,7 @@ ${lineItemsText}
 💵 *المجموع الفرعي:* ${order.subtotal.toLocaleString('en-US')} ${settings.currency}${discountLine}
 🚚 *رسوم التوصيل:* ${shippingText}
 💰 *الإجمالي المستحق:* ${order.grandTotal.toLocaleString('en-US')} ${settings.currency}${taxDisclosureLine}
-💳 *طريقة الدفع:* ${formatPaymentMethodLabel(order.paymentMethod)}
+💳 *طريقة الدفع:* ${formatPaymentMethodLabel(order.paymentMethod)}${bankTransferNotice}
 ━━━━━━━━━━━━━━━━━━━━
 🔍 *تتبع حالة الطلب مباشرة:*
 ${trackingUrl}

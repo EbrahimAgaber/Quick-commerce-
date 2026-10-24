@@ -22,8 +22,11 @@ import {
   CheckCircle2, 
   ShoppingBag, 
   ShieldCheck,
-  Navigation
+  Navigation,
+  Upload,
+  FileCheck2
 } from 'lucide-react';
+import { buildWhatsAppInvoiceMessage, createWhatsAppUrl } from '../../utils/whatsappInvoice';
 import { MoyasarPaymentModal } from './MoyasarPaymentModal';
 import { LocationPickerModal } from './LocationPickerModal';
 import { isSameSaudiCity } from '../../utils/cityUtils';
@@ -136,6 +139,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [landmarkNotes, setLandmarkNotes] = useState(orderNotes || '');
   const [paymentMethod, setPaymentMethod] = useState(settings.paymentMethods[0] || 'الدفع عند الاستلام (COD)');
   const [copiedIban, setCopiedIban] = useState(false);
+  const [bankTransferReceiptDataUrl, setBankTransferReceiptDataUrl] = useState('');
+  const [bankTransferReceiptName, setBankTransferReceiptName] = useState('');
+  const [bankTransferSenderName, setBankTransferSenderName] = useState('');
+  const [isProcessingReceipt, setIsProcessingReceipt] = useState(false);
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
   const [isLocating, setIsLocating] = useState(false);
   const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
@@ -161,14 +168,101 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const isDifferentCity = deliveryType === 'delivery' && !isSameSaudiCity(shopperCity, storeCity);
   const isCodRestricted = Boolean(settings.restrictCodToStoreCity && isDifferentCity);
 
-  // Filter payment methods when out-of-city COD is restricted
+  // Filter payment methods when out-of-city COD is restricted or online payments are disabled
   const availablePaymentMethods = (settings.paymentMethods || []).filter((method) => {
     if (isCodRestricted) {
       const isCod = method.includes('استلام') || method.toLowerCase().includes('cod');
       if (isCod) return false;
     }
+    if (settings.enableOnlinePayments === false) {
+      const isCard =
+        method.includes('بطاق') ||
+        method.includes('فيزا') ||
+        method.includes('مدى') ||
+        method.includes('Apple') ||
+        method.toLowerCase().includes('card');
+      if (isCard) return false;
+    }
     return true;
   });
+
+  // Ensure selected paymentMethod stays within availablePaymentMethods
+  useEffect(() => {
+    if (availablePaymentMethods.length > 0 && !availablePaymentMethods.includes(paymentMethod)) {
+      setPaymentMethod(availablePaymentMethods[0]);
+    }
+  }, [availablePaymentMethods, paymentMethod]);
+
+  const isBankTransferSelected =
+    paymentMethod.includes('بنكي') ||
+    paymentMethod.includes('تحويل') ||
+    paymentMethod.toLowerCase().includes('bank');
+
+  const handleReceiptFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMsg('حجم ملف الإيصال كبير جداً. يرجى اختيار صورة أو ملف أقل من 10 ميجابايت.');
+      return;
+    }
+
+    setErrorMsg('');
+    setIsProcessingReceipt(true);
+    setBankTransferReceiptName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawDataUrl = String(event.target?.result || '');
+      // Compress images via canvas if in browser and file is an image
+      if (file.type.startsWith('image/') && typeof Image !== 'undefined' && typeof document !== 'undefined') {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const maxDim = 1000;
+            let width = img.width || 800;
+            let height = img.height || 800;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressed = canvas.toDataURL('image/jpeg', 0.72);
+              setBankTransferReceiptDataUrl(compressed || rawDataUrl);
+            } else {
+              setBankTransferReceiptDataUrl(rawDataUrl);
+            }
+          } catch {
+            setBankTransferReceiptDataUrl(rawDataUrl);
+          } finally {
+            setIsProcessingReceipt(false);
+          }
+        };
+        img.onerror = () => {
+          setBankTransferReceiptDataUrl(rawDataUrl);
+          setIsProcessingReceipt(false);
+        };
+        img.src = rawDataUrl;
+      } else {
+        setBankTransferReceiptDataUrl(rawDataUrl);
+        setIsProcessingReceipt(false);
+      }
+    };
+    reader.onerror = () => {
+      setErrorMsg('تعذر قراءة ملف الإيصال. يرجى المحاولة مرة أخرى.');
+      setIsProcessingReceipt(false);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Auto-switch payment method away from COD if restricted
   useEffect(() => {
@@ -407,7 +501,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     try {
       let mappedPaymentMethod: 'cod' | 'bank_transfer' | 'card' | 'apple_pay' | 'stc_pay' = 'cod';
-      if (paymentMethod.includes('تحويل')) {
+      if (paymentMethod.includes('تحويل') || paymentMethod.includes('بنكي') || paymentMethod.toLowerCase().includes('bank')) {
         mappedPaymentMethod = 'bank_transfer';
       } else if (paymentMethod.includes('بطاق') || paymentMethod.includes('فيزا') || paymentMethod.includes('مدى')) {
         mappedPaymentMethod = 'card';
@@ -415,6 +509,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         mappedPaymentMethod = 'apple_pay';
       } else if (paymentMethod.includes('STC')) {
         mappedPaymentMethod = 'stc_pay';
+      }
+
+      if (mappedPaymentMethod === 'bank_transfer' && !bankTransferReceiptDataUrl.trim()) {
+        setErrorMsg('يرجى إرفاق صورة إيصال التحويل البنكي لإتمام الطلب.');
+        setIsSubmitting(false);
+        return;
       }
 
       const serverRes = await StoreManager.submitOrderToServer({
@@ -435,11 +535,31 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         },
         paymentMethod: mappedPaymentMethod,
         promoCode: appliedPromo?.code,
+        bankTransferReceiptUrl: mappedPaymentMethod === 'bank_transfer' ? bankTransferReceiptDataUrl : undefined,
+        bankTransferReceiptFileName: mappedPaymentMethod === 'bank_transfer' ? bankTransferReceiptName : undefined,
+        bankTransferSenderName: mappedPaymentMethod === 'bank_transfer' ? bankTransferSenderName.trim() : undefined,
       });
 
       if (!serverRes.success || !serverRes.order) {
         setErrorMsg(serverRes.error || 'تعذر تسجيل الطلب في الخادم. يرجى مراجعة البيانات والمحاولة مجدداً.');
         return;
+      }
+
+      // If Bank Transfer, automatically send/open merchant WhatsApp notification with shopper name & order info
+      if (mappedPaymentMethod === 'bank_transfer' && settings.whatsappNumber?.trim()) {
+        try {
+          const waMsg = buildWhatsAppInvoiceMessage(
+            serverRes.order,
+            settings,
+            serverRes.order.storeSlug || settings.storeSlug
+          );
+          const waUrl = createWhatsAppUrl(settings.whatsappNumber, waMsg);
+          if (typeof window !== 'undefined' && typeof window.open === 'function') {
+            window.open(waUrl, '_blank');
+          }
+        } catch (waErr) {
+          console.debug('Auto WhatsApp notification note:', waErr);
+        }
       }
 
       // If online payment (Mada, Apple Pay, Visa/MC, STC Pay) is selected, trigger Moyasar Payment Modal
@@ -856,40 +976,128 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 })}
               </div>
 
-              {/* If Bank Transfer is selected, show copyable IBAN details */}
-              {paymentMethod.includes('بنكي') && settings.bankDetails?.iban && (
-                <div className="mt-3 p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-stone-800">{settings.bankDetails.bankName}</span>
-                    <span className="text-stone-500">حساب المتجر الرسمي</span>
-                  </div>
-                  <div className="text-stone-600">
-                    <span>المستفيد: </span>
-                    <span className="font-semibold text-stone-800">
-                      {settings.bankDetails.accountHolder}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-stone-200">
-                    <code className="text-stone-900 font-mono text-xs select-all" dir="ltr">
-                      {settings.bankDetails.iban}
-                    </code>
-                    <button
-                      type="button"
-                      onClick={handleCopyIban}
-                      className="flex items-center gap-1 text-[11px] font-bold py-0.5 px-2 rounded bg-stone-100 hover:bg-stone-200 text-stone-800 transition-colors cursor-pointer"
-                    >
-                      {copiedIban ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>تم النسخ!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>نسخ الآيبان</span>
-                        </>
+              {/* If Bank Transfer is selected, show copyable IBAN details and Mandatory Receipt Upload */}
+              {isBankTransferSelected && (
+                <div className="mt-3 p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-3 text-xs">
+                  {settings.bankDetails?.iban ? (
+                    <div className="space-y-2 pb-3 border-b border-stone-200">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-stone-800">{settings.bankDetails.bankName || 'الحساب البنكي للمتجر'}</span>
+                        <span className="text-stone-500">حساب المتجر الرسمي</span>
+                      </div>
+                      {settings.bankDetails.accountHolder && (
+                        <div className="text-stone-600">
+                          <span>المستفيد: </span>
+                          <span className="font-semibold text-stone-800">
+                            {settings.bankDetails.accountHolder}
+                          </span>
+                        </div>
                       )}
-                    </button>
+                      <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-stone-200">
+                        <code className="text-stone-900 font-mono text-xs select-all" dir="ltr">
+                          {settings.bankDetails.iban}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={handleCopyIban}
+                          className="flex items-center gap-1 text-[11px] font-bold py-0.5 px-2 rounded bg-stone-100 hover:bg-stone-200 text-stone-800 transition-colors cursor-pointer"
+                        >
+                          {copiedIban ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>تم النسخ!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>نسخ الآيبان</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-stone-600 pb-2 border-b border-stone-200">
+                      يرجى التحويل إلى الحساب البنكي للمتجر ثم إرفاق صورة إيصال التحويل أدناه.
+                    </div>
+                  )}
+
+                  {/* Sender Name (Optional) */}
+                  <div>
+                    <label className="block font-bold text-stone-700 mb-1">
+                      اسم المحوّل (صاحب الحساب المحوّل منه)
+                    </label>
+                    <input
+                      type="text"
+                      value={bankTransferSenderName}
+                      onChange={(e) => setBankTransferSenderName(e.target.value)}
+                      placeholder="مثال: محمد عبدالله..."
+                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-xs focus:outline-none focus:border-stone-400"
+                    />
+                  </div>
+
+                  {/* Mandatory Receipt Upload */}
+                  <div className="space-y-1.5">
+                    <label className="block font-bold text-stone-900">
+                      إرفاق إيصال التحويل البنكي <span className="text-red-500">* (إلزامي لإتمام الطلب)</span>
+                    </label>
+                    <p className="text-[11px] text-stone-500 leading-relaxed">
+                      يرجى رفع صورة واضحة لإيصال التحويل البنكي، وسيتم إرسالها تلقائياً للتاجر مع تفاصيل طلبك لمراجعتها وتأكيد الدفع.
+                    </p>
+
+                    <label
+                      className={`mt-1 flex flex-col items-center justify-center p-4 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${
+                        bankTransferReceiptDataUrl
+                          ? 'border-emerald-400 bg-emerald-50/50'
+                          : 'border-stone-300 hover:border-stone-400 bg-white'
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={handleReceiptFileChange}
+                        className="hidden"
+                        data-testid="bank-transfer-receipt-input"
+                      />
+
+                      {isProcessingReceipt ? (
+                        <div className="flex items-center gap-2 text-stone-600 py-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>جارٍ تجهيز وإرفاق الإيصال...</span>
+                        </div>
+                      ) : bankTransferReceiptDataUrl ? (
+                        <div className="w-full flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                              <FileCheck2 className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0 text-right">
+                              <span className="font-bold text-emerald-900 block truncate">
+                                تم إرفاق إيصال التحويل بنجاح ✅
+                              </span>
+                              <span className="text-[10px] text-emerald-700 block truncate">
+                                {bankTransferReceiptName || 'receipt.jpg'} (اضغط لتغيير الملف)
+                              </span>
+                            </div>
+                          </div>
+                          {bankTransferReceiptDataUrl.startsWith('data:image/') && (
+                            <img
+                              src={bankTransferReceiptDataUrl}
+                              alt="معاينة الإيصال"
+                              className="w-12 h-12 object-cover rounded-lg border border-emerald-200 shrink-0"
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1.5 text-center py-1">
+                          <div className="w-9 h-9 rounded-xl bg-stone-100 text-stone-600 flex items-center justify-center">
+                            <Upload className="w-4 h-4" />
+                          </div>
+                          <span className="font-bold text-stone-800">اضغط هنا لرفع صورة إيصال التحويل</span>
+                          <span className="text-[10px] text-stone-400">يدعم الصور (JPG, PNG) أو ملف PDF</span>
+                        </div>
+                      )}
+                    </label>
                   </div>
                 </div>
               )}
@@ -932,7 +1140,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(3)}
+                  onClick={() => {
+                    setErrorMsg('');
+                    if (isBankTransferSelected && !bankTransferReceiptDataUrl.trim()) {
+                      setErrorMsg('يرجى إرفاق صورة إيصال التحويل البنكي للمتابعة وإتمام الطلب.');
+                      return;
+                    }
+                    setCurrentStep(3);
+                  }}
                   className="flex-1 py-3 px-4 bg-stone-900 hover:bg-stone-800 text-white rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
                   <span>مراجعة وتأكيد الطلب</span>
