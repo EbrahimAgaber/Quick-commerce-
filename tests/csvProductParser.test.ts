@@ -137,4 +137,25 @@ describe('CSV Product Parser & Importer (Google Sheets / Excel)', () => {
     expect(reimported.validProducts[0].id).toBe('p-export-1');
     expect(reimported.validProducts[0].price).toBe(299);
   });
+
+  it('parses the 46-item Google Drive nuts & snacks CSV with Price (SAR) and Direct Image URL columns', () => {
+    const userCsv = `\uFEFFID,Product Name,Price (SAR),Image URL,Direct Image URL,Original Filename
+1,لوز أمريكي,60,https://drive.google.com/file/d/1FglJhkFVjjkwbk-gSc7Oe6JaO7GsCFdO/view?usp=drivesdk,https://drive.google.com/uc?export=view&id=1FglJhkFVjjkwbk-gSc7Oe6JaO7GsCFdO,00000027-PHOTO-2026-10-23-19-05-40.jpg
+2,مكسرات مشكلة مالح ديلوكس,60,https://drive.google.com/file/d/1u9tHVIOGTCEtcPrlPYfIqWw6iHH_B4TW/view?usp=drivesdk,https://drive.google.com/uc?export=view&id=1u9tHVIOGTCEtcPrlPYfIqWw6iHH_B4TW,00000028-PHOTO-2026-10-23-19-05-48.jpg
+46,مكسرات ياباني بارد,30,https://drive.google.com/file/d/1jxw_nMFq0AGhqVyinGlzHXYIVYnyNB3F/view?usp=drivesdk,https://drive.google.com/uc?export=view&id=1jxw_nMFq0AGhqVyinGlzHXYIVYnyNB3F,00000072-PHOTO-2026-10-23-19-05-58.jpg`;
+
+    expect(matchHeaderToField('Price (SAR)')).toBe('price');
+    expect(matchHeaderToField('Direct Image URL')).toBe('imageUrl');
+
+    const res = parseProductsCsv(userCsv);
+    expect(res.errors).toHaveLength(0);
+    expect(res.validProducts).toHaveLength(3);
+
+    expect(res.validProducts[0].id).toBe('1');
+    expect(res.validProducts[0].name).toBe('لوز أمريكي');
+    expect(res.validProducts[0].price).toBe(60);
+    expect(res.validProducts[0].imageUrl).toBe(
+      'https://lh3.googleusercontent.com/d/1FglJhkFVjjkwbk-gSc7Oe6JaO7GsCFdO=w1000'
+    );
+  });
 });
