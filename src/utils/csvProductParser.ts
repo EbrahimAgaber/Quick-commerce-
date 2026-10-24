@@ -18,15 +18,46 @@ export interface CsvProductImportResult {
  * Supports English, Arabic, and snake_case / camelCase variants.
  */
 const FIELD_ALIASES: Record<keyof Omit<Product, 'galleryImages' | 'variants'> | 'variants' | 'galleryImages', string[]> = {
-  id: ['id', 'product_id', 'sku', 'barcode', 'رمز المنتج', 'المعرف', 'كود المنتج', 'الرمز'],
-  name: ['name', 'product_name', 'title', 'اسم المنتج', 'الاسم', 'عنوان المنتج', 'اسم'],
-  price: ['price', 'regular_price', 'unit_price', 'السعر', 'سعر المنتج', 'السعر الأصلي', 'سعر'],
-  salePrice: ['saleprice', 'sale_price', 'discount_price', 'discountprice', 'discount', 'سعر الخصم', 'سعر التخفيض', 'الخصم', 'سعر العرض'],
-  category: ['category', 'department', 'section', 'type', 'التصنيف', 'القسم', 'الفئة', 'المجموعة'],
-  description: ['description', 'details', 'desc', 'body', 'الوصف', 'التفاصيل', 'وصف المنتج', 'شرح المنتج'],
-  imageUrl: ['image', 'image_url', 'imageurl', 'photo', 'picture', 'صورة', 'رابط الصورة', 'صورة المنتج', 'الرابط'],
+  id: ['id', 'product_id', 'sku', 'barcode', 'item_id', 'رمز المنتج', 'المعرف', 'كود المنتج', 'الرمز', 'رقم المنتج'],
+  name: ['name', 'product_name', 'productname', 'item_name', 'title', 'product', 'اسم المنتج', 'الاسم', 'عنوان المنتج', 'اسم', 'المنتج', 'الصنف'],
+  price: [
+    'price',
+    'price_sar',
+    'pricesar',
+    'price_in_sar',
+    'regular_price',
+    'unit_price',
+    'cost',
+    'amount',
+    'السعر',
+    'سعر المنتج',
+    'السعر الأصلي',
+    'سعر',
+    'السعر بالريال',
+    'السعر ر.س',
+  ],
+  salePrice: ['saleprice', 'sale_price', 'discount_price', 'discountprice', 'discount', 'special_price', 'سعر الخصم', 'سعر التخفيض', 'الخصم', 'سعر العرض'],
+  category: ['category', 'department', 'section', 'type', 'group', 'التصنيف', 'القسم', 'الفئة', 'المجموعة', 'النوع'],
+  description: ['description', 'details', 'desc', 'body', 'notes', 'الوصف', 'التفاصيل', 'وصف المنتج', 'شرح المنتج', 'ملاحظات'],
+  imageUrl: [
+    'direct_image_url',
+    'directimageurl',
+    'direct_image',
+    'image_url',
+    'imageurl',
+    'image',
+    'photo',
+    'picture',
+    'thumbnail',
+    'img',
+    'رابط الصورة المباشر',
+    'رابط الصورة',
+    'صورة المنتج',
+    'صورة',
+    'الرابط',
+  ],
   galleryImages: ['gallery', 'gallery_images', 'galleryimages', 'additional_images', 'صور إضافية', 'معرض الصور', 'صور'],
-  variants: ['variants', 'options', 'sizes', 'colors', 'الخيارات', 'المقاسات', 'الألوان', 'المتغيرات', 'الأحجام'],
+  variants: ['variants', 'options', 'sizes', 'colors', 'weights', 'الخيارات', 'المقاسات', 'الألوان', 'المتغيرات', 'الأحجام', 'الأوزان'],
   inStock: ['instock', 'in_stock', 'available', 'status', 'متوفر', 'في المخزن', 'الحالة', 'التوفر'],
   stockQuantity: ['stock', 'quantity', 'qty', 'stock_quantity', 'inventory', 'الكمية', 'المخزون', 'الرصيد'],
   featured: ['featured', 'is_featured', 'star', 'مميز', 'منتج مميز', 'موصى به'],
@@ -38,27 +69,79 @@ const FIELD_ALIASES: Record<keyof Omit<Product, 'galleryImages' | 'variants'> | 
 
 /**
  * Normalizes header string to lowercase trimmed alphanumerics for comparison.
- * Removes spaces, underscores, and dashes so 'Product Name', 'product_name', 'product-name' all match.
+ * Strips parenthetical unit/currency annotations (e.g. "(SAR)", "(ر.س)") and punctuation
+ * so 'Price (SAR)', 'Product Name', 'product_name', and 'Direct Image URL' all match cleanly.
  */
 function normalizeHeaderKey(key: string): string {
   return key
     .toLowerCase()
-    .replace(/[\uFEFF\r\n\t\s_\-]/g, '')
+    .replace(/\([^)]*\)/g, '') // Strip parenthetical suffixes like (SAR), (USD), (ر.س)
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/(?:sar|usd|eur|gbp|aed|kwd|qar|bhd|omr|ر\.?س|ريال)$/gi, '')
+    .replace(/[\uFEFF\r\n\t\s_\-:/\\.,]/g, '')
     .trim();
+}
+
+/**
+ * Converts Google Drive sharing or view URLs into direct embeddable image URLs
+ * that render reliably inside browser <img> tags without CORS/cookie redirects.
+ */
+export function normalizeProductImageUrl(rawUrl: string): string {
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed) return '';
+
+  // Match Google Drive file ID from:
+  // - https://drive.google.com/file/d/{FILE_ID}/view...
+  // - https://drive.google.com/open?id={FILE_ID}
+  // - https://drive.google.com/uc?export=view&id={FILE_ID}
+  // - https://drive.google.com/uc?id={FILE_ID}&export=download
+  const filePathMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+  const queryIdMatch = trimmed.match(/drive\.google\.com\/(?:uc|open|thumbnail)\?[^#]*[?&]id=([a-zA-Z0-9_-]+)/i);
+  const driveFileId = filePathMatch?.[1] || queryIdMatch?.[1];
+
+  if (driveFileId) {
+    return `https://lh3.googleusercontent.com/d/${driveFileId}=w1000`;
+  }
+
+  return trimmed;
 }
 
 /**
  * Detects the canonical product field corresponding to an arbitrary column header.
  */
 export function matchHeaderToField(header: string): string | null {
+  const rawClean = header
+    .toLowerCase()
+    .replace(/[\uFEFF\r\n\t\s_\-]/g, '')
+    .trim();
   const clean = normalizeHeaderKey(header);
+  if (!clean && !rawClean) return null;
+
+  // 1. Exact match against aliases (both rawClean and currency/parenthesis-stripped clean)
   for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
     for (const alias of aliases) {
-      if (clean === normalizeHeaderKey(alias)) {
+      const normAlias = normalizeHeaderKey(alias);
+      const rawNormAlias = alias.toLowerCase().replace(/[\uFEFF\r\n\t\s_\-]/g, '').trim();
+      if (rawClean === rawNormAlias || (clean && clean === normAlias)) {
         return field;
       }
     }
   }
+
+  // 2. Smart substring fallback for composite headers (e.g. "Price in SAR", "Direct Image URL", "Product Price")
+  if (rawClean.includes('directimage') || rawClean.includes('imageurl') || rawClean.includes('رابطالصور')) {
+    return 'imageUrl';
+  }
+  if (rawClean.includes('saleprice') || rawClean.includes('discountprice') || rawClean.includes('سعرالخصم')) {
+    return 'salePrice';
+  }
+  if (rawClean.includes('price') || rawClean.includes('سعر') || rawClean.includes('السعر')) {
+    return 'price';
+  }
+  if (rawClean.includes('productname') || rawClean.includes('itemname') || rawClean.includes('اسمالمنتج')) {
+    return 'name';
+  }
+
   return null;
 }
 
@@ -250,7 +333,16 @@ export function parseProductsCsv(csvString: string): CsvProductImportResult {
     const parsed: Record<string, any> = {};
     rowCells.forEach((cellVal, idx) => {
       const field = fieldMap[idx];
-      if (field) {
+      if (!field) return;
+      const trimmedVal = (cellVal || '').trim();
+      // Do not overwrite an already-populated field with an empty cell,
+      // and prefer "Direct Image URL" over a generic "Image URL" column when both exist
+      if (field === 'imageUrl') {
+        const headerNorm = (rawHeaders[idx] || '').toLowerCase();
+        if (!parsed.imageUrl || ( trimmedVal && headerNorm.includes('direct') )) {
+          if (trimmedVal) parsed.imageUrl = trimmedVal;
+        }
+      } else if (!parsed[field] || trimmedVal) {
         parsed[field] = cellVal;
       }
     });
@@ -290,9 +382,11 @@ export function parseProductsCsv(csvString: string): CsvProductImportResult {
     // 6. Variants
     const variants = parseList(parsed.variants);
 
-    // 7. Images
-    const imageUrl = (parsed.imageUrl || '').trim() || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
-    const galleryImages = parseList(parsed.galleryImages);
+    // 7. Images (Automatically normalize Google Drive view/uc links into direct embeddable image URLs)
+    const imageUrl =
+      normalizeProductImageUrl(parsed.imageUrl || '') ||
+      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
+    const galleryImages = parseList(parsed.galleryImages).map(normalizeProductImageUrl).filter(Boolean);
 
     // 8. ID (use provided or auto-generate)
     const id = (parsed.id || '').trim() || `prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
