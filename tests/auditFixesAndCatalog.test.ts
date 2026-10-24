@@ -105,7 +105,7 @@ describe('Audit Fixes & Catalog Integrity Test Suite', () => {
         ownerId: 'merchant_123',
       });
 
-      expect(store.settings.whatsappNumber).toBe('0501234567');
+      expect(store.settings.whatsappNumber).toBe('966501234567');
     });
 
     it('normalizes pricing and stock values with Arabic digits', () => {

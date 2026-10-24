@@ -1,0 +1,19 @@
+# StoreLink / Quick E-Commerce Robots Configuration
+# https://quick-ecommerce-saas-app.web.app/robots.txt
+
+User-agent: *
+Allow: /
+Allow: /?store=*
+Allow: /s/*
+
+# Disallow private administrative, driver dispatch, and API endpoints
+Disallow: /admin
+Disallow: /dispatch/
+Disallow: /api/
+Disallow: /*?driver=*
+Disallow: /*?view=admin
+
+# Crawl Delay & Authoritative Sitemaps
+Crawl-delay: 1
+Sitemap: https://quick-ecommerce-saas-app.web.app/sitemap.xml
+Sitemap: https://quick-ecommerce-saas-app.web.app/sitemap.txt

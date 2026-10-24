@@ -24,19 +24,32 @@ if (!(globalThis as any).document) {
     },
     createElement: (tag: string) => {
       const attrs = new Map<string, string>();
-      return {
+      const elObj: any = {
         tagName: tag.toUpperCase(),
-        setAttribute: (k: string, v: string) => attrs.set(k, v),
+        setAttribute: (k: string, v: string) => {
+          attrs.set(k, v);
+          if (k === 'id') elObj.id = v;
+          if (k === 'rel') elObj.rel = v;
+          if (k === 'href') elObj.href = v;
+        },
         getAttribute: (k: string) => attrs.get(k) ?? null,
         textContent: '',
         id: '',
+        rel: '',
+        href: '',
+        remove: () => {
+          const idx = mockHeadElements.indexOf(elObj);
+          if (idx !== -1) mockHeadElements.splice(idx, 1);
+        },
       };
+      return elObj;
     },
     querySelector: (selector: string) => {
       return (
         mockHeadElements.find((el) => {
           if (selector.includes('name="description"') && el.getAttribute?.('name') === 'description') return true;
           if (selector.includes('geo.region') && el.getAttribute?.('name') === 'geo.region') return true;
+          if (selector.includes('link[rel="canonical"]') && (el.getAttribute?.('rel') === 'canonical' || el.rel === 'canonical')) return true;
           return false;
         }) || null
       );
@@ -57,7 +70,18 @@ if (!(globalThis as any).window) {
 }
 
 import { parseStoreRouteFromLocation, isPlatformHostname, buildShareableStoreUrl } from '../src/utils/urlRouter';
-import { resolveSaudiCityGeo, buildStoreJsonLd, generateAIOptimizedSEO, injectStoreSEO } from '../src/utils/seoManager';
+import { 
+  resolveSaudiCityGeo, 
+  buildStoreJsonLd, 
+  buildProductJsonLd, 
+  buildSaaSPlatformJsonLd,
+  injectPlatformSEO,
+  injectStoreSEO,
+  setCanonicalUrl,
+  generateAIOptimizedSEO,
+  resolveDynamicStoreOgImage,
+  DEFAULT_PLATFORM_OG_IMAGE
+} from '../src/utils/seoManager';
 import { StoreManager } from '../src/services/storeManager';
 import { StoreInstance } from '../src/types/store';
 import { spawnSync } from 'child_process';
@@ -186,7 +210,7 @@ describe('Custom Domain, URL Customization, SEO/GEO & MCP Suite', () => {
       expect(dxbFallback.cityAr).toBe('الرياض');
     });
 
-    it('builds Google-compliant schema.org/Store JSON-LD structured data', () => {
+    it('builds Google-compliant schema.org/Store JSON-LD structured data with aggregateRating and reviews', () => {
       const store = StoreManager.getActiveStore();
       const jsonLd = buildStoreJsonLd(store, 'https://shop.mybrand.sa');
 
@@ -197,6 +221,36 @@ describe('Custom Domain, URL Customization, SEO/GEO & MCP Suite', () => {
       expect(jsonLd.address.addressCountry).toBe('SA');
       expect(jsonLd.geo.latitude).toBeDefined();
       expect(jsonLd.geo.longitude).toBeDefined();
+
+      if (jsonLd.makesOffer && jsonLd.makesOffer.length > 0) {
+        const firstProd = jsonLd.makesOffer[0];
+        expect(firstProd['@type']).toBe('Product');
+        expect(firstProd.aggregateRating).toBeDefined();
+        expect(firstProd.aggregateRating['@type']).toBe('AggregateRating');
+        expect(firstProd.aggregateRating.ratingValue).toBeDefined();
+        expect(firstProd.aggregateRating.reviewCount).toBeGreaterThan(0);
+        expect(firstProd.review).toBeDefined();
+        expect(Array.isArray(firstProd.review)).toBe(true);
+        expect(firstProd.review[0]['@type']).toBe('Review');
+        expect(firstProd.brand.name).toBe(store.settings.storeName);
+        expect(firstProd.offers.priceValidUntil).toBeDefined();
+        expect(firstProd.offers.itemCondition).toBe('https://schema.org/NewCondition');
+      }
+    });
+
+    it('builds standalone Google-compliant Product JSON-LD schema', () => {
+      const store = StoreManager.getActiveStore();
+      const product = store.products[0];
+      const prodJsonLd = buildProductJsonLd(product, store.settings, 'https://shop.mybrand.sa');
+
+      expect(prodJsonLd['@context']).toBe('https://schema.org');
+      expect(prodJsonLd['@type']).toBe('Product');
+      expect(prodJsonLd.name).toBe(product.name);
+      expect(prodJsonLd.sku).toBe(product.id);
+      expect(prodJsonLd.aggregateRating['@type']).toBe('AggregateRating');
+      expect(prodJsonLd.aggregateRating.ratingValue).toBeDefined();
+      expect(prodJsonLd.review[0]['@type']).toBe('Review');
+      expect(prodJsonLd.offers.priceCurrency).toBe('SAR');
     });
 
     it('injects dynamic meta tags into the DOM', () => {
@@ -223,6 +277,100 @@ describe('Custom Domain, URL Customization, SEO/GEO & MCP Suite', () => {
       expect(ai.metaDescription).toContain('تسوق');
       expect(ai.metaKeywords.length).toBeGreaterThan(3);
       expect(ai.heroTitle).toBeDefined();
+    });
+
+    it('builds SaaS Platform JSON-LD with WebApplication and no retail product items', () => {
+      const saasLd = buildSaaSPlatformJsonLd('https://quick-ecommerce-saas-app.web.app');
+      expect(saasLd['@context']).toBe('https://schema.org');
+      expect(Array.isArray(saasLd['@graph'])).toBe(true);
+
+      const webApp = saasLd['@graph'].find((item: any) => item['@type'] === 'WebApplication');
+      expect(webApp).toBeDefined();
+      expect(webApp.name).toContain('Quick E-Commerce');
+      expect(webApp.applicationCategory).toBe('BusinessApplication');
+      expect(webApp.featureList.length).toBeGreaterThan(3);
+
+      const hasRetailProducts = saasLd['@graph'].some((item: any) => item['@type'] === 'Product' || item.makesOffer);
+      expect(hasRetailProducts).toBe(false);
+    });
+
+    it('injectPlatformSEO injects SaaS metadata and removes store/product schemas', () => {
+      // First inject store SEO
+      const store = StoreManager.getActiveStore();
+      injectStoreSEO(store);
+      expect(document.getElementById('store-jsonld-schema')).not.toBeNull();
+
+      // Now inject Platform SEO
+      injectPlatformSEO('https://quick-ecommerce-saas-app.web.app');
+      expect(document.title).toContain('منصة');
+      expect(document.getElementById('platform-jsonld-schema')).not.toBeNull();
+      // Store schema should be cleanly removed!
+      expect(document.getElementById('store-jsonld-schema')).toBeNull();
+      expect(document.getElementById('product-jsonld-schema')).toBeNull();
+    });
+
+        it('resolves dynamic Open Graph image following 3-tier hierarchy (Logo -> Product -> Fallback)', () => {
+      const baseStore = StoreManager.getActiveStore();
+
+      // Tier 1: Store Logo available
+      const storeWithLogo = {
+        ...baseStore,
+        settings: {
+          ...baseStore.settings,
+          logoUrl: 'https://example.com/custom-store-logo.png',
+        },
+      };
+      expect(resolveDynamicStoreOgImage(storeWithLogo)).toBe('https://example.com/custom-store-logo.png');
+
+      // Tier 2a: Store Logo NOT available, but active product has an image
+      const storeNoLogo = {
+        ...baseStore,
+        settings: {
+          ...baseStore.settings,
+          logoUrl: '',
+        },
+      };
+      const activeProduct = {
+        id: 'p-1',
+        name: 'حذاء جلدي فاخر',
+        price: 250,
+        imageUrl: 'https://example.com/luxury-shoes.jpg',
+        category: 'أحذية',
+        variants: [],
+        galleryImages: [],
+        description: 'حذاء راقي',
+        featured: true,
+        inStock: true,
+      };
+      expect(resolveDynamicStoreOgImage(storeNoLogo, activeProduct)).toBe('https://example.com/luxury-shoes.jpg');
+
+      // Tier 2b: Store Logo NOT available, no active product, but catalog has products with images
+      const storeWithCatalog = {
+        ...storeNoLogo,
+        products: [
+          { ...activeProduct, imageUrl: 'https://example.com/catalog-shoe-item.jpg' },
+        ],
+      };
+      expect(resolveDynamicStoreOgImage(storeWithCatalog, null)).toBe('https://example.com/catalog-shoe-item.jpg');
+
+      // Tier 3: Neither logo nor products have images -> Falls back to Quick E-Commerce Nano Banana asset
+      const storeEmpty = {
+        ...storeNoLogo,
+        products: [],
+      };
+      expect(resolveDynamicStoreOgImage(storeEmpty, null)).toBe(DEFAULT_PLATFORM_OG_IMAGE);
+    });
+
+    it('injectStoreSEO removes platform schema and sets store-specific canonical URL', () => {
+      injectPlatformSEO('https://quick-ecommerce-saas-app.web.app');
+      expect(document.getElementById('platform-jsonld-schema')).not.toBeNull();
+
+      const store = StoreManager.getActiveStore();
+      injectStoreSEO(store, { customUrl: 'https://quick-ecommerce-saas-app.web.app/?store=simpler' });
+
+      // Platform schema should be removed when viewing a store
+      expect(document.getElementById('platform-jsonld-schema')).toBeNull();
+      expect(document.getElementById('store-jsonld-schema')).not.toBeNull();
     });
   });
 

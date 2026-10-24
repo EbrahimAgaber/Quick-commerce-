@@ -15,9 +15,13 @@ import {
   Check, 
   AlertCircle,
   ExternalLink,
-  X
+  X,
+  ShieldCheck,
+  KeyRound,
+  Loader2
 } from 'lucide-react';
-import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
+import { createWhatsAppUrl, getOrderDeliveryPin } from '../../utils/whatsappInvoice';
+import { normalizeArabicDigits } from '../../utils/digits';
 
 interface DriverDispatchViewProps {
   orderId: string;
@@ -34,6 +38,10 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [deliveredSuccess, setDeliveredSuccess] = useState(false);
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [showFailureModal, setShowFailureModal] = useState(false);
+  const [failureReason, setFailureReason] = useState('العميل لم يقم بالرد على الاتصالات المتكررة');
 
   useEffect(() => {
     let isMounted = true;
@@ -96,7 +104,11 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
   const storeMapUrl = settings.storeLocationUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${settings.storeName} ${settings.city || ''}`)}`;
   const customerMapUrl = order.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${order.city} ${order.deliveryAddress}`)}`;
 
-  const handleUpdateStatus = async (newStatus: 'Out for Delivery' | 'Delivered' | 'Cancelled') => {
+  const handleUpdateStatus = async (
+    newStatus: 'Out for Delivery' | 'Delivered' | 'Cancelled',
+    customNotes?: string,
+    pin?: string
+  ) => {
     setUpdating(true);
     const store = StoreManager.getStoreById(storeId) || StoreManager.getStoreBySlug(storeId) || StoreManager.getActiveStore();
     const targetStoreId = store?.id || storeId || 'aurora';
@@ -110,7 +122,7 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
       returnEligibleUntil: newStatus === 'Delivered'
         ? new Date(new Date(nowIso).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
         : order.returnEligibleUntil,
-      trackingNotes: newStatus === 'Cancelled' ? 'تعذر التوصيل: تم إرجاع الشحنة للمتجر بواسطة المندوب' : order.trackingNotes,
+      trackingNotes: customNotes || (newStatus === 'Cancelled' ? 'تعذر التوصيل: تم إرجاع الشحنة للمتجر بواسطة المندوب' : order.trackingNotes),
     };
 
     if (store) {
@@ -121,6 +133,7 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
     try {
       await StoreManager.updateOrderInStore(targetStoreId, updatedOrder, {
         source: 'driver',
+        deliveryPin: pin || order.deliveryPin || (order ? getOrderDeliveryPin(order) : undefined),
         restockItems: newStatus === 'Cancelled',
       });
     } catch (err) {
@@ -133,6 +146,27 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
     if (newStatus === 'Delivered') {
       setDeliveredSuccess(true);
     }
+  };
+
+  const expectedPin = order ? getOrderDeliveryPin(order) : '';
+
+  const handleVerifyAndDeliver = () => {
+    const cleanEntered = normalizeArabicDigits(enteredPin).replace(/\D/g, '').trim();
+    if (!cleanEntered) {
+      setPinError('يرجى كتابة كود تأكيد التسليم المكون من 4 أرقام المستلم من العميل');
+      return;
+    }
+    if (cleanEntered !== expectedPin) {
+      setPinError('⚠️ كود التسليم غير صحيح! اطلب من العميل تزويدك بالكود المكون من 4 أرقام (موجود في رسالة الواتساب أو صفحة التتبع).');
+      return;
+    }
+    setPinError('');
+    handleUpdateStatus('Delivered', undefined, cleanEntered);
+  };
+
+  const handleConfirmFailure = () => {
+    setShowFailureModal(false);
+    handleUpdateStatus('Cancelled', `تعذر التوصيل: ${failureReason} (تم إرجاع الشحنة للمتجر)`);
   };
 
   const handleSendMerchantDeliveredWhatsApp = () => {
@@ -321,10 +355,10 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
           </p>
         </div>
 
-        {/* STEP 5: Delivery Action Buttons */}
+        {/* STEP 5: Delivery Action & Security PIN Verification */}
         {!deliveredSuccess && (
-          <div className="space-y-2 pt-2 pb-6">
-            {order.status !== 'Out for Delivery' && (
+          <div className="space-y-3 pt-2 pb-8">
+            {order.status !== 'Out for Delivery' && order.status !== 'Delivered' && (
               <button
                 type="button"
                 disabled={updating}
@@ -332,36 +366,135 @@ export const DriverDispatchView: React.FC<DriverDispatchViewProps> = ({
                 className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
               >
                 <Truck className="w-4 h-4" />
-                <span>استلمت من المحل وجاري التوصيل</span>
+                <span>استلمت من المحل وبدأت التوصيل 🚚</span>
               </button>
             )}
 
-            <button
-              type="button"
-              disabled={updating}
-              onClick={() => handleUpdateStatus('Delivered')}
-              className="w-full py-4 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-sm font-black flex items-center justify-center gap-2 shadow-xl hover:scale-[1.01] transition-all cursor-pointer"
-            >
-              <CheckCircle2 className="w-5 h-5 text-emerald-200" />
-              <span>
-                {isCOD ? `تم تسليم الطلب واستلام ${order.grandTotal} ${settings.currency} كاش` : 'تم تسليم الطلب للعميل بنجاح'}
-              </span>
-            </button>
+            {/* PIN Verification Box */}
+            <div className="bg-stone-900 border border-emerald-500/30 rounded-3xl p-4 sm:p-5 space-y-3 shadow-xl">
+              <div className="flex items-start gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">
+                    تأكيد تسليم الشحنة عبر الكود السري
+                  </h3>
+                  <p className="text-xs text-stone-400 mt-0.5 leading-relaxed">
+                    اطلب كود تأكيد الاستلام (4 أرقام) من العميل لتوثيق التسليم في النظام.
+                  </p>
+                </div>
+              </div>
 
+              <div className="space-y-2 pt-1">
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={enteredPin}
+                    onChange={(e) => {
+                      setEnteredPin(e.target.value);
+                      setPinError('');
+                    }}
+                    placeholder="أدخل كود التسليم (4 أرقام)"
+                    className="w-full py-3 px-4 bg-stone-950 border border-stone-700 focus:border-emerald-500 rounded-2xl text-center text-xl font-black font-mono tracking-widest text-emerald-300 placeholder:text-stone-600 placeholder:font-sans placeholder:text-xs placeholder:tracking-normal outline-none transition-colors"
+                  />
+                  <KeyRound className="w-4 h-4 text-stone-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+
+                {pinError && (
+                  <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>{pinError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  disabled={updating || !enteredPin.trim()}
+                  onClick={handleVerifyAndDeliver}
+                  className="w-full py-4 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-2xl text-sm font-black flex items-center justify-center gap-2 shadow-xl hover:scale-[1.01] active:scale-98 transition-all cursor-pointer"
+                >
+                  {updating ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+                  )}
+                  <span>
+                    {isCOD
+                      ? `تحقق وتأكيد استلام ${order.grandTotal.toLocaleString('en-US')} ${settings.currency} كاش`
+                      : 'تحقق وتأكيد تسليم الشحنة للعميل'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Inability to Deliver / Return Trigger */}
             {order.status !== 'Cancelled' && (
               <button
                 type="button"
                 disabled={updating}
-                onClick={() => {
-                  if (window.confirm('هل أنت متأكد من تعذر التوصيل وإرجاع الشحنة للمتجر؟')) {
-                    handleUpdateStatus('Cancelled');
-                  }
-                }}
-                className="w-full py-2.5 px-3 bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-stone-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-stone-800"
+                onClick={() => setShowFailureModal(true)}
+                className="w-full py-2.5 px-3 bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-rose-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-stone-800"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>تعذر التوصيل / رفض العميل الاستلام (إرجاع للمتجر)</span>
               </button>
+            )}
+
+            {/* Failure Reason Selector Sheet */}
+            {showFailureModal && (
+              <div className="p-4 bg-stone-900 border border-rose-500/40 rounded-3xl space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-rose-400 flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>تحديد سبب تعذر التوصيل:</span>
+                  </span>
+                  <button
+                    onClick={() => setShowFailureModal(false)}
+                    className="text-stone-500 hover:text-stone-300 p-1"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  {[
+                    'العميل لم يقم بالرد على الاتصالات المتكررة',
+                    'العميل رفض استلام الشحنة / ألغى الطلب عند الوصول',
+                    'العنوان المسجل غير دقيق أو خارج نطاق التوصيل',
+                    'كود التحقق غير متوفر مع المستلم وتعذر التوثيق',
+                  ].map((reason) => (
+                    <label
+                      key={reason}
+                      className={`flex items-center gap-2 p-2.5 rounded-xl cursor-pointer transition-colors ${
+                        failureReason === reason
+                          ? 'bg-rose-950/60 text-rose-200 border border-rose-500/40'
+                          : 'bg-stone-950 text-stone-400 hover:text-stone-200'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="failureReason"
+                        checked={failureReason === reason}
+                        onChange={() => setFailureReason(reason)}
+                        className="accent-rose-500"
+                      />
+                      <span>{reason}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={updating}
+                  onClick={handleConfirmFailure}
+                  className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md"
+                >
+                  تأكيد تعذر التوصيل وإرجاع الشحنة للمتجر
+                </button>
+              </div>
             )}
           </div>
         )}

@@ -47,6 +47,7 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   deliveryEstimationDays: '1 - 3 أيام عمل للتسليم المباشر',
   googleWebAppUrl: '',
   enableOnlinePayments: true,
+  restrictCodToStoreCity: false,
   moyasarPublishableKey: '',
   moyasarTestMode: true,
   enableAudioNotifications: true,
@@ -342,6 +343,19 @@ export function safeSetLocalStorage(key: string, value: string): void {
   }
 }
 
+function deduplicateOrderList(orders: Order[]): Order[] {
+  if (!Array.isArray(orders)) return [];
+  const map = new Map<string, Order>();
+  for (const o of orders) {
+    if (!o || typeof o !== 'object' || !o.id) continue;
+    const cleanId = String(o.id).trim().toUpperCase();
+    if (!map.has(cleanId)) {
+      map.set(cleanId, o);
+    }
+  }
+  return Array.from(map.values());
+}
+
 export class StoreStorage {
   static getSettings(): StoreSettings {
     try {
@@ -403,7 +417,7 @@ export class StoreStorage {
       if (data) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed)) {
-          return parsed.filter((o) => o && typeof o === 'object' && o.id);
+          return deduplicateOrderList(parsed.filter((o) => o && typeof o === 'object' && o.id));
         }
       }
     } catch (e) {
@@ -413,13 +427,18 @@ export class StoreStorage {
   }
 
   static saveOrders(orders: Order[]): void {
-    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify((orders || []).slice(0, 150)));
+    // Retain up to 300 most recent orders in local storage hot cache
+    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(deduplicateOrderList(orders || []).slice(0, 300)));
     this.dispatchUpdate();
   }
 
   static addOrder(newOrder: Order): void {
     const orders = this.getOrders();
-    const updated = [newOrder, ...orders];
+    const cleanId = newOrder.id.toUpperCase().trim();
+    const exists = orders.some((o) => o.id.toUpperCase().trim() === cleanId);
+    const updated = exists
+      ? orders.map((o) => (o.id.toUpperCase().trim() === cleanId ? newOrder : o))
+      : [newOrder, ...orders];
     this.saveOrders(updated);
   }
 
@@ -485,7 +504,7 @@ export class StoreStorage {
     currentOrders.forEach((o) => {
       if (o && o.id && !ordersMap.has(o.id)) ordersMap.set(o.id, o);
     });
-    const mergedOrders = Array.from(ordersMap.values()).slice(0, 150);
+    const mergedOrders = Array.from(ordersMap.values()).slice(0, 300);
     safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(mergedOrders));
 
     if (Array.isArray(data.policies) && data.policies.length > 0) {

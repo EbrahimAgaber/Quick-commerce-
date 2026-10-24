@@ -1,20 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { Order, StoreSettings } from '../../types/store';
-import { generateZatcaTLVBase64, calculateVatBreakdown } from '../../utils/zatca';
+import { 
+  generateZatcaTLVBase64, 
+  calculateVatBreakdown, 
+  getZatcaComplianceType, 
+  generateNonRegisteredOrderQRPayload,
+  generateZatcaPhase2Uuid,
+  generateInvoiceHash,
+  ZatcaComplianceType
+} from '../../utils/zatca';
 import { 
   X, 
   Printer, 
-  Download, 
   MessageCircle, 
   FileText, 
-  Check, 
-  Share2, 
   Receipt,
-  Building2,
-  Calendar,
-  CreditCard,
-  Truck
+  Truck,
+  ShieldCheck,
+  CheckCircle2,
+  Info
 } from 'lucide-react';
 import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
 
@@ -33,29 +38,32 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 }) => {
   const [format, setFormat] = useState<'a4' | 'thermal'>('a4');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [copiedLink, setCopiedLink] = useState(false);
 
   const brand = settings.brandTheme || {
     primaryColor: '#0B253F',
     accentColor: '#0077FF',
   };
 
-  // Compute VAT Breakdown
+  const complianceType: ZatcaComplianceType = 
+    order?.zatcaComplianceType || getZatcaComplianceType(settings);
+
+  // Compute VAT Breakdown based on business compliance type
   const vatBreakdown = order
     ? calculateVatBreakdown(
         order.grandTotal,
         settings.pricesIncludeVat ?? true,
-        order.vatRate ?? 0.15
+        order.vatRate ?? settings.vatRate ?? 0.15,
+        complianceType
       )
-    : { netAmount: 0, vatAmount: 0, totalWithVat: 0 };
+    : { netAmount: 0, vatAmount: 0, totalWithVat: 0, vatRate: 0, isVatApplicable: false, complianceType };
 
-  // Generate ZATCA Phase 1 QR Code
+  // Generate QR Code adhering strictly to compliance type
   useEffect(() => {
     if (!order) return;
 
     let isMounted = true;
-    const vatNumber = settings.vatNumber || '300000000000003';
     const sellerName = settings.storeName || 'متجر إلكتروني';
+    const vatNumber = settings.vatNumber || '300000000000003';
     
     // Parse order timestamp to ISO string safely
     let timestampIso = new Date().toISOString();
@@ -73,15 +81,43 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
 
     try {
-      const tlvPayload = generateZatcaTLVBase64({
-        sellerName,
-        vatNumber,
-        timestamp: timestampIso,
-        invoiceTotal: order.grandTotal.toFixed(2),
-        vatTotal: (order.vatAmount ?? vatBreakdown.vatAmount).toFixed(2),
-      });
+      let qrPayload = '';
 
-      QRCode.toDataURL(tlvPayload, {
+      if (complianceType === 'non_registered') {
+        // NON-REGISTERED: Strictly forbid ZATCA Tax QR. Generate Order Verification QR.
+        const storeSlug = order.storeSlug || settings.storeSlug || '';
+        const slugParam = storeSlug ? `store=${encodeURIComponent(storeSlug)}&` : '';
+        const trackingUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/?${slugParam}track=${order.id}`;
+        qrPayload = generateNonRegisteredOrderQRPayload({
+          storeName: sellerName,
+          orderId: order.id,
+          grandTotal: order.grandTotal,
+          currency: settings.currency || 'ر.س',
+          trackingUrl,
+        });
+      } else if (complianceType === 'phase_2') {
+        // PHASE 2: Extended ZATCA with Hash & UUID
+        const invoiceHash = order.invoiceHash || generateInvoiceHash(`${order.id}-${order.grandTotal}-${timestampIso}`);
+        qrPayload = generateZatcaTLVBase64({
+          sellerName,
+          vatNumber,
+          timestamp: timestampIso,
+          invoiceTotal: order.grandTotal.toFixed(2),
+          vatTotal: vatBreakdown.vatAmount.toFixed(2),
+          invoiceHash,
+        });
+      } else {
+        // PHASE 1: Standard ZATCA Phase 1 Simplified Tax Invoice QR (Tags 1-5)
+        qrPayload = generateZatcaTLVBase64({
+          sellerName,
+          vatNumber,
+          timestamp: timestampIso,
+          invoiceTotal: order.grandTotal.toFixed(2),
+          vatTotal: (order.vatAmount ?? vatBreakdown.vatAmount).toFixed(2),
+        });
+      }
+
+      QRCode.toDataURL(qrPayload, {
         width: 180,
         margin: 1,
         color: {
@@ -92,13 +128,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         if (isMounted) setQrDataUrl(url);
       });
     } catch (err) {
-      console.error('Failed to generate ZATCA QR code:', err);
+      console.error('Failed to generate invoice QR code:', err);
     }
 
     return () => {
       isMounted = false;
     };
-  }, [order, settings, vatBreakdown.vatAmount]);
+  }, [order, settings, vatBreakdown.vatAmount, complianceType]);
 
   // Handle escape key
   useEffect(() => {
@@ -117,11 +153,30 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     window.print();
   };
 
+  const invoiceTitleArabic = 
+    complianceType === 'non_registered'
+      ? 'فاتورة مبيعات'
+      : complianceType === 'phase_2'
+      ? 'فاتورة ضريبية مبسطة - مرحلة الربط (FATOORA)'
+      : 'فاتورة ضريبية مبسطة';
+
+  const invoiceTitleEnglish = 
+    complianceType === 'non_registered'
+      ? 'COMMERCIAL SALES INVOICE'
+      : complianceType === 'phase_2'
+      ? 'SIMPLIFIED TAX INVOICE - PHASE 2'
+      : 'SIMPLIFIED TAX INVOICE';
+
   const handleShareWhatsApp = () => {
-    const text = `فاتورة ضريبية مبسطة رقم #${order.id}\nالمتجر: ${settings.storeName}\nالمبلغ الإجمالي: ${order.grandTotal} ${settings.currency}\nرابط التتبع: ${window.location.origin}/#track-${order.id}`;
+    const storeSlug = order.storeSlug || settings.storeSlug || '';
+    const slugParam = storeSlug ? `store=${encodeURIComponent(storeSlug)}&` : '';
+    const trackingUrl = `${window.location.origin}/?${slugParam}track=${order.id}`;
+    const text = `${invoiceTitleArabic} رقم #${order.id}\nالمتجر: ${settings.storeName}\nالمبلغ الإجمالي: ${order.grandTotal} ${settings.currency}\nرابط التتبع: ${trackingUrl}`;
     const url = createWhatsAppUrl(order.customerPhone || settings.whatsappNumber, text);
     window.open(url, '_blank');
   };
+
+  const invoiceUuid = order.invoiceUuid || (complianceType === 'phase_2' ? generateZatcaPhase2Uuid() : null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto bg-stone-950/75 backdrop-blur-xs">
@@ -243,20 +298,38 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                   {settings.commercialRegister && (
                     <p>س.ت: {settings.commercialRegister}</p>
                   )}
-                  <p>الرقم الضريبي: {settings.vatNumber || '300000000000003'}</p>
+                  {settings.freelanceCertificate && (
+                    <p>وثيقة العمل الحر: {settings.freelanceCertificate}</p>
+                  )}
+                  {complianceType === 'non_registered' ? (
+                    <p className="text-amber-700 font-semibold">غير مسجل في ضريبة القيمة المضافة</p>
+                  ) : (
+                    <p>الرقم الضريبي: {settings.vatNumber || '300000000000003'}</p>
+                  )}
                   <p>{settings.city || 'المملكة العربية السعودية'}</p>
                 </div>
               </div>
 
               {format === 'a4' && (
                 <div className="text-left" dir="ltr">
-                  <span className="inline-block px-2.5 py-1 rounded-md bg-stone-100 text-stone-800 text-[11px] font-bold uppercase tracking-wider mb-2">
-                    SIMPLIFIED TAX INVOICE
+                  <span className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider mb-2 ${
+                    complianceType === 'non_registered'
+                      ? 'bg-amber-100 text-amber-900'
+                      : complianceType === 'phase_2'
+                      ? 'bg-purple-100 text-purple-900'
+                      : 'bg-stone-100 text-stone-800'
+                  }`}>
+                    {invoiceTitleEnglish}
                   </span>
                   <div className="text-xs text-stone-600 space-y-1">
                     <p><strong>Invoice #:</strong> {order.id}</p>
                     <p><strong>Date:</strong> {order.timestamp || new Date().toLocaleString('ar-SA')}</p>
                     <p><strong>Status:</strong> {order.status}</p>
+                    {invoiceUuid && (
+                      <p className="text-[10px] text-stone-400 truncate max-w-[200px]" title={invoiceUuid}>
+                        <strong>UUID:</strong> {invoiceUuid}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -265,9 +338,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             {/* Thermal Title */}
             {format === 'thermal' && (
               <div className="text-center py-2 border-b border-dashed border-stone-400 mb-3">
-                <p className="font-bold text-sm">فاتورة ضريبية مبسطة</p>
+                <p className="font-bold text-sm">{invoiceTitleArabic}</p>
                 <p className="text-[11px] text-stone-500">رقم الفاتورة: #{order.id}</p>
                 <p className="text-[10px] text-stone-500">{order.timestamp}</p>
+                {complianceType === 'non_registered' && (
+                  <p className="text-[10px] text-amber-700 font-bold mt-0.5">منشأة غير مسجلة في ضريبة القيمة المضافة</p>
+                )}
               </div>
             )}
 
@@ -319,37 +395,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                         </td>
                       </tr>
                     ))
-                  ) : order.itemsSummary ? (
-                    order.itemsSummary.split(/[\n,]/).filter((l) => l.trim().length > 0).map((line, idx) => {
-                      const trimmed = line.trim();
-                      const match1 = trimmed.match(/^(\d+)\s*[xX×]\s*(.*?)(?:\s*-\s*(\d+(?:\.\d+)?))?/);
-                      const match2 = trimmed.match(/^(.*?)\s*[xX×]\s*(\d+)/);
-                      let name = trimmed;
-                      let qty = '1';
-                      let total = '-';
-                      if (match1) {
-                        qty = match1[1];
-                        name = match1[2]?.trim() || trimmed;
-                        total = match1[3] ? Number(match1[3]).toFixed(2) : '-';
-                      } else if (match2) {
-                        name = match2[1]?.trim() || trimmed;
-                        qty = match2[2];
-                      }
-                      return (
-                        <tr key={idx} className="text-xs">
-                          <td className="py-2">
-                            <p className="font-bold">{name}</p>
-                          </td>
-                          <td className="py-2 text-center font-mono">{qty}</td>
-                          <td className="py-2 text-left font-mono text-stone-400">-</td>
-                          <td className="py-2 text-left font-mono font-semibold">{total}</td>
-                        </tr>
-                      );
-                    })
                   ) : (
                     <tr>
                       <td colSpan={4} className="py-3 text-center text-stone-500 text-xs italic">
-                        تفاصيل المنتجات ملخصة في الإجمالي
+                        {order.itemsSummary || 'تفاصيل المنتجات ملخصة في الإجمالي'}
                       </td>
                     </tr>
                   )}
@@ -357,12 +406,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               </table>
             </div>
 
-            {/* Financial Summary & ZATCA Breakdown */}
+            {/* Financial Summary */}
             <div className={`border-t pt-3 space-y-1.5 ${format === 'thermal' ? 'border-dashed border-stone-400 text-xs' : 'border-stone-200 text-xs'}`}>
               <div className="flex justify-between text-stone-600">
-                <span>المجموع الفرعي الخاضع للضريبة:</span>
+                <span>مجموع المنتجات:</span>
                 <span className="font-mono">
-                  {vatBreakdown.netAmount.toFixed(2)} {settings.currency}
+                  {(order.subtotal || order.grandTotal).toFixed(2)} {settings.currency}
                 </span>
               </div>
 
@@ -382,37 +431,81 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 </span>
               </div>
 
-              <div className="flex justify-between text-stone-700 font-semibold bg-stone-50 p-1.5 rounded-lg">
-                <span>ضريبة القيمة المضافة (15% VAT):</span>
-                <span className="font-mono text-stone-900">
-                  {vatBreakdown.vatAmount.toFixed(2)} {settings.currency}
-                </span>
-              </div>
+              {/* VAT itemization: ONLY displayed if registered (Phase 1 or Phase 2). STRICTLY omitted for non-registered */}
+              {vatBreakdown.isVatApplicable ? (
+                <>
+                  <div className="flex justify-between text-stone-500 text-[11px] pt-1 border-t border-stone-100">
+                    <span>المجموع الخاضع للضريبة (غير شامل الضريبة):</span>
+                    <span className="font-mono">
+                      {vatBreakdown.netAmount.toFixed(2)} {settings.currency}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-stone-700 font-semibold bg-stone-50 p-1.5 rounded-lg">
+                    <span>ضريبة القيمة المضافة (15% VAT):</span>
+                    <span className="font-mono text-stone-900">
+                      {vatBreakdown.vatAmount.toFixed(2)} {settings.currency}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 p-2 rounded-lg text-amber-800 text-[11px]">
+                  <Info className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                  <span>المنشأة غير خاضعة لضريبة القيمة المضافة (لا تضاف أي ضريبة).</span>
+                </div>
+              )}
 
               <div className="flex justify-between text-sm sm:text-base font-black text-stone-900 pt-2 border-t border-stone-200">
-                <span>الإجمالي الكلي شامل الضريبة:</span>
+                <span>
+                  {complianceType === 'non_registered' ? 'الإجمالي النهائي المستحق:' : 'الإجمالي الكلي شامل الضريبة:'}
+                </span>
                 <span className="font-mono" style={{ color: brand.primaryColor }}>
                   {order.grandTotal.toFixed(2)} {settings.currency}
                 </span>
               </div>
             </div>
 
-            {/* ZATCA Phase 1 QR Code */}
+            {/* QR Code Section - Adapts strictly to Compliance Type */}
             <div className={`mt-6 pt-4 border-t ${format === 'thermal' ? 'border-dashed border-stone-400 text-center' : 'border-stone-200 flex items-center justify-between'}`}>
               <div className={format === 'thermal' ? 'mb-2' : ''}>
-                <p className="text-[11px] font-bold text-stone-800">
-                  رمز التحقق لهيئة الزكاة والضريبة والجمارك (ZATCA)
-                </p>
-                <p className="text-[10px] text-stone-500 max-w-xs leading-relaxed">
-                  امسح الرمز بواسطة تطبيق هيئة الزكاة للتحقق من صحة الفاتورة الضريبية المبسطة وبيانات المنشأة.
-                </p>
+                {complianceType === 'non_registered' ? (
+                  <>
+                    <p className="text-[11px] font-bold text-stone-800 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
+                      <span>رمز التحقق وتتبع الطلب التجاري</span>
+                    </p>
+                    <p className="text-[10px] text-stone-500 max-w-xs leading-relaxed">
+                      امسح الرمز لتتبع تفاصيل طلبك مباشرة والتحقق من صحة الإيصال عبر المتجر.
+                    </p>
+                  </>
+                ) : complianceType === 'phase_2' ? (
+                  <>
+                    <p className="text-[11px] font-bold text-purple-900 flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                      <span>رمز التحقق لهيئة الزكاة (مرحلة الربط والتكامل FATOORA)</span>
+                    </p>
+                    <p className="text-[10px] text-stone-500 max-w-xs leading-relaxed">
+                      فاتورة مشفرة ومطابقة لمتطلبات المرحلة الثانية لهيئة الزكاة والضريبة والجمارك مع البصمة الرقمية.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[11px] font-bold text-stone-800 flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>رمز التحقق لهيئة الزكاة والضريبة والجمارك (ZATCA)</span>
+                    </p>
+                    <p className="text-[10px] text-stone-500 max-w-xs leading-relaxed">
+                      امسح الرمز بواسطة تطبيق هيئة الزكاة للتحقق من صحة الفاتورة الضريبية المبسطة وبيانات المنشأة.
+                    </p>
+                  </>
+                )}
               </div>
 
               {qrDataUrl ? (
                 <div className="flex justify-center">
                   <img
                     src={qrDataUrl}
-                    alt="ZATCA Phase 1 QR Code"
+                    alt={complianceType === 'non_registered' ? 'Order Verification QR' : 'ZATCA QR Code'}
                     className={`border border-stone-200 rounded-lg p-1 bg-white ${
                       format === 'thermal' ? 'w-28 h-28 mx-auto' : 'w-24 h-24'
                     }`}

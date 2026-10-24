@@ -3,6 +3,7 @@ import { CartItem, Order, PromoCode, StoreSettings } from '../../types/store';
 import { StoreManager } from '../../services/storeManager';
 import { normalizeArabicDigits, normalizeSaudiPhoneNumber } from '../../utils/digits';
 import { trackBeginCheckout, trackPurchase } from '../../utils/analytics';
+import { getZatcaComplianceType, calculateVatBreakdown } from '../../utils/zatca';
 import { 
   X, 
   Send, 
@@ -20,9 +21,12 @@ import {
   Truck, 
   CheckCircle2, 
   ShoppingBag, 
-  ShieldCheck 
+  ShieldCheck,
+  Navigation
 } from 'lucide-react';
 import { MoyasarPaymentModal } from './MoyasarPaymentModal';
+import { LocationPickerModal } from './LocationPickerModal';
+import { isSameSaudiCity } from '../../utils/cityUtils';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -44,19 +48,60 @@ const DEFAULT_CITIES = [
   'الخبر',
   'الظهران',
   'الأحساء',
+  'القطيف',
+  'الجبيل',
+  'حفر الباطن',
+  'الخرج',
+  'الدوادمي',
   'بريدة (القصيم)',
   'عنيزة',
+  'الرس',
+  'حائل',
   'أبها',
   'خميس مشيط',
-  'الطائف',
-  'تبوك',
-  'حائل',
+  'محايل عسير',
+  'بيشة',
   'جازان',
+  'صبيا',
+  'أبو عريش',
+  'صامطة',
   'نجران',
-  'الجبيل',
+  'شرورة',
+  'تبوك',
+  'العلا',
   'ينبع',
+  'الطائف',
+  'عرعر',
+  'سكاكا',
+  'القريات',
+  'وادي الدواسر',
   'مدينة أخرى',
 ];
+
+const KNOWN_SPL_PREFIXES: Record<string, { city: string; district?: string }> = {
+  ALUL: { city: 'العلا', district: 'حي الصخيرات' },
+  ULAA: { city: 'العلا', district: 'حي العزيزية' },
+  RIYD: { city: 'الرياض', district: 'حي العليا' },
+  RRRD: { city: 'الرياض', district: 'حي النخيل' },
+  RYDH: { city: 'الرياض', district: 'حي الملز' },
+  JEDD: { city: 'جدة', district: 'حي الروضة' },
+  JDDH: { city: 'جدة', district: 'حي الشاطئ' },
+  MAKK: { city: 'مكة المكرمة', district: 'حي العزيزية' },
+  MADN: { city: 'المدينة المنورة', district: 'حي قباء' },
+  DAMM: { city: 'الدمام', district: 'حي الشاطئ الشرقي' },
+  KHBR: { city: 'الخبر', district: 'حي العليا' },
+  DHHR: { city: 'الظهران', district: 'حي الجامعة' },
+  ABHA: { city: 'أبها', district: 'حي المنسك' },
+  TABK: { city: 'تبوك', district: 'حي المروج' },
+  QASM: { city: 'بريدة (القصيم)', district: 'حي الريان' },
+  TAIF: { city: 'الطائف', district: 'حي شهار' },
+  HAIL: { city: 'حائل', district: 'حي النقرة' },
+  JAZN: { city: 'جازان', district: 'حي الشاطئ' },
+  NAJR: { city: 'نجران', district: 'حي الفهد' },
+  JUBL: { city: 'الجبيل', district: 'حي الفردوس' },
+  YANB: { city: 'ينبع', district: 'حي المجد' },
+  AHSA: { city: 'الأحساء', district: 'حي المبرز' },
+};
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   isOpen,
@@ -93,10 +138,48 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [copiedIban, setCopiedIban] = useState(false);
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
   const [isLocating, setIsLocating] = useState(false);
+  const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [pendingMoyasarOrder, setPendingMoyasarOrder] = useState<Order | null>(null);
   const [showMoyasarModal, setShowMoyasarModal] = useState(false);
+
+  // Saudi National Address (SPL) State
+  const [splShortCode, setSplShortCode] = useState('');
+  const [isLookingUpSpl, setIsLookingUpSpl] = useState(false);
+  const [splSuccessMsg, setSplSuccessMsg] = useState('');
+  const [splErrorMsg, setSplErrorMsg] = useState('');
+
+  // Saudi Personal Data Protection Law (PDPL / SDAIA) Consent
+  const [isPdplConsentAccepted, setIsPdplConsentAccepted] = useState(true);
+
+  // Determine current active shopper city & store city
+  const shopperCity = deliveryType === 'pickup' 
+    ? (settings.city || 'الرياض') 
+    : (city === 'مدينة أخرى' && customCity.trim() ? customCity.trim() : city);
+  const storeCity = settings.city || 'العلا';
+  const isDifferentCity = deliveryType === 'delivery' && !isSameSaudiCity(shopperCity, storeCity);
+  const isCodRestricted = Boolean(settings.restrictCodToStoreCity && isDifferentCity);
+
+  // Filter payment methods when out-of-city COD is restricted
+  const availablePaymentMethods = (settings.paymentMethods || []).filter((method) => {
+    if (isCodRestricted) {
+      const isCod = method.includes('استلام') || method.toLowerCase().includes('cod');
+      if (isCod) return false;
+    }
+    return true;
+  });
+
+  // Auto-switch payment method away from COD if restricted
+  useEffect(() => {
+    if (currentStep === 2 && isCodRestricted) {
+      const isCurrentCod = paymentMethod.includes('استلام') || paymentMethod.toLowerCase().includes('cod');
+      if (isCurrentCod) {
+        const fallback = availablePaymentMethods[0] || 'بطاقة مدى / البطاقات الائتمانية';
+        setPaymentMethod(fallback);
+      }
+    }
+  }, [currentStep, isCodRestricted, paymentMethod, availablePaymentMethods]);
 
   // Close on Escape
   useEffect(() => {
@@ -171,7 +254,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const handleGetLocation = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
-      alert('المتصفح لا يدعم تحديد الموقع التلقائي. يمكنك كتابة العنوان يدوياً.');
+      setShowLocationPickerModal(true);
       return;
     }
     setIsLocating(true);
@@ -187,12 +270,88 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         setIsLocating(false);
       },
       (err) => {
-        console.warn('Geolocation error:', err);
+        console.warn('Geolocation error or permission denied, falling back to interactive pin picker:', err);
         setIsLocating(false);
-        alert('تعذر الوصول إلى موقعك تلقائياً. يرجى السماح بالوصول للموقع في المتصفح أو إدخال العنوان يدوياً.');
+        // Automatically open the interactive pin picker so the customer is never blocked
+        setShowLocationPickerModal(true);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 8000 }
     );
+  };
+
+  const handleLookupNationalAddress = async () => {
+    const cleaned = splShortCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (cleaned.length < 8) {
+      setSplErrorMsg('يرجى إدخال رمز العنوان الوطني كاملاً (4 أحرف + 4 أرقام، مثال: RRRD2929 أو ALUL1885)');
+      setSplSuccessMsg('');
+      return;
+    }
+
+    setIsLookingUpSpl(true);
+    setSplErrorMsg('');
+    setSplSuccessMsg('');
+
+    const prefix = cleaned.substring(0, 4);
+    const bldg = cleaned.substring(4);
+    const matchedPrefix = KNOWN_SPL_PREFIXES[prefix];
+
+    // Determine current shopper city
+    const currentSelectedCity = city === 'مدينة أخرى' && customCity.trim() ? customCity.trim() : city;
+    const isDefaultCityUntouched = city === DEFAULT_CITIES[0] && !customCity.trim();
+
+    try {
+      const res = await fetch(`/api/geo/nationalAddress?shortCode=${encodeURIComponent(cleaned)}`);
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success && data.formattedAddress) {
+          if (data.city) {
+            // Only update city if shopper was on default untouched city
+            if (isDefaultCityUntouched || !currentSelectedCity) {
+              if (DEFAULT_CITIES.includes(data.city)) {
+                setCity(data.city);
+              } else {
+                setCity('مدينة أخرى');
+                setCustomCity(data.city);
+              }
+            }
+          }
+          setDeliveryAddress(data.formattedAddress);
+          if (data.location?.lat && data.location?.lng) {
+            setGoogleMapsUrl(`https://www.google.com/maps?q=${data.location.lat},${data.location.lng}`);
+          }
+          setSplSuccessMsg(`تم التحقق من العنوان الوطني بنجاح: ${data.city || currentSelectedCity} (${data.district || ''})`);
+          setIsLookingUpSpl(false);
+          return;
+        }
+      }
+      throw new Error('Fallback to local resolver');
+    } catch {
+      // Local robust resolver that respects the shopper's city
+      let targetCity = currentSelectedCity;
+      let districtInfo = '';
+
+      if (matchedPrefix) {
+        // If shopper has an explicit known code (e.g. ALUL for AlUla, MAKK for Makkah, etc.)
+        if (isDefaultCityUntouched) {
+          targetCity = matchedPrefix.city;
+          if (DEFAULT_CITIES.includes(matchedPrefix.city)) {
+            setCity(matchedPrefix.city);
+          } else {
+            setCity('مدينة أخرى');
+            setCustomCity(matchedPrefix.city);
+          }
+        }
+        districtInfo = matchedPrefix.district ? `${matchedPrefix.district}، ` : '';
+      }
+
+      // Format clean address without destroying the shopper's selected city
+      const fallbackAddr = `${districtInfo}العنوان الوطني المختصر (${cleaned}) - مبنى ${bldg}`;
+      setDeliveryAddress(fallbackAddr);
+      setSplSuccessMsg(`تم اعتماد العنوان الوطني المختصر: ${targetCity} (#${cleaned})`);
+    } finally {
+      setIsLookingUpSpl(false);
+    }
   };
 
   // Validate step 1 and advance
@@ -228,6 +387,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+
+    if (!isPdplConsentAccepted) {
+      setErrorMsg('يرجى الموافقة على شروط معالجة البيانات وفق نظام حماية البيانات الشخصية السعودي لإتمام الطلب.');
+      return;
+    }
 
     const phoneCheck = normalizeSaudiPhoneNumber(customerPhone);
     const finalPhone = phoneCheck.isValid ? phoneCheck.normalized : normalizeArabicDigits(customerPhone).replace(/\D/g, '');
@@ -494,21 +658,81 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     )}
                   </div>
 
+                  {/* Saudi National Address (SPL) Quick Lookup */}
+                  <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>العنوان الوطني المختصر (SPL)</span>
+                      </span>
+                      <span className="text-[10px] text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full font-bold">
+                        تعبئة ذكية للمدينة والشارع
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        maxLength={8}
+                        value={splShortCode}
+                        onChange={(e) => setSplShortCode(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleLookupNationalAddress();
+                          }
+                        }}
+                        placeholder="مثال: RRRD2929 أو ALUL1885"
+                        className="flex-1 px-3 py-2 bg-white border border-emerald-200 rounded-xl text-stone-900 text-xs font-mono tracking-wider uppercase focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        dir="ltr"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleLookupNationalAddress}
+                        disabled={isLookingUpSpl || !splShortCode.trim()}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                      >
+                        {isLookingUpSpl ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>تحقق</span>}
+                      </button>
+                    </div>
+                    {splSuccessMsg && (
+                      <p className="mt-1.5 text-[11px] text-emerald-700 flex items-center gap-1 font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{splSuccessMsg}</span>
+                      </p>
+                    )}
+                    {splErrorMsg && (
+                      <p className="mt-1.5 text-[11px] text-red-600 flex items-center gap-1 font-bold">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span>{splErrorMsg}</span>
+                      </p>
+                    )}
+                  </div>
+
                   {/* Detailed Address */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
                       <label className="block text-xs font-bold text-stone-800">
                         الحي واسم الشارع أو العنوان الوطني <span className="text-red-500">*</span>
                       </label>
-                      <button
-                        type="button"
-                        onClick={handleGetLocation}
-                        disabled={isLocating}
-                        className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
-                      >
-                        <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                        <span>{isLocating ? 'جاري تحديد موقعك...' : 'تحديد موقعي التلقائي (GPS)'}</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowLocationPickerModal(true)}
+                          className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Navigation className="w-3 h-3 text-emerald-600" />
+                          <span>تحديد بالدبوس على الخريطة</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleGetLocation}
+                          disabled={isLocating}
+                          className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                          <span>{isLocating ? 'جاري التحديد...' : 'GPS تلقائي'}</span>
+                        </button>
+                      </div>
                     </div>
                     <input
                       type="text"
@@ -576,12 +800,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* STEP 2: Payment Method */}
           {currentStep === 2 && (
             <div className="space-y-4 animate-in fade-in duration-200">
+              {/* Out-of-City Anti-Cancellation Protection Notice */}
+              {isCodRestricted && (
+                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>الدفع عند الاستلام متاح فقط داخل مدينة المتجر ({storeCity})</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    نظراً لأن وجهة الشحن إلى مدينة <strong>({shopperCity})</strong>، تم حصر خيارات الدفع على الدفع الإلكتروني المعتمد أو التحويل البنكي لحجز وتجهيز شحنتك فوراً وتفادي إلغاء الشحنات بعد الإرسال.
+                  </p>
+                </div>
+              )}
+
               <label className="block text-xs font-bold text-stone-800 mb-2">
                 اختر وسيلة الدفع المناسبة لك:
               </label>
 
               <div className="space-y-2.5">
-                {settings.paymentMethods.map((method) => {
+                {availablePaymentMethods.map((method) => {
                   const isSelected = paymentMethod === method;
                   return (
                     <label
@@ -657,26 +894,29 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               )}
 
-              {/* If Card / Mada / Apple Pay is selected, show payment trust feedback */}
+              {/* If Card / Mada / Apple Pay is selected, show Moyasar SAMA-certified third-party gateway trust card */}
               {(paymentMethod.includes('بطاق') || paymentMethod.includes('فيزا') || paymentMethod.includes('مدى') || paymentMethod.includes('Apple') || paymentMethod.toLowerCase().includes('card')) && (
-                <div className="mt-3 p-3.5 rounded-2xl bg-blue-50/60 border border-blue-200 space-y-2 text-xs">
+                <div className="mt-3 p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200 space-y-2.5 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-stone-900 flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      <span>دفع إلكتروني آمن ومعتمد 100%</span>
+                      <span>دفع إلكتروني آمن عبر بوابة ميسر (Moyasar)</span>
                     </span>
-                    <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full">
-                      تشفير مصرفي 256-bit
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      <span>معتمد من SAMA</span>
                     </span>
                   </div>
+
                   <p className="text-stone-600 leading-relaxed text-[11px]">
-                    نقبل بطاقات <strong>مدى (mada)</strong>، <strong>Visa</strong>، <strong>Mastercard</strong>، و <strong>Apple Pay</strong> مع توثيق الحماية الثلاثية (3D Secure OTP) من مصرفك.
+                    يتم الدفع بأمان وسرعة عبر بوابة <strong>ميسر (Moyasar)</strong> المعتمدة من البنك المركزي السعودي مع تشفير 256-bit وحماية ثلاثية الأبعاد (3D Secure). لا نقوم بحفظ أي بيانات بنكية أو بطاقات على خوادمنا نهائياً.
                   </p>
-                  <div className="flex items-center gap-2 pt-1 text-[10px] font-bold">
-                    <span className="px-2 py-0.5 rounded-md bg-white border border-stone-200 text-emerald-700 shadow-2xs">مدى mada</span>
-                    <span className="px-2 py-0.5 rounded-md bg-white border border-stone-200 text-blue-700 shadow-2xs">Visa</span>
-                    <span className="px-2 py-0.5 rounded-md bg-white border border-stone-200 text-amber-700 shadow-2xs">Mastercard</span>
-                    <span className="px-2 py-0.5 rounded-md bg-white border border-stone-200 text-stone-800 shadow-2xs">Apple Pay</span>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-bold">
+                    <span className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs">مدى mada</span>
+                    <span className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-800 shadow-2xs">Apple Pay</span>
+                    <span className="px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-800 shadow-2xs">Visa</span>
+                    <span className="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 shadow-2xs">Mastercard</span>
                   </div>
                 </div>
               )}
@@ -741,7 +981,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {/* Financial Summary */}
               <div className="p-3.5 rounded-2xl bg-stone-100/80 border border-stone-200 space-y-1.5 text-xs">
                 <div className="flex justify-between text-stone-600">
-                  <span>المجموع الفرعي:</span>
+                  <span>{getZatcaComplianceType(settings) === 'non_registered' ? 'المجموع الفرعي:' : 'المجموع الفرعي الخاضع للضريبة:'}</span>
                   <span className="font-mono">{subtotal.toLocaleString('en-US')} {settings.currency}</span>
                 </div>
                 {discountAmount > 0 && (
@@ -760,12 +1000,42 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     )}
                   </span>
                 </div>
+
+                {/* VAT itemization strictly when registered */}
+                {getZatcaComplianceType(settings) !== 'non_registered' ? (
+                  <div className="flex justify-between text-stone-700 font-semibold bg-stone-50 p-1.5 rounded-lg">
+                    <span>منها ضريبة القيمة المضافة (15% VAT):</span>
+                    <span className="font-mono text-stone-900">
+                      {calculateVatBreakdown(grandTotal, settings.pricesIncludeVat ?? true, settings.vatRate ?? 0.15, getZatcaComplianceType(settings)).vatAmount.toFixed(2)} {settings.currency}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-amber-800 bg-amber-50 p-1.5 rounded-lg">
+                    منشأة غير خاضعة لضريبة القيمة المضافة (لا تضاف أي ضريبة).
+                  </div>
+                )}
+
                 <div className="pt-2 border-t border-stone-200 flex justify-between text-sm font-black text-stone-900">
-                  <span>المبلغ الإجمالي المستحق:</span>
+                  <span>{getZatcaComplianceType(settings) === 'non_registered' ? 'المبلغ الإجمالي النهائي المستحق:' : 'المبلغ الإجمالي شامل الضريبة:'}</span>
                   <span className="text-base font-mono font-black" style={{ color: brand.accentColor }}>
                     {grandTotal.toLocaleString('en-US')} {settings.currency}
                   </span>
                 </div>
+              </div>
+
+              {/* Saudi Personal Data Protection Law (PDPL / SDAIA) Consent */}
+              <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-1.5">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none text-[11px] text-stone-700 leading-relaxed">
+                  <input
+                    type="checkbox"
+                    checked={isPdplConsentAccepted}
+                    onChange={(e) => setIsPdplConsentAccepted(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-stone-300 text-stone-900 focus:ring-0 cursor-pointer shrink-0"
+                  />
+                  <span>
+                    أوافق على معالجة اسمي ورقم جوالي وعنوان التوصيل لإتمام توصيل الطلب والتواصل معي، وفقاً <strong>لنظام حماية البيانات الشخصية السعودي (PDPL)</strong> وسياسة خصوصية المتجر.
+                  </span>
+                </label>
               </div>
 
               {/* Submit CTA */}
@@ -835,6 +1105,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           }}
           onPaymentFailed={(errMsg) => {
             setErrorMsg(errMsg);
+          }}
+        />
+      )}
+
+      {/* Interactive Map Pin Location Picker (Permission-Free) */}
+      {showLocationPickerModal && (
+        <LocationPickerModal
+          isOpen={showLocationPickerModal}
+          onClose={() => setShowLocationPickerModal(false)}
+          city={city === 'مدينة أخرى' && customCity.trim() ? customCity.trim() : city}
+          initialAddress={deliveryAddress}
+          onConfirm={(loc) => {
+            setGoogleMapsUrl(loc.googleMapsUrl);
+            if (!deliveryAddress.trim() || deliveryAddress.startsWith('موقع محدد')) {
+              setDeliveryAddress(loc.address || `موقع محدد بالدبوس (${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)})`);
+            }
+            setShowLocationPickerModal(false);
           }}
         />
       )}

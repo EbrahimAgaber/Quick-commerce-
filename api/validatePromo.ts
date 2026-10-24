@@ -26,7 +26,16 @@ export default async function handler(req: any, res: any) {
 
   try {
     const db = getAdminFirestore();
-    const storeRef = db.collection('stores').doc(storeId);
+    let storeRef = db.collection('stores').doc(storeId);
+    let storeSnap = await storeRef.get();
+    if (!storeSnap.exists) {
+      const slugQuery = await db.collection('stores').where('slug', '==', storeId).limit(1).get();
+      if (!slugQuery.empty) {
+        storeRef = slugQuery.docs[0].ref;
+        storeSnap = slugQuery.docs[0];
+      }
+    }
+
     const privateConfigRef = storeRef.collection('private').doc('config');
     const privateSnap = await privateConfigRef.get();
 
@@ -35,12 +44,8 @@ export default async function handler(req: any, res: any) {
       promoList = privateSnap.data()?.promoCodes || [];
     }
 
-    if (!promoList.length) {
-      // Fallback to store doc settings if not migrated yet
-      const storeSnap = await storeRef.get();
-      if (storeSnap.exists) {
-        promoList = storeSnap.data()?.settings?.promoCodes || [];
-      }
+    if (!promoList.length && storeSnap.exists) {
+      promoList = storeSnap.data()?.settings?.promoCodes || [];
     }
 
     const promo = promoList.find(

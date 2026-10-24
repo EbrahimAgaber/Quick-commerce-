@@ -396,7 +396,7 @@ export class ShopperSimulator {
   }): Promise<{ success: boolean; order?: Order; error?: string }> {
     if (!this.activeStore) throw new Error('No store loaded for shopper');
 
-    return await StoreManager.submitOrderToServer({
+    const result = await StoreManager.submitOrderToServer({
       storeId: this.activeStore.id,
       items: params.items,
       customer: {
@@ -411,6 +411,13 @@ export class ShopperSimulator {
       paymentMethod: params.paymentMethod,
       promoCode: params.promoCode,
     });
+
+    if (result.success && result.order) {
+      const fresh = StoreManager.getStoreById(this.activeStore.id);
+      if (fresh) this.activeStore = fresh;
+    }
+
+    return result;
   }
 
   /**
@@ -418,10 +425,11 @@ export class ShopperSimulator {
    */
   async trackOrder(orderId: string): Promise<Order | null> {
     if (!this.activeStore) throw new Error('No store loaded for shopper');
+    const freshStore = StoreManager.getStoreById(this.activeStore.id) || this.activeStore;
     return await StoreManager.lookupOrderById(
-      this.activeStore.id,
+      freshStore.id,
       orderId,
-      this.activeStore.orders || []
+      freshStore.orders || []
     );
   }
 

@@ -24,7 +24,18 @@ export default async function handler(req: any, res: any) {
   const db = getAdminFirestore();
 
   try {
-    const storeRef = db.collection('stores').doc(storeId);
+    let storeRef = db.collection('stores').doc(storeId);
+    let storeSnap = await storeRef.get();
+
+    // Fall back to slug lookup if storeId was passed as a store slug
+    if (!storeSnap.exists) {
+      const slugQuery = await db.collection('stores').where('slug', '==', storeId).limit(1).get();
+      if (!slugQuery.empty) {
+        storeRef = slugQuery.docs[0].ref;
+        storeSnap = slugQuery.docs[0];
+      }
+    }
+
     const orderRef = storeRef.collection('orders').doc(orderId);
     const orderSnap = await orderRef.get();
 

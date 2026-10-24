@@ -1,0 +1,3 @@
+https://quick-ecommerce-saas-app.web.app/
+https://quick-ecommerce-saas-app.web.app/?store=simpler
+https://quick-ecommerce-saas-app.web.app/?store=aurora

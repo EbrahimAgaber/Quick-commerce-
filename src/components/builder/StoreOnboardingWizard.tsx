@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StoreSettings, Product } from '../../types/store';
 import { DEFAULT_PRODUCTS } from '../../services/storeStorage';
 import { generateCleanStoreSlug } from '../../utils/urlRouter';
-import { normalizeArabicDigits } from '../../utils/digits';
+import { normalizeArabicDigits, toWhatsAppNumber } from '../../utils/digits';
 import { requestAIGeneration } from '../../services/aiService';
 import { compressImageFile } from '../../utils/imageUploader';
 import { 
@@ -97,7 +97,7 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
         setStepError('يرجى إدخال اسم المتجر أولاً للمتابعة.');
         return;
       }
-      const cleanPhone = normalizeArabicDigits(whatsappNumber.trim()).replace(/\D/g, '');
+      const cleanPhone = toWhatsAppNumber(whatsappNumber.trim());
       if (!cleanPhone || cleanPhone.length < 8) {
         setStepError('يرجى إدخال رقم واتساب صحيح (مع رمز الدولة مثل 9665XXXXXXXX) لاستقبال طلبات العملاء.');
         return;
@@ -122,7 +122,7 @@ export const StoreOnboardingWizard: React.FC<StoreOnboardingWizardProps> = ({
   };
 
   const handleFinish = () => {
-    const cleanPhone = normalizeArabicDigits(whatsappNumber.trim()).replace(/\D/g, '');
+    const cleanPhone = toWhatsAppNumber(whatsappNumber.trim());
     const finalSlug = (customSlug.trim() || generateCleanStoreSlug(storeName.trim() || 'store'))
       .toLowerCase()
       .replace(/[^a-z0-9-_]/g, '');

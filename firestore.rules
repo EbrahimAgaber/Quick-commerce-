@@ -44,7 +44,8 @@ service cloud.firestore {
              data.city is string && data.city.size() <= 100 &&
              data.deliveryAddress is string && data.deliveryAddress.size() <= 300 &&
              data.grandTotal is number && data.grandTotal >= 0 &&
-             data.status in ['Received', 'In Progress', 'Paid'] &&
+             data.status in ['Received', 'In Progress'] &&
+             data.status != 'Paid' &&
              data.items is list && data.items.size() > 0 && data.items.size() <= 100;
     }
 
@@ -133,6 +134,19 @@ service cloud.firestore {
                          ]) && request.resource.data.status == 'Return Requested');
         allow delete: if false;
       }
+    }
+
+    // Delivery Captains Collection (Dynamic registration, owner activation, delivery stats)
+    match /captains/{captainId} {
+      allow read: if isSignedIn();
+      allow create: if isValidId(captainId) &&
+                    request.resource.data.keys().hasAll(['id', 'name', 'phone', 'city', 'status']) &&
+                    request.resource.data.id == captainId &&
+                    request.resource.data.name is string && request.resource.data.name.size() > 0 &&
+                    request.resource.data.phone is string && request.resource.data.phone.size() >= 8 &&
+                    request.resource.data.status in ['pending_activation', 'active'];
+      allow update: if isSignedIn() && isValidId(captainId);
+      allow delete: if false;
     }
   }
 }

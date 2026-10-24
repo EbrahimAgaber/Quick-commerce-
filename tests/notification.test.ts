@@ -39,6 +39,8 @@ import {
 } from '../src/services/notificationService';
 import { Order, StoreSettings } from '../src/types/store';
 import { DEFAULT_SETTINGS } from '../src/services/storeStorage';
+import { toWhatsAppNumber, buildWhatsAppLink } from '../src/utils/digits';
+import { buildWhatsAppInvoiceMessage, buildMerchantCustomerUpdateMessage, formatPaymentMethodLabel } from '../src/utils/whatsappInvoice';
 
 describe('NotificationHub & Real-time Alert System', () => {
   const mockSettings: StoreSettings = {
@@ -82,11 +84,11 @@ describe('NotificationHub & Real-time Alert System', () => {
     vi.restoreAllMocks();
   });
 
-  it('dispatches storelink_new_order_placed CustomEvent on window with order and settings', async () => {
+  it('dispatches storelink_new_order_placed CustomEvent on window with order and settings via alertMerchantLocally', () => {
     const eventSpy = vi.fn();
     window.addEventListener('storelink_new_order_placed', eventSpy);
 
-    const report = await NotificationHub.dispatchOrderPlaced(mockOrder, mockSettings);
+    const report = NotificationHub.alertMerchantLocally(mockOrder, mockSettings);
 
     expect(eventSpy).toHaveBeenCalledTimes(1);
     const eventDetail = eventSpy.mock.calls[0][0].detail;
@@ -97,21 +99,35 @@ describe('NotificationHub & Real-time Alert System', () => {
     window.removeEventListener('storelink_new_order_placed', eventSpy);
   });
 
-  it('deduplicates rapid consecutive dispatches for the same order ID', async () => {
+  it('deduplicates rapid consecutive dispatches for the same order ID', () => {
     const dedupOrder: Order = { ...mockOrder, id: 'ORD-DEDUP-UNIQUE-1' };
     const eventSpy = vi.fn();
     window.addEventListener('storelink_new_order_placed', eventSpy);
 
     // First call: succeeds
-    const report1 = await NotificationHub.dispatchOrderPlaced(dedupOrder, mockSettings);
+    const report1 = NotificationHub.alertMerchantLocally(dedupOrder, mockSettings);
     expect(report1.audioPlayed).toBe(true);
 
     // Second call immediately with same order ID: skipped by deduplication
-    const report2 = await NotificationHub.dispatchOrderPlaced(dedupOrder, mockSettings);
+    const report2 = NotificationHub.alertMerchantLocally(dedupOrder, mockSettings);
     expect(report2.audioPlayed).toBe(false);
 
     // Event listener only fired once
     expect(eventSpy).toHaveBeenCalledTimes(1);
+
+    window.removeEventListener('storelink_new_order_placed', eventSpy);
+  });
+
+  it('ensures dispatchOrderPlaced defaults to remote channels without alerting shopper locally', async () => {
+    const eventSpy = vi.fn();
+    window.addEventListener('storelink_new_order_placed', eventSpy);
+
+    const shopperOrder: Order = { ...mockOrder, id: 'ORD-SHOPPER-NO-CHIME' };
+    const report = await NotificationHub.dispatchOrderPlaced(shopperOrder, mockSettings);
+
+    // Shopper device does NOT receive audio chime or local toast by default
+    expect(report.audioPlayed).toBe(false);
+    expect(eventSpy).not.toHaveBeenCalled();
 
     window.removeEventListener('storelink_new_order_placed', eventSpy);
   });
@@ -155,5 +171,64 @@ describe('NotificationHub & Real-time Alert System', () => {
   it('handles requestDesktopNotificationPermission in test environment safely', async () => {
     const granted = await requestDesktopNotificationPermission();
     expect(typeof granted).toBe('boolean');
+  });
+
+  describe('WhatsApp Normalization & Link Generation', () => {
+    it('normalizes local Saudi numbers to international WhatsApp format (fixing @0558698103 error)', () => {
+      // The exact user-reported number from WhatsApp screenshot
+      expect(toWhatsAppNumber('0558698103')).toBe('966558698103');
+      expect(buildWhatsAppLink('0558698103')).toBe('https://wa.me/966558698103');
+
+      // With text
+      expect(buildWhatsAppLink('0558698103', 'طلب جديد')).toBe('https://wa.me/966558698103?text=%D8%B7%D9%84%D8%A8%20%D8%AC%D8%AF%D9%8A%D8%AF');
+
+      // Eastern Arabic digits
+      expect(toWhatsAppNumber('٠٥٥٨٦٩٨١٠٣')).toBe('966558698103');
+
+      // Formatted with spaces and +
+      expect(toWhatsAppNumber('+966 55 869 8103')).toBe('966558698103');
+
+      // Leading 00
+      expect(toWhatsAppNumber('00966558698103')).toBe('966558698103');
+
+      // 9 digits without leading 0
+      expect(toWhatsAppNumber('558698103')).toBe('966558698103');
+    });
+
+    it('formats shopper-to-merchant order message with customer perspective rather than thanking themselves', () => {
+      const msg = buildWhatsAppInvoiceMessage(mockOrder, mockSettings);
+
+      // Perspective: customer greeting and submitting order to store
+      expect(msg).toContain('السلام عليكم ورحمة الله وبركاته');
+      expect(msg).toContain('أود تأكيد طلبي الجديد من متجر');
+      expect(msg).toContain(mockSettings.storeName);
+      expect(msg).toContain(mockOrder.id);
+      expect(msg).toContain('الدفع عند الاستلام (COD) 💵');
+      expect(msg).toContain('بانتظار تأكيدكم وبدء التجهيز، شكراً لكم!');
+
+      // Must NOT contain inverted store-to-customer receipt text
+      expect(msg).not.toContain('شكراً لتسوقك من');
+    });
+
+    it('formats merchant-to-customer confirmation message with premium customer service tone', () => {
+      const msg = buildMerchantCustomerUpdateMessage(mockOrder, mockSettings);
+
+      // Perspective: store addressing customer politely
+      expect(msg).toContain(`مرحباً أ. ${mockOrder.customerName}`);
+      expect(msg).toContain(`تحية طيبة من فريق *${mockSettings.storeName}*`);
+      expect(msg).toContain(`تم استلام وتأكيد طلبكم بنجاح وجارٍ التجهيز 📋`);
+      expect(msg).toContain(`380 SAR`);
+      expect(msg).toContain(`الدفع عند الاستلام (COD) 💵`);
+      expect(msg).toContain(`track=ORD-NOTIF-999`);
+      expect(msg).toContain(`فريق خدمة العملاء`);
+    });
+
+    it('localizes payment method labels properly for Arabic shoppers', () => {
+      expect(formatPaymentMethodLabel('cod')).toBe('الدفع عند الاستلام (COD) 💵');
+      expect(formatPaymentMethodLabel('cash_on_delivery')).toBe('الدفع عند الاستلام (COD) 💵');
+      expect(formatPaymentMethodLabel('card')).toBe('مدفوع إلكترونياً (مدى / Apple Pay) ✅');
+      expect(formatPaymentMethodLabel('apple_pay')).toBe('مدفوع إلكترونياً (مدى / Apple Pay) ✅');
+      expect(formatPaymentMethodLabel('bank_transfer')).toBe('تحويل بنكي فوري 🏦');
+    });
   });
 });

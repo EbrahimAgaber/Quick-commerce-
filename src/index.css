@@ -1,8 +1,18 @@
 @import "tailwindcss";
 
+/* Zero-CLS Arabic Typography: Fallback metric overrides matching Cairo WOFF2 geometry */
+@font-face {
+  font-family: 'Cairo-Fallback';
+  src: local('Arial'), local('Segoe UI'), local('Tahoma');
+  ascent-override: 96.5%;
+  descent-override: 26.5%;
+  line-gap-override: 0%;
+  size-adjust: 104.2%;
+}
+
 @layer base {
   body {
-    font-family: 'Cairo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Cairo', 'Cairo-Fallback', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
   
   .font-amiri {

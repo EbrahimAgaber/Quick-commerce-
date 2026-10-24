@@ -190,7 +190,17 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
 
     const paymentId = paymentData?.id || `pay_${Math.random().toString(36).substring(2, 9)}`;
 
+    // Ensure paymentData reported success or we are in test mode
+    if (paymentData?.status && paymentData.status !== 'paid' && !settings.moyasarTestMode) {
+      setIsVerifying(false);
+      setStatusMessage('فشلت عملية الدفع أو تم رفضها من قبل البنك. يرجى استخدام بطاقة أخرى.');
+      if (onPaymentFailed) onPaymentFailed('فشلت عملية الدفع أو تم رفضها من قبل البنك.');
+      return;
+    }
+
     try {
+      const canonicalStoreId = order.storeId || storeSlug || (settings as any).id || 'store_aurora_01';
+
       // 1. Try server-side verification if serverless functions are configured
       let serverVerified = false;
       try {
@@ -198,7 +208,7 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            storeId: storeSlug || settings.storeName,
+            storeId: canonicalStoreId,
             orderId: order.id,
             paymentId,
           }),
@@ -213,6 +223,14 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
         // Fallback to local verified order update
       }
 
+      // If not verified on server and not in test mode, check if client paymentData was explicit
+      if (!serverVerified && !settings.moyasarTestMode && (!paymentData || paymentData.status !== 'paid')) {
+        setIsVerifying(false);
+        setStatusMessage('تعذر التحقق من نجاح عملية الدفع مع البنك. يرجى مراجعة البنك أو تجربة وسيلة دفع أخرى.');
+        if (onPaymentFailed) onPaymentFailed('تعذر التحقق من نجاح العملية مع البنك.');
+        return;
+      }
+
       // 2. Update order in local store state with Paid status & payment ID
       const updatedOrder: Order = {
         ...order,
@@ -222,8 +240,7 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
         trackingNotes: `تم استلام الدفع الإلكتروني بنجاح (معرف العملية: ${paymentId}). الطلب مؤكد وجاري التجهيز.`,
       };
 
-      const targetStoreId = storeSlug || order.city || 'store_aurora_01';
-      await StoreManager.updateOrderInStore(targetStoreId, updatedOrder);
+      await StoreManager.updateOrderInStore(canonicalStoreId, updatedOrder);
 
       setPaymentSuccess(true);
       setIsVerifying(false);
@@ -232,9 +249,10 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
         onPaymentSuccess(updatedOrder);
       }, 1200);
     } catch (err: any) {
+      console.error('Error during payment processing:', err);
       setIsVerifying(false);
-      setStatusMessage('تمت العملية ولكن تعذر تحديث بيانات الطلب فورياً. تم حفظ بيانات التحصيل.');
-      onPaymentSuccess({ ...order, status: 'Paid', paymentId });
+      setStatusMessage('حدث خطأ أثناء اعتماد حالة الدفع للطلب. يرجى التواصل مع الدعم الفني.');
+      if (onPaymentFailed) onPaymentFailed(err?.message || 'تعذر اعتماد الدفع.');
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
 import { 
   StoreSettings, 
   Product, 
@@ -12,12 +12,12 @@ import {
 import { StoreStorage, DEFAULT_PRODUCTS, MODERN_RETAIL_THEME, safeSetLocalStorage } from './services/storeStorage';
 import { StoreManager } from './services/storeManager';
 import { AuthService } from './services/authService';
-import { onFirebaseAuthStateChanged } from './services/firebase';
+import { onFirebaseAuthStateChanged, auth } from './services/firebase';
 import { injectBrandThemeStyles } from './utils/themeInjector';
 import { initializeMarketingPixels } from './utils/analytics';
 import { matchesSearch } from './utils/arabicSearch';
 import { parseStoreRouteFromLocation } from './utils/urlRouter';
-import { injectStoreSEO } from './utils/seoManager';
+import { injectStoreSEO, injectPlatformSEO } from './utils/seoManager';
 
 // Core Storefront Layout & Components (Eagerly loaded for instant First Contentful Paint)
 import { Navbar, AppViewMode, DevicePreviewMode } from './components/layout/Navbar';
@@ -31,6 +31,7 @@ import { OrderSuccessModal } from './components/storefront/OrderSuccessModal';
 import { MerchantAuthGate } from './components/auth/MerchantAuthGate';
 import { Footer } from './components/layout/Footer';
 import { OrderNotificationToast } from './components/common/OrderNotificationToast';
+import { NotificationHub } from './services/notificationService';
 import { Plus, Sparkles, RotateCcw, Eye, EyeOff, Package, ShoppingBag, Store, Loader2 } from 'lucide-react';
 
 // Code-Split Heavy Merchant & Secondary Modals via React.lazy
@@ -61,12 +62,37 @@ const OrderTrackerModal = lazy(() =>
 const StorePoliciesModal = lazy(() =>
   import('./components/storefront/StorePoliciesModal').then((m) => ({ default: m.StorePoliciesModal }))
 );
+const CaptainPortalModal = lazy(() =>
+  import('./components/captain/CaptainPortalModal').then((m) => ({ default: m.CaptainPortalModal }))
+);
 
 export default function App() {
   // Merchant User & Multi-Store Management
   const [currentUser, setCurrentUser] = useState<MerchantUser | null>(() => AuthService.getCurrentUser());
   const [allStores, setAllStores] = useState<StoreInstance[]>(() => StoreManager.getAllStores());
-  const [activeStore, setActiveStore] = useState<StoreInstance>(() => StoreManager.getActiveStore());
+  // When the URL targets a specific store that is already cached, start with THAT store
+  // (never the last-active/demo store) so the shopper never sees a wrong store name flash.
+  const [activeStore, setActiveStore] = useState<StoreInstance>(() => {
+    try {
+      const route = parseStoreRouteFromLocation();
+      const slug = route.storeSlug;
+      const routed = slug
+        ? StoreManager.getStoreBySlug(slug) || StoreManager.getStoreById(slug)
+        : route.customDomainHostname
+          ? StoreManager.getStoreByCustomDomain(route.customDomainHostname)
+          : null;
+      if (routed) {
+        StoreManager.setActiveStoreId(routed.id);
+        return routed;
+      }
+    } catch {}
+    return StoreManager.getActiveStore();
+  });
+  // Tracks the store the UI is currently bound to, so background sync events can't swap in another store.
+  const activeStoreIdRef = useRef<string>(activeStore.id);
+  useEffect(() => {
+    activeStoreIdRef.current = activeStore.id;
+  }, [activeStore.id]);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'register'>('login');
   const [isShopperPreviewOnly, setIsShopperPreviewOnly] = useState(false);
@@ -126,10 +152,20 @@ export default function App() {
   // Listen to local storage & cross-tab sync events
   useEffect(() => {
     const handleDbSync = () => {
-      setSettings(StoreStorage.getSettings());
-      setProducts(StoreStorage.getProducts());
-      setOrders(StoreStorage.getOrders());
-      setPolicies(StoreStorage.getPolicies());
+      // Ignore storage snapshots that belong to a different store (prevents demo/other store flash)
+      const bound = StoreManager.getStoreById(activeStoreIdRef.current);
+      if (bound && StoreManager.getActiveStore().id !== bound.id) return;
+      if (bound) {
+        setSettings(bound.settings || StoreStorage.getSettings());
+        setProducts(bound.products || []);
+        setOrders(bound.orders || []);
+        setPolicies(bound.policies || []);
+      } else {
+        setSettings(StoreStorage.getSettings());
+        setProducts(StoreStorage.getProducts());
+        setOrders(StoreStorage.getOrders());
+        setPolicies(StoreStorage.getPolicies());
+      }
     };
 
     const handleAuthChange = () => {
@@ -139,7 +175,8 @@ export default function App() {
     const handleStoresChange = () => {
       const stores = StoreManager.getAllStores();
       setAllStores(stores);
-      const curr = StoreManager.getActiveStore();
+      // Stay on the store the UI is bound to (handleSelectStore updates the ref on explicit switches)
+      const curr = StoreManager.getStoreById(activeStoreIdRef.current) || StoreManager.getActiveStore();
       if (curr) {
         setActiveStore(curr);
         setSettings(curr.settings || StoreStorage.getSettings());
@@ -192,8 +229,10 @@ export default function App() {
   useEffect(() => {
     if (!activeStore.id || activeStore.id === 'store_aurora_01') return;
 
+    // ONLY subscribe and alert if a real merchant is logged in on this device and NOT in shopper preview!
+    if (!currentUser || isShopperPreviewOnly) return;
     const isOwner = Boolean(
-      (currentUser && activeStore.ownerId === currentUser.id) ||
+      activeStore.ownerId === currentUser.id ||
       activeStore.ownerId === 'merchant_user' ||
       activeStore.ownerId === 'guest'
     );
@@ -201,11 +240,13 @@ export default function App() {
 
     const unsubscribeOrders = StoreManager.subscribeToStoreOrders(
       activeStore.id,
-      (liveOrders) => {
+      (liveOrders, _newCount, newOrders) => {
         if (liveOrders && liveOrders.length > 0) {
           setOrders(liveOrders);
           StoreStorage.saveOrders(liveOrders);
         }
+        // Merchant-device alerts (toast/chime/desktop) for orders that arrived after the listener started
+        (newOrders || []).forEach((o) => NotificationHub.alertMerchantLocally(o, activeStore.settings || settings));
       }
     );
 
@@ -242,27 +283,45 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   // Inject Dynamic SEO, Open Graph, Saudi GEO tags and JSON-LD structured data
+  // Cleanly separates SaaS platform metadata from individual merchant storefronts
   useEffect(() => {
-    if (activeStore && settings) {
+    if (viewMode === 'landing') {
+      injectPlatformSEO();
+    } else if (viewMode === 'storefront' && activeStore && settings) {
       injectStoreSEO(
         { ...activeStore, settings, products },
         { activeProduct: selectedProduct }
       );
+    } else if (viewMode === 'dashboard') {
+      document.title = `لوحة التحكم | ${settings?.storeName || 'StoreLink'}`;
     }
-  }, [activeStore, settings, products, selectedProduct]);
+  }, [viewMode, activeStore, settings, products, selectedProduct]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isTrackerOpen, setIsTrackerOpen] = useState(() => Boolean(initialRoute.trackOrderId));
   const [trackerInitialId, setTrackerInitialId] = useState(() => initialRoute.trackOrderId || '');
   const [isPoliciesOpen, setIsPoliciesOpen] = useState(false);
+  const [isCaptainPortalOpen, setIsCaptainPortalOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return (
+        params.get('view') === 'captain' ||
+        params.get('captain') === 'true' ||
+        params.get('driver') === 'register' ||
+        window.location.pathname.startsWith('/captain')
+      );
+    }
+    return false;
+  });
   const [isBrandStudioOpen, setIsBrandStudioOpen] = useState(false);
   const [isNewStoreWizardOpen, setIsNewStoreWizardOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
 
   const handleSelectStore = (storeId: string) => {
-    StoreManager.setActiveStoreId(storeId);
     const store = StoreManager.getStoreById(storeId);
+    if (store) activeStoreIdRef.current = store.id;
+    StoreManager.setActiveStoreId(storeId);
     if (store) {
       const currentOrders = StoreStorage.getOrders();
       const resolvedOrders = store.orders?.length ? store.orders : currentOrders;
@@ -338,12 +397,22 @@ export default function App() {
           StoreManager.fetchStoreFromFirestore(targetSlugOrId)
             .then((freshStore) => {
               if (freshStore) {
+                const localProds = localMatch.products || [];
+                const freshProds = freshStore.products || [];
+                let resolvedProds = freshProds;
+                if (freshProds.length === 0 && localProds.length > 0) {
+                  resolvedProds = localProds;
+                  if (auth.currentUser && (localMatch.ownerId === auth.currentUser.uid || localMatch.ownerId === 'guest')) {
+                    StoreManager.syncStoreToFirestore({ ...localMatch, products: localProds }).catch(console.warn);
+                  }
+                }
                 setActiveStore((prev) => ({
                   ...freshStore,
+                  products: resolvedProds,
                   orders: prev.orders?.length ? prev.orders : freshStore.orders || [],
                 }));
                 setSettings(freshStore.settings);
-                setProducts(freshStore.products || []);
+                setProducts(resolvedProds);
                 setPolicies(freshStore.policies || []);
                 if (freshStore.orders && freshStore.orders.length > 0) {
                   setOrders(freshStore.orders);
@@ -546,9 +615,19 @@ export default function App() {
   // Checkout Success handler
   const handleOrderSuccess = (order: Order) => {
     StoreManager.submitOrderToStore(activeStore.id, order);
-    setOrders(StoreStorage.getOrders());
-    setProducts(StoreManager.getActiveStore().products || []);
-    setActiveStore(StoreManager.getActiveStore());
+    // Re-read THIS store only; never fall back to the last-active/demo store after checkout
+    const updatedStore = StoreManager.getStoreById(activeStore.id);
+    if (updatedStore) {
+      setOrders(updatedStore.orders || []);
+      setProducts(updatedStore.products || []);
+      setActiveStore(updatedStore);
+    } else {
+      setOrders((prev) => {
+        const cleanId = order.id.toUpperCase().trim();
+        const exists = prev.some((o) => o.id.toUpperCase().trim() === cleanId);
+        return exists ? prev.map((o) => (o.id.toUpperCase().trim() === cleanId ? order : o)) : [order, ...prev];
+      });
+    }
     setAllStores(StoreManager.getAllStores());
     setCart([]);
     setAppliedPromo(null);
@@ -562,7 +641,7 @@ export default function App() {
     StoreStorage.saveSettings(newSettings);
     setSettings(newSettings);
     const updatedStore: StoreInstance = { ...activeStore, settings: newSettings };
-    StoreManager.updateStore(updatedStore);
+    StoreManager.updateStore(updatedStore, { immediateSync: true });
     setActiveStore(updatedStore);
     setAllStores(StoreManager.getAllStores());
   };
@@ -571,7 +650,7 @@ export default function App() {
     StoreStorage.saveProducts(newProducts);
     setProducts(newProducts);
     const updatedStore: StoreInstance = { ...activeStore, products: newProducts };
-    StoreManager.updateStore(updatedStore);
+    StoreManager.updateStore(updatedStore, { immediateSync: true });
     setActiveStore(updatedStore);
     setAllStores(StoreManager.getAllStores());
   };
@@ -658,7 +737,7 @@ export default function App() {
       storeSubtitle: newSettings.storeSubtitle,
       slug: customSlug,
       businessType: newSettings.businessType,
-      ownerId: currentUser?.id || 'guest',
+      ownerId: auth.currentUser?.uid || currentUser?.id || 'guest',
       tagline: newSettings.tagline,
       whatsappNumber: newSettings.whatsappNumber,
       currency: newSettings.currency,
@@ -780,6 +859,7 @@ export default function App() {
           onPreviewDemoStore={() => {
             setViewMode('storefront');
           }}
+          onOpenCaptainPortal={() => setIsCaptainPortalOpen(true)}
         />
 
         {isNewStoreWizardOpen && (
@@ -797,6 +877,13 @@ export default function App() {
             initialMode={authInitialMode}
             onClose={() => setIsAuthModalOpen(false)}
             onSuccess={handleAuthSuccess}
+          />
+        )}
+
+        {isCaptainPortalOpen && (
+          <CaptainPortalModal
+            isOpen={isCaptainPortalOpen}
+            onClose={() => setIsCaptainPortalOpen(false)}
           />
         )}
       </Suspense>
@@ -870,6 +957,7 @@ export default function App() {
         onOpenPolicies={() => setIsPoliciesOpen(true)}
         onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
         onOpenNewStoreWizard={() => setIsNewStoreWizardOpen(true)}
+        onOpenCaptainPortal={() => setIsCaptainPortalOpen(true)}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         viewMode={viewMode}
@@ -1126,6 +1214,7 @@ export default function App() {
               setTrackerInitialId('');
               setIsTrackerOpen(true);
             }}
+            onOpenCaptainPortal={() => setIsCaptainPortalOpen(true)}
           />
         </>
       )}
@@ -1201,6 +1290,14 @@ export default function App() {
             onSuccess={handleAuthSuccess}
           />
         )}
+
+        {/* 11. Delivery Captain Network Portal (Phase 4) */}
+        {isCaptainPortalOpen && (
+          <CaptainPortalModal
+            isOpen={isCaptainPortalOpen}
+            onClose={() => setIsCaptainPortalOpen(false)}
+          />
+        )}
       </Suspense>
 
       {/* 3. Product Detail Modal */}
@@ -1243,14 +1340,14 @@ export default function App() {
         />
       )}
 
-      {/* 10. Floating Multi-Channel Order Notification Toast */}
-      <OrderNotificationToast
-        onSelectOrder={(_orderId) => {
-          if (!isShopperPreviewOnly) {
+      {/* 10. Floating Multi-Channel Order Notification Toast - Merchant Only */}
+      {currentUser && !isShopperPreviewOnly && (
+        <OrderNotificationToast
+          onSelectOrder={(_orderId) => {
             setViewMode('dashboard');
-          }
-        }}
-      />
+          }}
+        />
+      )}
     </div>
   );
 }

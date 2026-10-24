@@ -3,6 +3,7 @@ import { StoreSettings, BrandTheme } from '../../types/store';
 import { BRAND_PRESETS, MODERN_RETAIL_THEME } from '../../services/storeStorage';
 import { injectBrandThemeStyles, loadGoogleFont } from '../../utils/themeInjector';
 import { compressImageFile } from '../../utils/imageUploader';
+import { toWhatsAppNumber } from '../../utils/digits';
 import { 
   Palette, 
   X, 
@@ -130,8 +131,14 @@ export const BrandCustomizerModal: React.FC<BrandCustomizerModalProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    injectBrandThemeStyles(formData.brandTheme);
-    onSaveSettings(formData);
+    const cleanWhatsapp = toWhatsAppNumber(formData.whatsappNumber);
+    const cleanedSettings: StoreSettings = {
+      ...formData,
+      whatsappNumber: cleanWhatsapp,
+      supportPhone: formData.supportPhone || (cleanWhatsapp ? `+${cleanWhatsapp}` : ''),
+    };
+    injectBrandThemeStyles(cleanedSettings.brandTheme);
+    onSaveSettings(cleanedSettings);
     setShowSavedNotification(true);
     setTimeout(() => {
       setShowSavedNotification(false);

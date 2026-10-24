@@ -183,3 +183,88 @@ describe('Server-Side Order & Pricing Integrity (S1, S5)', () => {
     expect(res2.discountAmount).toBe(0); // Ignored because expired
   });
 });
+
+import { deduplicateOrders } from '../src/services/storeManager';
+import { getOrderDeliveryPin } from '../src/utils/whatsappInvoice';
+import { normalizeArabicDigits } from '../src/utils/digits';
+import { Order } from '../src/types/store';
+
+describe('Order Deduplication & Driver Delivery PIN Verification', () => {
+  it('deduplicateOrders strips duplicate order entries preserving single record', () => {
+    const rawOrders: Order[] = [
+      {
+        id: 'ORD-H6BKT6DQ',
+        timestamp: '2026-10-22T14:00:00Z',
+        customerName: 'يوسف كالو',
+        customerPhone: '0551122334',
+        city: 'العلا',
+        deliveryAddress: 'حي الصخيرات',
+        paymentMethod: 'cod',
+        itemsSummary: '1x حذاء رجالي أنيق',
+        items: [],
+        subtotal: 130,
+        shippingFee: 15,
+        grandTotal: 145,
+        status: 'Delivered',
+        driverDeliveredAt: '2026-10-22T14:30:00Z',
+      },
+      {
+        id: 'ORD-H6BKT6DQ', // Duplicate!
+        timestamp: '2026-10-22T14:00:00Z',
+        customerName: 'يوسف كالو',
+        customerPhone: '0551122334',
+        city: 'العلا',
+        deliveryAddress: 'حي الصخيرات',
+        paymentMethod: 'cod',
+        itemsSummary: '1x حذاء رجالي أنيق',
+        items: [],
+        subtotal: 130,
+        shippingFee: 15,
+        grandTotal: 145,
+        status: 'Delivered',
+        driverDeliveredAt: '2026-10-22T14:30:00Z',
+      },
+      {
+        id: 'ORD-ANOTHER-01',
+        timestamp: '2026-10-22T15:00:00Z',
+        customerName: 'سارة',
+        customerPhone: '0501112233',
+        city: 'الرياض',
+        deliveryAddress: 'حي الملقا',
+        paymentMethod: 'card',
+        itemsSummary: '1x عطر',
+        items: [],
+        subtotal: 200,
+        shippingFee: 0,
+        grandTotal: 200,
+        status: 'Received',
+      },
+    ];
+
+    const cleaned = deduplicateOrders(rawOrders);
+    expect(cleaned.length).toBe(2);
+    expect(cleaned.filter((o) => o.id === 'ORD-H6BKT6DQ').length).toBe(1);
+    expect(cleaned[0].grandTotal).toBe(145);
+  });
+
+  it('generates a valid 4-digit Delivery PIN and validates driver match', () => {
+    const orderWithPin: Partial<Order> = {
+      id: 'ORD-TEST1234',
+      deliveryPin: '4829',
+    };
+    expect(getOrderDeliveryPin(orderWithPin as Order)).toBe('4829');
+
+    // Deterministic fallback for orders without explicit deliveryPin
+    const orderWithoutPin: Partial<Order> = {
+      id: 'ORD-H6BKT6DQ',
+    };
+    const resolvedPin = getOrderDeliveryPin(orderWithoutPin as Order);
+    expect(/^\d{4}$/.test(resolvedPin)).toBe(true);
+
+    // Normalize Eastern Arabic numerals entered by driver
+    const driverInput = '٤٨٢٩';
+    const normalizedInput = normalizeArabicDigits(driverInput);
+    expect(normalizedInput).toBe('4829');
+    expect(normalizedInput === '4829').toBe(true);
+  });
+});

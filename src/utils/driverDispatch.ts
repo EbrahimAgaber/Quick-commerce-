@@ -1,5 +1,5 @@
 import { Order, StoreSettings } from '../types/store';
-import { normalizeArabicDigits } from './digits';
+import { normalizeArabicDigits, toWhatsAppNumber } from './digits';
 
 export interface DriverDispatchParams {
   order: Order;
@@ -49,7 +49,7 @@ export function generateDriverWhatsAppUrl(params: {
   driverPhone: string;
   message: string;
 }): string {
-  const cleanPhone = normalizeArabicDigits(params.driverPhone || '').replace(/\D/g, '');
+  const cleanPhone = toWhatsAppNumber(params.driverPhone);
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(params.message)}`;
 }
 

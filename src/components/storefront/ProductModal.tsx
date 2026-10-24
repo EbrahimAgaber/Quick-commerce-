@@ -3,6 +3,7 @@ import { Product, StoreSettings } from '../../types/store';
 import { X, Check, ShoppingBag, MessageCircle, Sparkles, Share2, Flame, Package } from 'lucide-react';
 import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
 import { buildShareableStoreUrl } from '../../utils/urlRouter';
+import { getZatcaComplianceType } from '../../utils/zatca';
 
 interface ProductModalProps {
   product: Product | null;
@@ -218,7 +219,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             </h2>
 
             {/* Price Row */}
-            <div className="mt-3 flex items-baseline gap-2">
+            <div className="mt-3 flex flex-wrap items-baseline gap-2">
               <span className="text-2xl font-black font-mono" style={{ color: brand.primaryColor }}>
                 {currentPrice.toLocaleString('en-US')}
               </span>
@@ -227,6 +228,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 <span className="text-sm text-stone-400 line-through mr-2">
                   {product.price.toLocaleString('en-US')} {settings.currency}
                 </span>
+              )}
+              {getZatcaComplianceType(settings) !== 'non_registered' && (
+                <span className="text-xs text-stone-500 font-medium mr-2">(شامل ضريبة القيمة المضافة 15%)</span>
               )}
             </div>
 
@@ -284,11 +288,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <div className="flex items-center gap-3 bg-stone-100 rounded-xl p-1 border border-stone-200">
                 <button
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-7 h-7 rounded-lg bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center shadow-xs cursor-pointer"
+                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center shadow-xs cursor-pointer text-base"
+                  aria-label="تقليل الكمية"
                 >
                   -
                 </button>
-                <span className="w-8 text-center text-xs font-mono font-bold text-stone-900">
+                <span className="w-8 text-center text-sm font-mono font-bold text-stone-900">
                   {quantity}
                 </span>
                 <button
@@ -296,7 +301,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                     setQuantity(maxStock !== undefined ? Math.min(maxStock, quantity + 1) : quantity + 1)
                   }
                   disabled={maxStock !== undefined && quantity >= maxStock}
-                  className="w-7 h-7 rounded-lg bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center shadow-xs cursor-pointer"
+                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-lg bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center shadow-xs cursor-pointer text-base"
+                  aria-label="زيادة الكمية"
                 >
                   +
                 </button>

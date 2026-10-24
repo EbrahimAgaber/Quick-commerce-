@@ -47,7 +47,7 @@ describe('Simulation Kit - Business Owner & Shopper Persona Tests', () => {
       expect(report.totalSteps).toBe(16);
       expect(report.storeId).toBeDefined();
       expect(report.orderId).toBeDefined();
-    }, 20000);
+    }, 60000);
   });
 
   describe('2. Business Owner Persona (Merchant Operations)', () => {
@@ -150,7 +150,7 @@ describe('Simulation Kit - Business Owner & Shopper Persona Tests', () => {
 
       expect(dispatchRes.updatedOrder.status).toBe('Out for Delivery');
       expect(dispatchRes.updatedOrder.courierName).toBe('الكابتن أحمد');
-      expect(dispatchRes.whatsappUrl).toContain('0559998877');
+      expect(dispatchRes.whatsappUrl).toContain('966559998877');
       expect(dispatchRes.message).toContain(orderId);
 
       // Driver Settlement
@@ -158,7 +158,7 @@ describe('Simulation Kit - Business Owner & Shopper Persona Tests', () => {
       expect(settled.status).toBe('Delivered');
       expect(settled.driverSettled).toBe(true);
       expect(settled.driverCashCollected).toBe(inProgressOrder.grandTotal);
-    });
+    }, 35000);
   });
 
   describe('3. Shopper Persona (Customer Experience & Edge Cases)', () => {

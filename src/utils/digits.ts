@@ -60,3 +60,28 @@ export function normalizeSaudiPhoneNumber(phone: string): {
     formattedInternational: international,
   };
 }
+
+/**
+ * Converts any phone input into the international digits-only format required by
+ * wa.me / api.whatsapp.com (e.g. 0558698103 -> 966558698103).
+ * Handles Eastern Arabic digits, +, spaces, dashes, leading 00, and Saudi local formats.
+ */
+export function toWhatsAppNumber(phone: string | null | undefined): string {
+  let clean = normalizeArabicDigits(String(phone || '')).replace(/\D/g, '');
+  if (clean.startsWith('00')) clean = clean.substring(2);
+  if (/^05\d{8}$/.test(clean)) return '966' + clean.substring(1);
+  if (/^5\d{8}$/.test(clean)) return '966' + clean;
+  if (/^96605\d{8}$/.test(clean)) return '966' + clean.substring(4);
+  return clean;
+}
+
+
+/**
+ * Builds a wa.me link with a normalized international number and optional pre-filled text.
+ * Returns '' if no usable phone is given.
+ */
+export function buildWhatsAppLink(phone: string | null | undefined, text?: string): string {
+  const num = toWhatsAppNumber(phone);
+  if (!num) return '';
+  return text ? `https://wa.me/${num}?text=${encodeURIComponent(text)}` : `https://wa.me/${num}`;
+}

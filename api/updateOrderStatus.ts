@@ -108,9 +108,10 @@ export default async function handler(req: any, res: any) {
         });
       }
 
-      // Phone verification check for shopper
-      const expectedLast4 = (existingOrder.customerPhone || '').slice(-4);
-      if (phoneLast4 && phoneLast4 !== expectedLast4) {
+      // Phone verification check for shopper (Mandatory)
+      const expectedLast4 = (existingOrder.customerPhone || '').replace(/\D/g, '').slice(-4);
+      const cleanPhoneLast4 = (phoneLast4 || '').toString().trim();
+      if (!cleanPhoneLast4 || cleanPhoneLast4 !== expectedLast4) {
         return res.status(403).json({
           error: 'آخر 4 أرقام من رقم الجوال غير متطابقة.',
           success: false,
@@ -121,6 +122,18 @@ export default async function handler(req: any, res: any) {
       const allowedDriverStatuses = ['Out for Delivery', 'Delivered', 'Cancelled'];
       if (status && !allowedDriverStatuses.includes(status)) {
         return res.status(403).json({ error: 'Driver not permitted to set this status.', success: false });
+      }
+
+      // If driver is marking order as 'Delivered', verify delivery PIN!
+      if (status === 'Delivered') {
+        const expectedPin = existingOrder.deliveryPin || (existingOrder.id ? (existingOrder.id.replace(/\D/g, '').slice(-4) || '0000') : '');
+        const providedPin = (req.body?.deliveryPin || req.body?.pin || '').toString().trim();
+        if (!isMerchantAuthenticated && (!providedPin || providedPin !== expectedPin)) {
+          return res.status(403).json({
+            error: 'رمز تأكيد التسليم (PIN) غير صحيح أو لم يتم إدخاله.',
+            success: false,
+          });
+        }
       }
     } else {
       // Merchant actions require authentication if configured, or allow demo store updates
@@ -269,7 +282,7 @@ export default async function handler(req: any, res: any) {
       }
     }
 
-    const mergedOrder = {
+    const mergedOrder: any = {
       ...existingOrder,
       ...orderUpdates,
       id: cleanOrderId,

@@ -33,10 +33,16 @@ export default async function handler(req: any, res: any) {
   const db = getAdminFirestore();
 
   try {
-    const storeRef = db.collection('stores').doc(storeId);
-    const storeSnap = await storeRef.get();
+    let storeRef = db.collection('stores').doc(storeId);
+    let storeSnap = await storeRef.get();
     if (!storeSnap.exists) {
-      return res.status(404).json({ error: 'Store not found.', success: false });
+      const slugQuery = await db.collection('stores').where('slug', '==', storeId).limit(1).get();
+      if (!slugQuery.empty) {
+        storeRef = slugQuery.docs[0].ref;
+        storeSnap = slugQuery.docs[0];
+      } else {
+        return res.status(404).json({ error: 'Store not found.', success: false });
+      }
     }
 
     // Verify ownership

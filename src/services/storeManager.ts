@@ -8,9 +8,10 @@ import {
 } from './storeStorage';
 import { db, auth, isFirebaseConfigured } from './firebase';
 import { generateCleanStoreSlug } from '../utils/urlRouter';
-import { normalizeArabicDigits } from '../utils/digits';
-import { generateOrderId } from '../utils/whatsappInvoice';
+import { normalizeArabicDigits, toWhatsAppNumber } from '../utils/digits';
+import { generateOrderId, getOrderDeliveryPin, generateDeliveryPin } from '../utils/whatsappInvoice';
 import { NotificationHub } from './notificationService';
+import { getZatcaComplianceType, calculateVatBreakdown } from '../utils/zatca';
 import { 
   doc, 
   getDoc, 
@@ -59,6 +60,22 @@ const inFlightStoreFetches = new Map<string, Promise<StoreInstance | null>>();
 const syncDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**
+ * Strips duplicate orders by order ID (case-insensitive), preventing duplicated records
+ */
+export function deduplicateOrders(orders: Order[]): Order[] {
+  if (!Array.isArray(orders)) return [];
+  const map = new Map<string, Order>();
+  for (const o of orders) {
+    if (!o || typeof o !== 'object' || !o.id) continue;
+    const cleanId = String(o.id).trim().toUpperCase();
+    if (!map.has(cleanId)) {
+      map.set(cleanId, o);
+    }
+  }
+  return Array.from(map.values());
+}
+
+/**
  * Validates and deeply sanitizes a raw store object from localStorage or Firestore,
  * ensuring missing or corrupted properties are safely replaced with robust defaults.
  */
@@ -71,10 +88,41 @@ export function sanitizeStoreInstance(raw: any): StoreInstance | null {
   const rawTheme = (rawSettings.brandTheme && typeof rawSettings.brandTheme === 'object') ? rawSettings.brandTheme : {};
   const rawBank = (rawSettings.bankDetails && typeof rawSettings.bankDetails === 'object') ? rawSettings.bankDetails : {};
 
+  const isDemo = raw.id === 'store_aurora_01' || raw.slug === 'aurora';
+  const cleanStoreName = typeof rawSettings.storeName === 'string' && rawSettings.storeName.trim()
+    ? rawSettings.storeName.trim()
+    : (isDemo ? DEFAULT_SETTINGS.storeName : 'متجر إلكتروني');
+  const cleanTagline = typeof rawSettings.tagline === 'string' && rawSettings.tagline.trim()
+    ? rawSettings.tagline.trim()
+    : (isDemo ? DEFAULT_SETTINGS.tagline : 'تسوق أحدث المنتجات مع توصيل سريع وضمان جودة معتمد');
+
+  // Strip stale demo branding (أورورا / Aurora) from non-demo merchant stores
+  let metaTitle = typeof rawSettings.metaTitle === 'string' ? rawSettings.metaTitle.trim() : '';
+  if (!isDemo && (!metaTitle || metaTitle.includes('أورورا') || metaTitle.includes('Aurora'))) {
+    metaTitle = `${cleanStoreName} | ${cleanTagline}`;
+  }
+
+  let metaDescription = typeof rawSettings.metaDescription === 'string' ? rawSettings.metaDescription.trim() : '';
+  if (!isDemo && (!metaDescription || metaDescription.includes('أورورا') || metaDescription.includes('Aurora'))) {
+    metaDescription = `${cleanStoreName}: ${cleanTagline}. تسوق أفضل المنتجات مع شحن فوري لكافة مدن المملكة ودفع آمن عند الاستلام وبطاقات مدى وأبل باي.`;
+  }
+
+  let metaKeywords = Array.isArray(rawSettings.metaKeywords) ? rawSettings.metaKeywords : [];
+  if (!isDemo) {
+    metaKeywords = metaKeywords.filter((k: any) => typeof k === 'string' && !k.includes('أورورا') && !k.includes('Aurora'));
+    if (metaKeywords.length === 0) {
+      metaKeywords = [cleanStoreName, 'تسوق أونلاين السعودية', 'الدفع عند الاستلام', 'توصيل سريع'];
+    }
+  }
+
   const settings: StoreSettings = {
     ...DEFAULT_SETTINGS,
     ...rawSettings,
-    storeName: typeof rawSettings.storeName === 'string' && rawSettings.storeName.trim() ? rawSettings.storeName.trim() : DEFAULT_SETTINGS.storeName,
+    storeName: cleanStoreName,
+    tagline: cleanTagline,
+    metaTitle: metaTitle || DEFAULT_SETTINGS.metaTitle,
+    metaDescription: metaDescription || DEFAULT_SETTINGS.metaDescription,
+    metaKeywords: metaKeywords.length > 0 ? metaKeywords : DEFAULT_SETTINGS.metaKeywords,
     currency: typeof rawSettings.currency === 'string' && rawSettings.currency.trim() ? rawSettings.currency.trim() : 'ر.س',
     brandTheme: {
       ...DEFAULT_SETTINGS.brandTheme,
@@ -94,8 +142,6 @@ export function sanitizeStoreInstance(raw: any): StoreInstance | null {
       ? rawSettings.paymentMethods
       : DEFAULT_SETTINGS.paymentMethods,
   };
-
-  const isDemo = raw.id === 'store_aurora_01';
   let products = Array.isArray(raw.products)
     ? raw.products.filter((p: any) => p && typeof p === 'object' && p.id)
     : [];
@@ -103,9 +149,11 @@ export function sanitizeStoreInstance(raw: any): StoreInstance | null {
     products = DEFAULT_PRODUCTS;
   }
 
-  const orders = Array.isArray(raw.orders)
-    ? raw.orders.filter((o: any) => o && typeof o === 'object' && o.id)
-    : [];
+  const orders = deduplicateOrders(
+    Array.isArray(raw.orders)
+      ? raw.orders.filter((o: any) => o && typeof o === 'object' && o.id)
+      : []
+  );
 
   const policies = Array.isArray(raw.policies) && raw.policies.length > 0
     ? raw.policies.filter((pol: any) => pol && typeof pol === 'object' && pol.id)
@@ -449,9 +497,9 @@ export class StoreManager {
         if (snapshot.exists()) {
           const raw = snapshot.data();
           
-          // 4. Load products subcollection if not present in main document
+          // 4. Load products subcollection if not present or empty in main document
           let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
-          if (!Array.isArray(raw.products)) {
+          if (!Array.isArray(raw.products) || productsList.length === 0) {
             try {
               const productsSubCol = collection(db, 'stores', storeIdToFetch, 'products');
               const productsSnap = await getDocs(productsSubCol);
@@ -469,7 +517,8 @@ export class StoreManager {
 
           // Preserve cached local orders when hydrating from public catalog document
           const existingStore = this.getStoreById(storeIdToFetch) || this.getStoreBySlug(cleanQuery);
-          const cachedOrders = existingStore?.orders?.length ? existingStore.orders : StoreStorage.getOrders();
+          // Never borrow another store's orders from the shared StoreStorage snapshot
+          const cachedOrders: Order[] = existingStore?.orders || [];
 
           // If the authenticated merchant owns this store, fetch latest live orders from Firestore orders subcollection
           let liveOrders: Order[] = cachedOrders;
@@ -520,10 +569,22 @@ export class StoreManager {
    * Strips `orders` from the `/stores/{storeId}` document to comply with Firestore PII security rules.
    */
   static async syncStoreToFirestore(store: StoreInstance): Promise<boolean> {
-    if (!isFirebaseConfigured || !auth.currentUser || store.ownerId !== auth.currentUser.uid) {
+    if (!isFirebaseConfigured || !auth.currentUser) {
       this.dispatchSyncStatus('local_only');
       return false;
     }
+
+    // Auto-claim if the store has a generic guest/merchant_user ownerId
+    if (store.ownerId === 'guest' || store.ownerId === 'merchant_user') {
+      store.ownerId = auth.currentUser.uid;
+    }
+
+    if (store.ownerId !== auth.currentUser.uid) {
+      console.warn(`Sync skipped: store owner (${store.ownerId}) does not match current user (${auth.currentUser.uid})`);
+      this.dispatchSyncStatus('local_only');
+      return false;
+    }
+
     try {
       this.dispatchSyncStatus('syncing');
 
@@ -531,25 +592,33 @@ export class StoreManager {
       const { promoCodes = [], orderNotificationEmail = '', googleWebAppUrl = '', ...publicSettings } = store.settings;
       const { orders: _orders, products = [], ...publicStoreData } = store;
 
-      const publicPayload = {
-        ...publicStoreData,
-        products: products || [],
-        settings: publicSettings,
-        storeName: store.settings.storeName || 'متجر إلكتروني',
-        updatedAt: new Date().toISOString(),
-      };
+      // Clean products deeply to eliminate any undefined fields that cause Firestore setDoc() to throw
+      const cleanProducts = (products || []).map((p) => JSON.parse(JSON.stringify(p)));
+
+      const publicPayload = JSON.parse(
+        JSON.stringify({
+          ...publicStoreData,
+          products: cleanProducts,
+          settings: publicSettings,
+          storeName: store.settings.storeName || 'متجر إلكتروني',
+          updatedAt: new Date().toISOString(),
+        })
+      );
 
       const docRef = doc(db, 'stores', store.id);
       await setDoc(docRef, publicPayload, { merge: true });
 
       // 2. Sync private config subcollection /stores/{id}/private/config
       const privateRef = doc(db, 'stores', store.id, 'private', 'config');
-      await setDoc(privateRef, {
-        promoCodes,
-        orderNotificationEmail,
-        googleWebAppUrl,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      const cleanPrivatePayload = JSON.parse(
+        JSON.stringify({
+          promoCodes,
+          orderNotificationEmail,
+          googleWebAppUrl,
+          updatedAt: new Date().toISOString(),
+        })
+      );
+      await setDoc(privateRef, cleanPrivatePayload, { merge: true });
 
       // 3. Sync products to subcollection /stores/{id}/products/{productId} (S10)
       try {
@@ -564,8 +633,8 @@ export class StoreManager {
         });
         await Promise.all(deletePromises);
 
-        if (Array.isArray(products) && products.length > 0) {
-          const syncProductPromises = products.map((prod) => {
+        if (Array.isArray(cleanProducts) && cleanProducts.length > 0) {
+          const syncProductPromises = cleanProducts.map((prod) => {
             const prodRef = doc(db, 'stores', store.id, 'products', prod.id);
             return setDoc(prodRef, prod, { merge: true });
           });
@@ -578,17 +647,20 @@ export class StoreManager {
       // 4. Register slug in /slugs/{slug} (S6)
       if (store.slug && store.slug !== 'aurora') {
         const slugRef = doc(db, 'slugs', store.slug.toLowerCase().trim());
-        await setDoc(slugRef, {
-          storeId: store.id,
-          ownerId: store.ownerId,
-          createdAt: store.createdAt || new Date().toISOString(),
-        }, { merge: true });
+        const cleanSlugPayload = JSON.parse(
+          JSON.stringify({
+            storeId: store.id,
+            ownerId: store.ownerId,
+            createdAt: store.createdAt || new Date().toISOString(),
+          })
+        );
+        await setDoc(slugRef, cleanSlugPayload, { merge: true });
       }
 
       this.dispatchSyncStatus('synced');
       return true;
     } catch (err) {
-      console.warn('Could not sync store to Firestore:', err);
+      console.error('Could not sync store to Firestore:', err);
       this.dispatchSyncStatus('error');
       return false;
     }
@@ -678,8 +750,25 @@ export class StoreManager {
       if (userStores.length > 0) {
         const existing = this.getAllStores();
         const mergedMap = new Map<string, StoreInstance>();
-        // Put user's own stores first in the cache
-        userStores.forEach((s) => mergedMap.set(s.id, s));
+
+        // Put user's own stores first in the cache, safely preserving local products if cloud has none
+        userStores.forEach((cloudStore) => {
+          const localStore = existing.find((e) => e.id === cloudStore.id);
+          let resolvedProducts = cloudStore.products || [];
+          if (resolvedProducts.length === 0 && localStore && (localStore.products || []).length > 0) {
+            resolvedProducts = localStore.products;
+            // Backfill repair to Firestore immediately
+            if (auth.currentUser && cloudStore.ownerId === auth.currentUser.uid) {
+              this.syncStoreToFirestore({ ...cloudStore, products: resolvedProducts }).catch(console.warn);
+            }
+          }
+
+          mergedMap.set(cloudStore.id, {
+            ...cloudStore,
+            products: resolvedProducts,
+          });
+        });
+
         existing.forEach((s) => {
           if (!mergedMap.has(s.id)) {
             mergedMap.set(s.id, s);
@@ -705,17 +794,17 @@ export class StoreManager {
   /**
    * Fetch orders for a store from `/stores/{storeId}/orders` (Owner only)
    */
-  static async fetchStoreOrdersFromFirestore(storeId: string): Promise<Order[]> {
+  static async fetchStoreOrdersFromFirestore(storeId: string, limitCount = 300): Promise<Order[]> {
     if (!storeId || !isFirebaseConfigured || !auth.currentUser) return [];
     try {
       const ordersCol = collection(db, 'stores', storeId, 'orders');
       let snap: any;
       try {
-        const q = query(ordersCol, orderBy('timestamp', 'desc'), limit(100));
+        const q = query(ordersCol, orderBy('timestamp', 'desc'), limit(limitCount));
         snap = await getDocs(q);
       } catch {
         // Fallback without orderBy in case documents lack timestamp field
-        const fallbackQ = query(ordersCol, limit(100));
+        const fallbackQ = query(ordersCol, limit(limitCount));
         snap = await getDocs(fallbackQ);
       }
       const list: Order[] = [];
@@ -740,7 +829,7 @@ export class StoreManager {
    */
   static subscribeToStoreOrders(
     storeId: string,
-    onOrdersUpdated: (orders: Order[], newOrdersCount: number) => void
+    onOrdersUpdated: (orders: Order[], newOrdersCount: number, newOrders?: Order[]) => void
   ): Unsubscribe | null {
     if (!storeId || !isFirebaseConfigured || !auth.currentUser || storeId === 'store_aurora_01') {
       return null;
@@ -748,6 +837,7 @@ export class StoreManager {
     try {
       let isInitialSnapshot = true;
       let knownOrderIds = new Set<string>();
+      const listenerStartedAt = Date.now();
       const ordersCol = collection(db, 'stores', storeId, 'orders');
       const q = query(ordersCol, limit(100));
 
@@ -755,7 +845,7 @@ export class StoreManager {
         q,
         (snap) => {
           const list: Order[] = [];
-          let newlyAdded = 0;
+          const newOrders: Order[] = [];
 
           snap.forEach((d) => {
             const raw = d.data();
@@ -766,14 +856,18 @@ export class StoreManager {
             } as Order;
             list.push(ord);
             if (!isInitialSnapshot && !knownOrderIds.has(ord.id)) {
-              newlyAdded++;
+              // Only alert for orders created after the listener started (with 60s clock-skew tolerance)
+              const ts = new Date(ord.timestamp).getTime();
+              if (!Number.isFinite(ts) || ts >= listenerStartedAt - 60_000) {
+                newOrders.push(ord);
+              }
             }
           });
 
           knownOrderIds = new Set(list.map((o) => o.id));
           isInitialSnapshot = false;
           list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-          onOrdersUpdated(list, newlyAdded);
+          onOrdersUpdated(list, newOrders.length, newOrders);
         },
         (err) => {
           console.warn('Real-time order listener notice:', err);
@@ -792,27 +886,41 @@ export class StoreManager {
   static async submitOrderToStore(storeId: string, order: Order): Promise<boolean> {
     const store = this.getStoreById(storeId);
     if (store) {
-      store.orders = [order, ...(store.orders || [])].slice(0, 150);
-
-      // Decrement stockQuantity if tracked on ordered products
+      const cleanTargetId = order.id.toUpperCase().trim();
+      const existingIdx = (store.orders || []).findIndex(
+        (o) => o.id.toUpperCase().trim() === cleanTargetId
+      );
       let stockChanged = false;
-      if (Array.isArray(store.products) && Array.isArray(order.items)) {
-        store.products = store.products.map((prod) => {
-          const orderedQty = order.items
-            .filter((item) => item.productId === prod.id)
-            .reduce((sum, item) => sum + item.quantity, 0);
-          if (orderedQty > 0 && typeof prod.stockQuantity === 'number') {
-            stockChanged = true;
-            const remaining = Math.max(0, prod.stockQuantity - orderedQty);
-            return {
-              ...prod,
-              stockQuantity: remaining,
-              inStock: remaining > 0 ? prod.inStock : false,
-            };
-          }
-          return prod;
-        });
+
+      if (existingIdx >= 0) {
+        // Order already registered in store! Update in-place without adding duplicate or double-decrementing stock
+        store.orders[existingIdx] = { ...store.orders[existingIdx], ...order };
+      } else {
+        // Net new order: prepend and decrement inventory stock once
+        store.orders = [order, ...(store.orders || [])].slice(0, 150);
+
+        // Decrement stockQuantity if tracked on ordered products
+        if (Array.isArray(store.products) && Array.isArray(order.items)) {
+          store.products = store.products.map((prod) => {
+            const orderedQty = order.items
+              .filter((item) => item.productId === prod.id)
+              .reduce((sum, item) => sum + item.quantity, 0);
+            if (orderedQty > 0 && typeof prod.stockQuantity === 'number') {
+              stockChanged = true;
+              const remaining = Math.max(0, prod.stockQuantity - orderedQty);
+              return {
+                ...prod,
+                stockQuantity: remaining,
+                inStock: remaining > 0 ? prod.inStock : false,
+              };
+            }
+            return prod;
+          });
+        }
       }
+
+      // Ensure orders list is strictly deduplicated
+      store.orders = deduplicateOrders(store.orders);
 
       const all = this.getAllStores();
       const idx = all.findIndex((s) => s.id === storeId);
@@ -865,12 +973,9 @@ export class StoreManager {
       }
     }
 
-    // Notify merchant via NotificationHub (with deduplication guard)
-    const activeSettings = store?.settings || StoreStorage.getSettings();
-    if (activeSettings) {
-      NotificationHub.dispatchOrderPlaced(order, activeSettings).catch(() => {});
-    }
-
+    // Merchant notifications are dispatched once by the order placement path
+    // (NotificationHub.dispatchOrderPlaced for remote channels) and by the merchant's
+    // own real-time listener (alertMerchantLocally) — never from here.
     return true;
   }
 
@@ -910,6 +1015,7 @@ export class StoreManager {
             trackingNumber: trackData.trackingNumber,
             trackingUrl: trackData.trackingUrl,
             driverDeliveredAt: trackData.driverDeliveredAt,
+            deliveryPin: trackData.deliveryPin || getOrderDeliveryPin({ id: cleanId }),
             returnEligibleUntil: trackData.returnEligibleUntil,
             returnStatus: trackData.returnStatus,
             returnReason: trackData.returnReason,
@@ -929,16 +1035,20 @@ export class StoreManager {
   static async updateOrderInStore(
     storeId: string, 
     updatedOrder: Order,
-    options?: { restockItems?: boolean; source?: 'merchant' | 'driver' }
+    options?: { restockItems?: boolean; source?: 'merchant' | 'driver'; deliveryPin?: string }
   ): Promise<boolean> {
     const store = this.getStoreById(storeId);
     if (store && Array.isArray(store.orders)) {
-      const idx = store.orders.findIndex((o) => o.id === updatedOrder.id);
-      if (idx >= 0) {
-        store.orders[idx] = updatedOrder;
+      const cleanTargetId = updatedOrder.id.toUpperCase().trim();
+      const existing = store.orders.some((o) => o.id.toUpperCase().trim() === cleanTargetId);
+      if (existing) {
+        store.orders = store.orders.map((o) =>
+          o.id.toUpperCase().trim() === cleanTargetId ? updatedOrder : o
+        );
       } else {
         store.orders = [updatedOrder, ...store.orders];
       }
+      store.orders = deduplicateOrders(store.orders);
       const all = this.getAllStores();
       const sIdx = all.findIndex((s) => s.id === storeId);
       if (sIdx >= 0) {
@@ -979,6 +1089,7 @@ export class StoreManager {
             driverCashCollected: updatedOrder.driverCashCollected,
             driverDeliveredAt: updatedOrder.driverDeliveredAt,
             driverSettled: updatedOrder.driverSettled,
+            deliveryPin: options?.deliveryPin || updatedOrder.deliveryPin,
             returnReason: updatedOrder.returnReason,
             returnNotes: updatedOrder.returnNotes,
             returnItems: updatedOrder.returnItems,
@@ -1222,11 +1333,12 @@ export class StoreManager {
             };
           }
         }
-        // If response is HTML (e.g. Firebase hosting SPA rewrite to /index.html) or non-JSON,
-        // proceed safely to verified fallback order engine below.
+        // If the endpoint is not returning JSON (e.g. Firebase Hosting SPA index.html rewrite),
+        // proceed gracefully to the verified catalog engine below which validates prices and commits to Firestore.
       } catch (err: any) {
-        // Network failure, timeout or aborted request - fall through to local verified engine
-        console.warn('API /api/createOrder offline or unreachable, using verified local order engine:', err?.message || err);
+        // In environments where fetch('/api/createOrder') is unreachable or returns non-JSON,
+        // safely fall through to the verified catalog engine so orders succeed seamlessly.
+        console.warn('API /api/createOrder offline or unreachable, using verified catalog engine:', err?.message || err);
       }
     }
 
@@ -1274,6 +1386,11 @@ export class StoreManager {
               error: `الكمية المطلوبة من "${prod.name}" (${qty}) غير متوفرة. المتبقي: ${prod.stockQuantity}`,
             };
           }
+        } else {
+          return {
+            success: false,
+            error: `عذراً، أحد المنتجات المطلوبة غير متوفر في المتجر.`,
+          };
         }
 
         const hasSale =
@@ -1281,8 +1398,8 @@ export class StoreManager {
           typeof prod.salePrice === 'number' &&
           prod.salePrice > 0 &&
           prod.salePrice < prod.price;
-        const unitPrice = prod ? (hasSale ? prod.salePrice! : prod.price) : 100;
-        const prodName = prod ? prod.name : 'منتج مخصص';
+        const unitPrice = hasSale ? prod.salePrice! : prod.price;
+        const prodName = prod.name;
 
         subtotal += unitPrice * qty;
 
@@ -1345,10 +1462,22 @@ export class StoreManager {
         .map((i) => `${i.quantity}x ${i.name}${i.variant ? ` (${i.variant})` : ''}`)
         .join('، ');
 
+      const complianceType = getZatcaComplianceType(storeSettings);
+      const vatCalc = calculateVatBreakdown(
+        grandTotal,
+        storeSettings.pricesIncludeVat ?? true,
+        storeSettings.vatRate ?? 0.15,
+        complianceType
+      );
+
       const orderId = generateOrderId('ORD');
+      const deliveryPin = generateDeliveryPin();
       const verifiedOrder: Order = {
         id: orderId,
+        storeSlug: store?.slug || storeSettings.storeSlug || (typeof params.storeId === 'string' && !params.storeId.startsWith('store_') ? params.storeId : undefined),
+        storeId: store?.id || params.storeId || 'store_aurora_01',
         timestamp: new Date().toISOString(),
+        deliveryPin,
         customerName: params.customer.name.trim(),
         customerPhone: cleanPhone,
         city: isPickup
@@ -1368,6 +1497,9 @@ export class StoreManager {
         discountAmount: discountAmount > 0 ? discountAmount : undefined,
         shippingFee,
         grandTotal,
+        vatAmount: vatCalc.vatAmount,
+        vatRate: vatCalc.vatRate,
+        zatcaComplianceType: complianceType,
         status: 'Received',
         trackingNotes: isPickup
           ? 'طلب استلام من الفرع - بانتظار التجهيز'
@@ -1378,11 +1510,17 @@ export class StoreManager {
       const targetStoreId = store?.id || params.storeId || 'store_aurora_01';
       await this.submitOrderToStore(targetStoreId, verifiedOrder);
 
-      // Instantly alert merchant via all active notification channels (Audio chime, OS push, Telegram, Webhook)
+      // Alert merchant via REMOTE channels only (Telegram, Webhook, Sheets, Email).
+      // Device alerts (chime/toast/desktop) are raised on the merchant's device by its
+      // real-time orders listener — never on the shopper's browser.
       try {
         await NotificationHub.dispatchOrderPlaced(verifiedOrder, storeSettings);
       } catch (notifErr) {
         console.warn('Order notification dispatch error:', notifErr);
+      }
+      // Exception: the merchant placing a test order on their own store (or offline demo mode).
+      if (auth.currentUser && store?.ownerId === auth.currentUser.uid) {
+        NotificationHub.alertMerchantLocally(verifiedOrder, storeSettings);
       }
 
       return {
@@ -1440,7 +1578,7 @@ export class StoreManager {
     const isReserved = RESERVED_SLUGS.has(baseSlug.toLowerCase());
     const slugExists = isReserved || all.some((s) => s.slug.toLowerCase() === baseSlug.toLowerCase());
     const cleanSlug = slugExists ? `${baseSlug}-${Math.floor(100 + Math.random() * 900)}` : baseSlug;
-    const cleanWhatsapp = normalizeArabicDigits(params.whatsappNumber || '').replace(/\D/g, '') || '';
+    const cleanWhatsapp = toWhatsAppNumber(params.whatsappNumber || '');
 
     // Generate store ID with crypto.randomUUID (S6)
     const generatedId =
@@ -1499,6 +1637,9 @@ export class StoreManager {
         },
         primaryColor: params.primaryColor || '#0F172A',
         secondaryColor: params.accentColor || '#2563EB',
+        metaTitle: `${params.storeName.trim()} | ${params.tagline.trim() || 'المتجر الإلكتروني المعتمد في السعودية'}`,
+        metaDescription: `${params.storeName.trim()}: ${params.tagline.trim() || 'تسوق أفضل المنتجات مع شحن فوري ودفع آمن عند الاستلام وبطاقات مدى وأبل باي.'}`,
+        metaKeywords: [params.storeName.trim(), 'تسوق أونلاين السعودية', 'الدفع عند الاستلام', 'توصيل سريع'],
       },
       products: params.initialProducts !== undefined ? params.initialProducts : [],
       orders: [],
@@ -1518,20 +1659,25 @@ export class StoreManager {
   }
 
   static updateStore(updatedStore: StoreInstance, options?: { skipCloudSync?: boolean; immediateSync?: boolean }): void {
-    const all = this.getAllStores();
-    const index = all.findIndex((s) => s.id === updatedStore.id);
-    if (index >= 0) {
-      all[index] = updatedStore;
-      this.saveAllStores(all);
-    } else {
-      this.saveAllStores([updatedStore, ...all]);
+    let finalStore = updatedStore;
+    if (auth.currentUser && (finalStore.ownerId === 'guest' || finalStore.ownerId === 'merchant_user')) {
+      finalStore = { ...finalStore, ownerId: auth.currentUser.uid };
     }
 
-    if (!options?.skipCloudSync && auth.currentUser && updatedStore.ownerId === auth.currentUser.uid) {
+    const all = this.getAllStores();
+    const index = all.findIndex((s) => s.id === finalStore.id);
+    if (index >= 0) {
+      all[index] = finalStore;
+      this.saveAllStores(all);
+    } else {
+      this.saveAllStores([finalStore, ...all]);
+    }
+
+    if (!options?.skipCloudSync && auth.currentUser && finalStore.ownerId === auth.currentUser.uid) {
       if (options?.immediateSync) {
-        this.syncStoreToFirestore(updatedStore).catch(console.warn);
+        this.syncStoreToFirestore(finalStore).catch(console.warn);
       } else {
-        this.scheduleStoreSync(updatedStore);
+        this.scheduleStoreSync(finalStore);
       }
     }
   }

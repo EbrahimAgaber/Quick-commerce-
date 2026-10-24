@@ -36,6 +36,7 @@ export interface PromoCode {
 }
 
 export interface StoreSettings {
+  storeSlug?: string;
   storeName: string;
   storeSubtitle?: string;
   businessType?: string;
@@ -70,10 +71,15 @@ export interface StoreSettings {
   googleWebAppUrl?: string;
   legalName?: string;
   commercialRegister?: string;
+  freelanceCertificate?: string;
+  sbcNumber?: string;
   vatNumber?: string;
   pricesIncludeVat?: boolean;
   vatRate?: number;
+  zatcaComplianceType?: 'non_registered' | 'phase_1' | 'phase_2';
+  zatcaPhase2Uuid?: string;
   city?: string;
+  restrictCodToStoreCity?: boolean;
   googleAnalyticsId?: string;
   facebookPixelId?: string;
   tiktokPixelId?: string;
@@ -117,6 +123,8 @@ export interface Product {
   stockQuantity?: number;
   fabricComposition?: string;
   colorName?: string;
+  rating?: number;
+  reviewsCount?: number;
 }
 
 export type OrderStatus =
@@ -150,6 +158,8 @@ export interface ReturnClaimItem {
 
 export interface Order {
   id: string;
+  storeSlug?: string;
+  storeId?: string;
   timestamp: string;
   createdAt?: string;
   customerName: string;
@@ -171,14 +181,20 @@ export interface Order {
   courierPhone?: string;
   trackingNumber?: string;
   trackingUrl?: string;
+  labelUrl?: string;
+  estimatedDeliveryDate?: string;
   deliveryType?: 'delivery' | 'pickup';
   googleMapsUrl?: string;
   driverCashCollected?: number;
   driverDeliveredAt?: string;
   driverSettled?: boolean;
   driverSettledAt?: string;
+  deliveryPin?: string; // 4-digit verification code provided by shopper to driver upon delivery
   vatAmount?: number;
   vatRate?: number;
+  zatcaComplianceType?: 'non_registered' | 'phase_1' | 'phase_2';
+  invoiceUuid?: string;
+  invoiceHash?: string;
   paymentId?: string;
   paidAt?: string;
   // Return & Refund Fields

@@ -79,7 +79,11 @@ export default async function handler(req: any, res: any) {
 
     // 1. Webhook Signature / Secret Verification
     const providedSecret = req.headers?.['x-moyasar-secret'] || req.query?.secret;
-    if (webhookSecret && providedSecret !== webhookSecret) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction && (!webhookSecret || providedSecret !== webhookSecret)) {
+      console.warn('Moyasar webhook unauthorized secret mismatch in production');
+      return res.status(401).json({ error: 'Invalid or missing webhook secret signature.', success: false });
+    } else if (webhookSecret && providedSecret !== webhookSecret) {
       console.warn('Moyasar webhook unauthorized secret mismatch');
       return res.status(401).json({ error: 'Invalid webhook secret signature.', success: false });
     }
@@ -102,6 +106,21 @@ export default async function handler(req: any, res: any) {
         success: true,
         message: 'Webhook already processed (Idempotent replay).',
       });
+    }
+
+    // Check distributed webhook idempotency registry
+    const idempotencyDocId = `moyasar_${paymentId}_${payload.data.status || 'paid'}`;
+    const idempotencyRef = db.collection('webhook_idempotency_keys').doc(idempotencyDocId);
+    try {
+      const existingKeySnap = await idempotencyRef.get();
+      if (existingKeySnap.exists) {
+        return res.status(200).json({
+          success: true,
+          message: 'Webhook event already processed (Atomic idempotency key hit).',
+        });
+      }
+    } catch (idempErr) {
+      console.warn('Idempotency read notice:', idempErr);
     }
 
     // 4. Re-fetch authentic payment from Moyasar API using merchant secret key (sk)
@@ -184,6 +203,21 @@ export default async function handler(req: any, res: any) {
       sourceCompany: verifiedPayment.source?.company || 'unknown',
       createdAt: new Date().toISOString(),
     });
+
+    // 9. Store Distributed Idempotency Key with 7-Day Expiry
+    try {
+      await idempotencyRef.set({
+        paymentId,
+        storeId,
+        orderId,
+        status: verifiedPayment.status,
+        amount: verifiedPayment.amount,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      });
+    } catch (idempErr) {
+      console.warn('Idempotency recording error:', idempErr);
+    }
 
     return res.status(200).json({
       success: true,

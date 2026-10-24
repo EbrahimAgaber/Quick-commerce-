@@ -42,16 +42,22 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Delivered orders relevant for the driver
-  const deliveredOrders = orders.filter((o) => {
-    if (o.status !== 'Delivered') return false;
-    if (o.driverSettled) return false;
-    if (filterMode === 'today') {
-      const orderDate = (o.driverDeliveredAt || o.timestamp || '').split('T')[0];
-      return orderDate === todayStr;
-    }
-    return true;
-  });
+  // Delivered orders relevant for the driver (strictly deduplicated by ID to eliminate duplicate ledger counts)
+  const deliveredOrders = Array.from(
+    new Map(
+      orders
+        .filter((o) => {
+          if (o.status !== 'Delivered') return false;
+          if (o.driverSettled) return false;
+          if (filterMode === 'today') {
+            const orderDate = (o.driverDeliveredAt || o.timestamp || '').split('T')[0];
+            return orderDate === todayStr;
+          }
+          return true;
+        })
+        .map((o) => [o.id.toUpperCase().trim(), o])
+    ).values()
+  );
 
   // Financial calculations
   const totalDeliveries = deliveredOrders.length;
@@ -65,13 +71,20 @@ export const DriverSettlementModal: React.FC<DriverSettlementModalProps> = ({
   const netDueToMerchant = Math.max(0, totalCodCash - totalDriverEarnings);
 
   const handleSettleAndSendReceipt = () => {
-    // Mark delivered orders as settled
-    const updated = orders.map((o) => {
-      const isDelivered = deliveredOrders.some((d) => d.id === o.id);
-      return isDelivered
-        ? { ...o, driverSettled: true, driverSettledAt: new Date().toISOString() }
-        : o;
-    });
+    // Mark delivered orders as settled and deduplicate full order list
+    const updated = Array.from(
+      new Map(
+        orders.map((o) => {
+          const isDelivered = deliveredOrders.some(
+            (d) => d.id.toUpperCase().trim() === o.id.toUpperCase().trim()
+          );
+          const settledOrder = isDelivered
+            ? { ...o, driverSettled: true, driverSettledAt: new Date().toISOString() }
+            : o;
+          return [settledOrder.id.toUpperCase().trim(), settledOrder];
+        })
+      ).values()
+    );
 
     onUpdateOrders(updated);
     setSettledSuccess(true);

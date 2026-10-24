@@ -172,13 +172,45 @@ export function buildDiscordPayload(order: Order, settings: StoreSettings) {
 
 export class NotificationHub {
   private static recentlyDispatchedOrders = new Set<string>();
+  private static locallyAlertedOrders = new Set<string>();
+
+  /**
+   * Raises merchant-device alerts (in-app toast event, audio chime, desktop notification).
+   * MUST only be called on the merchant's own device (e.g. from the orders onSnapshot listener).
+   * Deduplicated per order id.
+   */
+  static alertMerchantLocally(
+    order: Order,
+    settings: StoreSettings
+  ): Pick<NotificationDispatchReport, 'audioPlayed' | 'desktopNotificationSent'> {
+    const result = { audioPlayed: false, desktopNotificationSent: false };
+    if (!order?.id || this.locallyAlertedOrders.has(order.id)) return result;
+    this.locallyAlertedOrders.add(order.id);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('storelink_new_order_placed', {
+          detail: { order, settings },
+        })
+      );
+    }
+    if (settings.enableAudioNotifications !== false) {
+      playOrderNotificationSound();
+      result.audioPlayed = true;
+    }
+    if (settings.enableDesktopNotifications !== false) {
+      result.desktopNotificationSent = showDesktopNotification(order, settings);
+    }
+    return result;
+  }
 
   /**
    * Dispatches order notifications across all active channels
    */
   static async dispatchOrderPlaced(
     order: Order,
-    settings: StoreSettings
+    settings: StoreSettings,
+    options?: { alertLocalDevice?: boolean }
   ): Promise<NotificationDispatchReport> {
     const report: NotificationDispatchReport = {
       audioPlayed: false,
@@ -199,25 +231,17 @@ export class NotificationHub {
       }, 30000);
     }
 
-    // 1. Broadcast In-App Event for Dashboard & Toast Banners
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('storelink_new_order_placed', {
-          detail: { order, settings },
-        })
-      );
+    // Optional local device alert (for tests or merchant self-checkout)
+    if (options?.alertLocalDevice) {
+      const localAlert = this.alertMerchantLocally(order, settings);
+      report.audioPlayed = localAlert.audioPlayed;
+      report.desktopNotificationSent = localAlert.desktopNotificationSent;
     }
 
-    // 2. Play Synthesized Chime
-    if (settings.enableAudioNotifications !== false) {
-      playOrderNotificationSound();
-      report.audioPlayed = true;
-    }
-
-    // 3. Native Desktop / Mobile Notification
-    if (settings.enableDesktopNotifications !== false) {
-      report.desktopNotificationSent = showDesktopNotification(order, settings);
-    }
+    // NOTE: In-app event, audio chime and desktop notification are MERCHANT-DEVICE alerts.
+    // They are intentionally NOT fired by default here because this method runs on the shopper's
+    // browser during checkout. The merchant's device raises them via `alertMerchantLocally`
+    // from the real-time Firestore orders listener (see App.tsx / subscribeToStoreOrders).
 
     // 4. Direct Telegram Bot Dispatch (if token and chat ID are configured)
     if (settings.telegramBotToken?.trim() && settings.telegramChatId?.trim()) {

@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, ShoppingBag, X, ExternalLink, CheckCircle, Volume2 } from 'lucide-react';
 import { Order, StoreSettings } from '../../types/store';
+import { toWhatsAppNumber } from '../../utils/digits';
 import { playOrderNotificationSound } from '../../services/notificationService';
+
 
 interface ToastItem {
   id: string;
@@ -53,7 +55,7 @@ export const OrderNotificationToast: React.FC<OrderNotificationToastProps> = ({ 
     >
       {toasts.map((toast) => {
         const { order, settings } = toast;
-        const cleanPhone = (order.customerPhone || '').replace(/\D/g, '');
+        const cleanPhone = toWhatsAppNumber(order.customerPhone);
         const whatsappHref = cleanPhone ? `https://wa.me/${cleanPhone}` : null;
 
         return (

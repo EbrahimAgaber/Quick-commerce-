@@ -1,5 +1,12 @@
 import { getAdminFirestore } from './_firebaseAdmin';
-import { handleCors, checkRateLimit, getClientIp } from './_security';
+import {
+  handleCors,
+  evaluateRateLimit,
+  setRateLimitHeaders,
+  getClientIp,
+  verifyTurnstileToken,
+} from './_security';
+import { dispatchServerOrderNotifications } from './_notifications';
 
 interface OrderItemInput {
   productId: string;
@@ -27,6 +34,7 @@ interface CreateOrderRequest {
   promoCode?: string;
   utm?: Record<string, string>;
   hp?: string; // Honeypot field
+  turnstileToken?: string;
 }
 
 function normalizePhone(p: string): string {
@@ -49,8 +57,11 @@ export default async function handler(req: any, res: any) {
 
   const clientIp = getClientIp(req);
 
-  // 1. IP Rate Limiting (max 10 orders per 10 minutes per IP)
-  if (!checkRateLimit(`order_ip_${clientIp}`, 10, 10 * 60 * 1000)) {
+  // 1. Distributed/Sliding-Window IP Rate Limiting (max 10 orders per 10 minutes per IP)
+  const ipRateLimit = await evaluateRateLimit(`order_ip_${clientIp}`, 10, 10 * 60 * 1000);
+  setRateLimitHeaders(res, ipRateLimit);
+
+  if (!ipRateLimit.allowed) {
     return res.status(429).json({
       error: 'لقد تجاوزت الحد المسموح به من الطلبات. يرجى الانتظار قليلاً.',
       success: false,
@@ -65,6 +76,15 @@ export default async function handler(req: any, res: any) {
   // 2. Honeypot check
   if (body.hp) {
     return res.status(400).json({ error: 'تم رفض الطلب.', success: false });
+  }
+
+  // 3. Cloudflare Turnstile Bot Token Verification (if provided or required)
+  const turnstileToken = body.turnstileToken || req.headers?.['x-turnstile-token'];
+  if (turnstileToken) {
+    const turnstileCheck = await verifyTurnstileToken(turnstileToken, clientIp);
+    if (!turnstileCheck.success) {
+      return res.status(400).json({ error: turnstileCheck.error || 'فشل التحقق الأمني.', success: false });
+    }
   }
 
   const { storeId, items, customer, paymentMethod, promoCode, utm } = body;
@@ -96,8 +116,9 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'رقم هاتف العميل غير صحيح.', success: false });
   }
 
-  // 3. Phone Rate Limiting (max 5 orders per 10 minutes per phone)
-  if (!checkRateLimit(`order_phone_${cleanPhone}`, 5, 10 * 60 * 1000)) {
+  // 4. Phone Rate Limiting (max 5 orders per 10 minutes per phone)
+  const phoneRateLimit = await evaluateRateLimit(`order_phone_${cleanPhone}`, 5, 10 * 60 * 1000);
+  if (!phoneRateLimit.allowed) {
     return res.status(429).json({
       error: 'تم تقديم عدة طلبات بهذا الرقم مؤخراً. يرجى الانتظار بضع دقائق.',
       success: false,
@@ -295,10 +316,31 @@ export default async function handler(req: any, res: any) {
 
       const timestamp = new Date().toISOString();
 
+      // Determine ZATCA compliance type and VAT breakdown
+      const complianceType: 'non_registered' | 'phase_1' | 'phase_2' = 
+        settings.zatcaComplianceType || (settings.vatNumber ? 'phase_1' : 'non_registered');
+
+      let vatAmount = 0;
+      let vatRate = 0;
+      if (complianceType !== 'non_registered') {
+        const effectiveRate = Number(settings.vatRate) > 0 ? Number(settings.vatRate) : 0.15;
+        vatRate = effectiveRate;
+        const pricesIncludeVat = settings.pricesIncludeVat ?? true;
+        if (pricesIncludeVat) {
+          const net = Math.round((grandTotal / (1 + effectiveRate)) * 100) / 100;
+          vatAmount = Math.round((grandTotal - net) * 100) / 100;
+        } else {
+          vatAmount = Math.round(grandTotal * effectiveRate * 100) / 100;
+        }
+      }
+
+      const deliveryPin = String(1000 + Math.floor(Math.random() * 9000));
+
       const fullOrderRecord = {
         id: orderId,
         storeId,
         timestamp,
+        deliveryPin,
         customerName: customer.name.trim(),
         customerPhone: cleanPhone,
         city: customer.city.trim(),
@@ -312,6 +354,9 @@ export default async function handler(req: any, res: any) {
         discountAmount: discountAmount > 0 ? discountAmount : 0,
         shippingFee,
         grandTotal,
+        vatAmount,
+        vatRate,
+        zatcaComplianceType: complianceType,
         status: initialStatus,
         trackingNotes: isOnlinePayment ? 'في انتظار استكمال الدفع الإلكتروني' : 'تم استلام الطلب وتأكيده بنجاح.',
         googleMapsUrl: customer.googleMapsUrl?.trim() || '',
@@ -364,12 +409,26 @@ export default async function handler(req: any, res: any) {
         amountHalalas: Math.round(grandTotal * 100),
         status: initialStatus,
         order: fullOrderRecord,
+        settings,
+        webhookSecret: privateData.webhookSecret,
       };
+    });
+
+    // 13. Asynchronously dispatch server-side merchant notifications (Telegram, Outbound Signed Webhook)
+    dispatchServerOrderNotifications(result.order, result.settings, result.webhookSecret).catch((notifErr) => {
+      console.warn('Server notification background task warning:', notifErr);
     });
 
     return res.status(200).json({
       success: true,
-      ...result,
+      orderId: result.orderId,
+      subtotal: result.subtotal,
+      discountAmount: result.discountAmount,
+      shippingFee: result.shippingFee,
+      grandTotal: result.grandTotal,
+      amountHalalas: result.amountHalalas,
+      status: result.status,
+      order: result.order,
     });
   } catch (err: any) {
     console.error('Order creation transaction failed:', err);

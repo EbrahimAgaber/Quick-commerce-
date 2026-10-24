@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Order, OrderStatus, StoreSettings } from '../../types/store';
 import { StoreManager } from '../../services/storeManager';
 import { 
@@ -19,7 +19,7 @@ import {
   RotateCcw,
   ShieldCheck
 } from 'lucide-react';
-import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
+import { createWhatsAppUrl, getOrderDeliveryPin } from '../../utils/whatsappInvoice';
 import { InvoiceModal } from './InvoiceModal';
 import { ReturnRequestModal } from './ReturnRequestModal';
 
@@ -297,6 +297,27 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
                   <p className="text-xs text-purple-800 leading-relaxed">
                     تم استلام المنتجات المرتجعة ومعالجة تسوية المبلغ بنجاح وفق سياسة المتجر.
                   </p>
+                </div>
+              )}
+
+              {/* Delivery PIN Badge for Active Orders */}
+              {searchedOrder.status !== 'Delivered' && 
+               searchedOrder.status !== 'Cancelled' && 
+               searchedOrder.status !== 'Returned' && 
+               searchedOrder.status !== 'Refunded' && (
+                <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200/90 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-amber-600" />
+                      <span>كود تأكيد التسليم للمندوب:</span>
+                    </span>
+                    <p className="text-[11px] text-amber-800">
+                      يرجى تزويد مندوب التوصيل بهذا الكود عند وصول الشحنة لإتمام التسليم
+                    </p>
+                  </div>
+                  <div className="text-2xl font-black font-mono tracking-widest text-amber-700 bg-white px-3.5 py-1 rounded-xl border border-amber-200 shadow-2xs select-all">
+                    {getOrderDeliveryPin(searchedOrder)}
+                  </div>
                 </div>
               )}
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Order, StoreSettings } from '../../types/store';
-import { CheckCircle2, MessageCircle, Copy, Check, PackageCheck, Sparkles, X, FileText } from 'lucide-react';
-import { buildWhatsAppInvoiceMessage, createWhatsAppUrl } from '../../utils/whatsappInvoice';
+import { CheckCircle2, MessageCircle, Copy, Check, PackageCheck, Sparkles, X, FileText, KeyRound, ShieldCheck } from 'lucide-react';
+import { buildWhatsAppInvoiceMessage, createWhatsAppUrl, getOrderDeliveryPin } from '../../utils/whatsappInvoice';
 import { InvoiceModal } from './InvoiceModal';
 
 interface OrderSuccessModalProps {
@@ -37,7 +37,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   if (!order) return null;
 
   const handleCopyInvoice = () => {
-    const text = buildWhatsAppInvoiceMessage(order, settings);
+    const text = buildWhatsAppInvoiceMessage(order, settings, order.storeSlug || settings.storeSlug);
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -50,7 +50,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   };
 
   const handleReopenWhatsApp = () => {
-    const text = buildWhatsAppInvoiceMessage(order, settings);
+    const text = buildWhatsAppInvoiceMessage(order, settings, order.storeSlug || settings.storeSlug);
     const url = createWhatsAppUrl(settings.whatsappNumber, text);
     window.open(url, '_blank');
   };
@@ -113,6 +113,20 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
           </div>
           <p className="text-[11px] text-stone-400">
             احفظ هذا الرقم لتتبع مسار شحنتك في أي وقت
+          </p>
+        </div>
+
+        {/* Delivery Confirmation PIN Card */}
+        <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-center space-y-1.5 shadow-sm">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100/80 text-amber-900 text-[11px] font-bold">
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+            <span>كود تأكيد التسليم للمندوب</span>
+          </div>
+          <div className="text-3xl font-black font-mono tracking-widest text-amber-700 py-0.5 select-all">
+            {getOrderDeliveryPin(order)}
+          </div>
+          <p className="text-[11px] text-amber-800 leading-relaxed">
+            زوّد مندوب التوصيل بهذا الكود السري عند وصول الشحنة ليتمكن من تأكيد تسليمها بنجاح 📦
           </p>
         </div>
 

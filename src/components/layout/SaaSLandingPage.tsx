@@ -13,7 +13,8 @@ import {
   CheckCircle2, 
   Globe, 
   ShoppingBag,
-  Smartphone
+  Smartphone,
+  Truck
 } from 'lucide-react';
 
 interface SaaSLandingPageProps {
@@ -23,6 +24,7 @@ interface SaaSLandingPageProps {
   onOpenAuth: () => void;
   onOpenDashboard: () => void;
   onPreviewDemoStore: () => void;
+  onOpenCaptainPortal?: () => void;
 }
 
 export const SaaSLandingPage: React.FC<SaaSLandingPageProps> = ({
@@ -32,6 +34,7 @@ export const SaaSLandingPage: React.FC<SaaSLandingPageProps> = ({
   onOpenAuth,
   onOpenDashboard,
   onPreviewDemoStore,
+  onOpenCaptainPortal,
 }) => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] flex flex-col font-sans" dir="rtl">
@@ -53,6 +56,16 @@ export const SaaSLandingPage: React.FC<SaaSLandingPageProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5">
+            {onOpenCaptainPortal && (
+              <button
+                onClick={onOpenCaptainPortal}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors cursor-pointer"
+              >
+                <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>دخول الكباتن 🚗</span>
+              </button>
+            )}
+
             <button
               onClick={onPreviewDemoStore}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
@@ -137,6 +150,40 @@ export const SaaSLandingPage: React.FC<SaaSLandingPageProps> = ({
                 </button>
               )}
             </div>
+
+            {/* Delivery Captain Direct Gateway */}
+            {onOpenCaptainPortal && (
+              <div className="pt-4 max-w-xl mx-auto">
+                <button
+                  type="button"
+                  onClick={onOpenCaptainPortal}
+                  className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 text-right flex items-center justify-between gap-3 hover:border-emerald-300 hover:shadow-md transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                      <Truck className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-sm text-emerald-950">
+                          بوابة كباتن التوصيل | سجل واربح معنا
+                        </span>
+                        <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-bold">
+                          انضم الآن 🚗
+                        </span>
+                      </div>
+                      <p className="text-xs text-emerald-800 mt-0.5 leading-relaxed">
+                        استلم طلبات متاجر منطقتك، سلّم الشحنات للعملاء، وحصّل أرباحك اليومية مع المنصة مباشرة.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs font-bold text-emerald-700 shrink-0 group-hover:-translate-x-1 transition-transform">
+                    <span>تسجيل ودخول</span>
+                    <ArrowLeft className="w-4 h-4" />
+                  </div>
+                </button>
+              </div>
+            )}
 
             <div className="pt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-500 font-medium">
               <span className="flex items-center gap-1.5">

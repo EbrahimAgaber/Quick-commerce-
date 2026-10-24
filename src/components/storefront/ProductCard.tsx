@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Product, StoreSettings } from '../../types/store';
 import { Plus, Eye, Check, Flame, Package } from 'lucide-react';
+import { getZatcaComplianceType } from '../../utils/zatca';
+import { getOptimizedImageUrl } from '../../utils/imageOptimizer';
 
 interface ProductCardProps {
   product: Product;
@@ -60,8 +62,10 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
       <div className="relative aspect-4/3 w-full overflow-hidden bg-stone-100">
         {!imgError && product.imageUrl ? (
           <img
-            src={product.imageUrl}
+            src={getOptimizedImageUrl(product.imageUrl, 400, 80)}
             alt={product.name}
+            width={400}
+            height={300}
             loading="lazy"
             decoding="async"
             onError={() => setImgError(true)}
@@ -165,13 +169,16 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
                 {product.price.toLocaleString('en-US')} {settings.currency}
               </span>
             )}
+            {getZatcaComplianceType(settings) !== 'non_registered' && (
+              <span className="text-[10px] text-stone-400">شامل الضريبة 15%</span>
+            )}
           </div>
 
-          {/* Quick add button */}
+          {/* Quick add button (48px standard touch target) */}
           <button
             onClick={(e) => onQuickAdd(product, e)}
             disabled={isOutOfStock}
-            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+            className={`w-12 h-12 min-w-[48px] min-h-[48px] rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               isAddedJustNow
                 ? 'bg-emerald-600 text-white'
                 : !isOutOfStock
@@ -182,9 +189,9 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
             title={!isOutOfStock ? (((product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي')).length > 1 ? 'اختيار الخيار والإضافة' : 'إضافة سريعة للسلة') : 'غير متوفر'}
           >
             {isAddedJustNow ? (
-              <Check className="w-4 h-4 animate-in zoom-in" />
+              <Check className="w-5 h-5 animate-in zoom-in" />
             ) : (
-              <Plus className="w-4 h-4 text-white" />
+              <Plus className="w-5 h-5 text-white" />
             )}
           </button>
         </div>

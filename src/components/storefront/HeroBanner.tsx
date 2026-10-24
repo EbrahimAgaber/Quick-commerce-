@@ -1,5 +1,6 @@
 import React from 'react';
 import { StoreSettings } from '../../types/store';
+import { toWhatsAppNumber } from '../../utils/digits';
 import { Sparkles, Zap, Palette, PackageCheck, MessageCircle, Truck, ShieldCheck } from 'lucide-react';
 
 interface HeroBannerProps {
@@ -27,7 +28,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     textColor: '#0F172A',
   };
 
-  const cleanWhatsapp = (settings.whatsappNumber || '').replace(/\D/g, '');
+  const cleanWhatsapp = toWhatsAppNumber(settings.whatsappNumber);
 
   return (
     <div 

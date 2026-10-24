@@ -6,13 +6,14 @@ import { RESERVED_SLUGS } from '../src/services/storeManager';
 describe('Firestore Rules & Access Control (S1, S4, S6, S7)', () => {
   const rulesContent = fs.readFileSync(path.resolve(__dirname, '../firestore.rules'), 'utf-8');
 
-  it('rules allow shoppers to create validated orders and restrict management to store owners', () => {
+  it('rules lockdown direct client creation on orders and restrict management to store owners', () => {
     const orderMatch = rulesContent.match(/match \/orders\/\{orderId\} \{[\s\S]*?\}/);
     expect(orderMatch).not.toBeNull();
     const orderRules = orderMatch![0];
 
     expect(orderRules).toContain('allow create: if isValidId(orderId) && isValidNewOrder(request.resource.data, orderId);');
     expect(orderRules).toContain('allow get, list: if isStoreOwner(storeId);');
+    expect(orderRules).toContain('allow delete: if false;');
     expect(orderRules).toContain('returnStatus');
     expect(orderRules).toContain('driverDeliveredAt');
   });
