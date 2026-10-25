@@ -25,6 +25,9 @@ import {
   TrendingUp,
   Percent,
   Plus,
+  HardDrive,
+  FileJson,
+  Download,
 } from 'lucide-react';
 import type { StorePolicy, StoreSettings, PromoCode } from '../../../types/store';
 import { normalizeArabicDigits } from '../../../utils/digits';
@@ -67,6 +70,11 @@ interface SettingsTabProps {
   onAddPromoCode: (code: string, type: 'percentage' | 'fixed', value: number) => void;
   onTogglePromoCode: (code: string) => void;
   onDeletePromoCode: (code: string) => void;
+  onDownloadBackupJson?: () => void;
+  onOpenRestoreBackupModal?: () => void;
+  onExportCSV?: () => void;
+  onOpenWhatsAppConnect?: () => void;
+  isWhatsAppConnected?: boolean;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
@@ -101,6 +109,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onAddPromoCode,
   onTogglePromoCode,
   onDeletePromoCode,
+  onDownloadBackupJson,
+  onOpenRestoreBackupModal,
+  onExportCSV,
+  onOpenWhatsAppConnect,
+  isWhatsAppConnected,
 }) => {
   const [copiedDnsKey, setCopiedDnsKey] = useState<string | null>(null);
   const [previewModeTab, setPreviewModeTab] = useState<'google' | 'whatsapp'>('google');
@@ -124,6 +137,61 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-200">
       <div className="lg:col-span-2 space-y-6">
+        {/* SECTION: LOCAL SERVER STORAGE & ONE-CLICK BACKUP / RESTORE */}
+        {(onDownloadBackupJson || onOpenRestoreBackupModal || onExportCSV) && (
+          <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-[#2563EB]" />
+                  <span>التخزين المحلي والنسخ الاحتياطي للمتجر (Local Server Backup & Restore)</span>
+                </h3>
+                <p className="text-[11px] text-stone-500 mt-0.5">
+                  بيانات متجرك وصور منتجاتك محفوظة محلياً على السيرفر بدون قيود حجم المتصفح، مع إمكانية التصدير والاستعادة بضغطة زر
+                </p>
+              </div>
+              <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 self-start sm:self-auto">
+                حالة التخزين: محفوظ محلياً على السيرفر 🟢
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {onDownloadBackupJson && (
+                <button
+                  type="button"
+                  onClick={onDownloadBackupJson}
+                  className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
+                >
+                  <FileJson className="w-4 h-4 text-emerald-400" />
+                  <span>تحميل نسخة احتياطية (JSON)</span>
+                </button>
+              )}
+
+              {onOpenRestoreBackupModal && (
+                <button
+                  type="button"
+                  onClick={onOpenRestoreBackupModal}
+                  className="px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-[#2563EB] font-bold rounded-xl text-xs flex items-center gap-2 transition-colors cursor-pointer border border-blue-200"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>استعادة نسخة احتياطية</span>
+                </button>
+              )}
+
+              {onExportCSV && (
+                <button
+                  type="button"
+                  onClick={onExportCSV}
+                  className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl text-xs flex items-center gap-2 transition-colors cursor-pointer border border-emerald-200"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>تصدير CSV / Excel</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* SECTION: STORE URL & CUSTOM DOMAIN */}
         <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
@@ -543,7 +611,23 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold text-stone-700 mb-1">رقم الواتساب لاستقبال الطلبات (دولي بدون +)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-stone-700">رقم الواتساب لاستقبال الطلبات (دولي بدون +)</label>
+                  {onOpenWhatsAppConnect && (
+                    <button
+                      type="button"
+                      onClick={onOpenWhatsAppConnect}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors flex items-center gap-1.5 cursor-pointer ${
+                        isWhatsAppConnected
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                      }`}
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{isWhatsAppConnected ? 'واتساب متصل بالخلفية 🟢' : 'ربط واتساب المتجر (QR) ⚡'}</span>
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={editableSettings.whatsappNumber}

@@ -11,3 +11,7 @@ coverage/
 firebase-applet-config.json
 .firebase/
 .aistudio/
+
+# Local database runtime session and cache
+data/whatsapp_session/
+*.bak

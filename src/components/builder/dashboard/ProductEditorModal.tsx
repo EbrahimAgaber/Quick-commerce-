@@ -7,7 +7,9 @@ import {
   getProductUnitLabel, 
   ProductUnit 
 } from '../../../types/store';
-import { compressImageFile } from '../../../utils/imageUploader';
+import { uploadImageToServer } from '../../../utils/imageUploader';
+import { normalizeProductImageUrl } from '../../../utils/csvProductParser';
+import { isLegacyWatchPlaceholder } from '../../../utils/imageOptimizer';
 import { requestAIGeneration } from '../../../services/aiService';
 import { normalizeArabicDigits } from '../../../utils/digits';
 import { 
@@ -32,6 +34,24 @@ interface ProductEditorModalProps {
   onSaveProduct: (productData: Omit<Product, 'id'> & { id?: string }) => void;
 }
 
+const INITIAL_PRODUCT_FORM = {
+  name: '',
+  category: 'عام',
+  price: 100 as string | number,
+  salePrice: 0 as string | number,
+  unit: 'piece' as ProductUnit,
+  unitLabel: '',
+  minQuantity: '' as string | number,
+  quantityStep: '' as string | number,
+  variants: '',
+  imageUrl: '',
+  galleryImages: [] as string[],
+  description: '',
+  inStock: true,
+  stockQuantity: '' as string | number,
+  featured: false,
+};
+
 export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
   isOpen,
   onClose,
@@ -44,64 +64,45 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
   const [generatingProductAI, setGeneratingProductAI] = useState(false);
   const [extraGalleryUrl, setExtraGalleryUrl] = useState('');
 
-  const [productForm, setProductForm] = useState({
-    name: '',
-    category: 'منتجات مميزة',
-    price: 150 as string | number,
-    salePrice: 0 as string | number,
-    unit: 'piece' as ProductUnit,
-    unitLabel: '',
-    minQuantity: '' as string | number,
-    quantityStep: '' as string | number,
-    variants: '',
-    imageUrl: '',
-    galleryImages: [] as string[],
-    description: '',
-    inStock: true,
-    stockQuantity: '' as string | number,
-    featured: false,
-  });
+  const [productForm, setProductForm] = useState({ ...INITIAL_PRODUCT_FORM });
 
   useEffect(() => {
     if (!isOpen) return;
     setProductFormError(null);
     setExtraGalleryUrl('');
 
-    if (editingProduct) {
+    if (editingProduct && editingProduct.id) {
+      // Deep-clone editingProduct so form mutations never alter the original product reference in memory
+      const cloned: Product = JSON.parse(JSON.stringify(editingProduct));
+      const rawPrimary = isLegacyWatchPlaceholder(cloned.imageUrl) ? '' : (cloned.imageUrl || '');
+      const clonedGallery =
+        Array.isArray(cloned.galleryImages) && cloned.galleryImages.length > 0
+          ? cloned.galleryImages.filter((img) => img && !isLegacyWatchPlaceholder(img))
+          : rawPrimary
+          ? [rawPrimary]
+          : [];
+
       setProductForm({
-        name: editingProduct.name,
-        category: editingProduct.category,
-        price: editingProduct.price,
-        salePrice: editingProduct.salePrice || 0,
-        unit: editingProduct.unit || 'piece',
-        unitLabel: editingProduct.unitLabel || '',
-        minQuantity: editingProduct.minQuantity !== undefined ? editingProduct.minQuantity : '',
-        quantityStep: editingProduct.quantityStep !== undefined ? editingProduct.quantityStep : '',
-        variants: (editingProduct.variants || []).filter((v) => v && v !== 'الخيار الافتراضي').join(', '),
-        imageUrl: editingProduct.imageUrl,
-        galleryImages: editingProduct.galleryImages && editingProduct.galleryImages.length > 0 ? editingProduct.galleryImages : [editingProduct.imageUrl],
-        description: editingProduct.description,
-        inStock: editingProduct.inStock,
-        stockQuantity: editingProduct.stockQuantity !== undefined ? editingProduct.stockQuantity : '',
-        featured: Boolean(editingProduct.featured),
+        name: cloned.name || '',
+        category: cloned.category || 'عام',
+        price: cloned.price ?? 100,
+        salePrice: cloned.salePrice || 0,
+        unit: cloned.unit || 'piece',
+        unitLabel: cloned.unitLabel || '',
+        minQuantity: cloned.minQuantity !== undefined ? cloned.minQuantity : '',
+        quantityStep: cloned.quantityStep !== undefined ? cloned.quantityStep : '',
+        variants: (cloned.variants || []).filter((v) => v && v !== 'الخيار الافتراضي').join(', '),
+        imageUrl: rawPrimary,
+        galleryImages: clonedGallery,
+        description: cloned.description || '',
+        inStock: cloned.inStock !== false,
+        stockQuantity: cloned.stockQuantity !== undefined ? cloned.stockQuantity : '',
+        featured: Boolean(cloned.featured),
       });
     } else {
       setProductForm({
-        name: '',
-        category: 'عام',
-        price: 100,
-        salePrice: 0,
-        unit: 'piece',
-        unitLabel: '',
-        minQuantity: '',
-        quantityStep: '',
-        variants: '',
-        imageUrl: '',
+        ...INITIAL_PRODUCT_FORM,
         galleryImages: [],
-        description: '',
-        inStock: true,
-        stockQuantity: '',
-        featured: false,
       });
     }
   }, [isOpen, editingProduct]);
@@ -114,26 +115,34 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
     setUploadingProductImg(true);
     setProductFormError(null);
     try {
-      const compressedDataUrl = await compressImageFile(file, 800, 800, 0.85);
+      // Upload to local server (/public/uploads/<hash>.webp) and return lightweight URL path
+      const uploadedImageUrl = await uploadImageToServer(file, {
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 0.85,
+        prefix: 'prod',
+      });
       if (isGallery) {
         setProductForm((prev) => ({
           ...prev,
-          galleryImages: [...prev.galleryImages, compressedDataUrl],
-          imageUrl: prev.imageUrl || compressedDataUrl,
+          galleryImages: [...prev.galleryImages, uploadedImageUrl],
+          imageUrl: prev.imageUrl || uploadedImageUrl,
         }));
       } else {
         setProductForm((prev) => ({
           ...prev,
-          imageUrl: compressedDataUrl,
-          galleryImages: prev.galleryImages.includes(compressedDataUrl)
-            ? prev.galleryImages
-            : [compressedDataUrl, ...prev.galleryImages],
+          imageUrl: uploadedImageUrl,
+          galleryImages: prev.galleryImages.includes(uploadedImageUrl)
+            ? [...prev.galleryImages]
+            : [uploadedImageUrl, ...prev.galleryImages],
         }));
       }
     } catch (err: unknown) {
-      setProductFormError(err instanceof Error ? err.message : 'تعذر ضغط الصورة');
+      setProductFormError(err instanceof Error ? err.message : 'تعذر رفع وضغط الصورة');
     } finally {
       setUploadingProductImg(false);
+      // Reset file input so consecutive uploads of the same or another file always fire onChange
+      e.target.value = '';
     }
   };
 
@@ -179,12 +188,16 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
       .map((v) => v.trim())
       .filter((v) => Boolean(v) && v !== 'الخيار الافتراضي');
 
-    const defaultImg = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
-    const primaryImg = productForm.imageUrl.trim() || productForm.galleryImages[0] || defaultImg;
+    const normalizedGallery = productForm.galleryImages
+      .map((img) => normalizeProductImageUrl(img))
+      .filter(Boolean);
+    const primaryImg = normalizeProductImageUrl(productForm.imageUrl.trim()) || normalizedGallery[0] || '';
     const finalGallery =
-      productForm.galleryImages.length > 0
-        ? Array.from(new Set([primaryImg, ...productForm.galleryImages]))
-        : [primaryImg];
+      normalizedGallery.length > 0
+        ? Array.from(new Set([primaryImg, ...normalizedGallery].filter(Boolean)))
+        : primaryImg
+        ? [primaryImg]
+        : [];
 
     const normStock = productForm.stockQuantity !== '' ? normalizeArabicDigits(String(productForm.stockQuantity)) : '';
     const parsedStockQty =
@@ -197,8 +210,9 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
     const normMin = productForm.minQuantity !== '' ? Number(normalizeArabicDigits(String(productForm.minQuantity))) : undefined;
     const normStep = productForm.quantityStep !== '' ? Number(normalizeArabicDigits(String(productForm.quantityStep))) : undefined;
 
+    // Pass id ONLY when editing an existing product; undefined when adding a new product
     onSaveProduct({
-      id: editingProduct?.id,
+      id: editingProduct?.id ? String(editingProduct.id) : undefined,
       name: productForm.name.trim(),
       category: productForm.category.trim() || 'عام',
       price: basePrice,
@@ -207,15 +221,17 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
       unitLabel: productForm.unitLabel?.trim() || undefined,
       minQuantity: normMin && normMin > 0 ? normMin : undefined,
       quantityStep: normStep && normStep > 0 ? normStep : undefined,
-      variants: variantsArray,
+      variants: [...variantsArray],
       imageUrl: primaryImg,
-      galleryImages: finalGallery,
+      galleryImages: [...finalGallery],
       description: productForm.description.trim(),
       inStock: finalInStock,
       stockQuantity: parsedStockQty,
       featured: productForm.featured,
     });
 
+    // Reset form state after saving so subsequent opens start clean
+    setProductForm({ ...INITIAL_PRODUCT_FORM, galleryImages: [] });
     onClose();
   };
 
@@ -234,7 +250,7 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
                 {editingProduct ? 'تعديل بيانات المنتج' : 'إضافة منتج جديد للمتجر'}
               </h3>
               <p className="text-xs text-stone-500">
-                ارفع صور المنتج من جهازك أو أضف الرابط، وسينعكس التحديث فوراً
+                ارفع صور المنتج من جهازك أو أضف الرابط، وسينعكس التحديث فوراً ويُحفظ محلياً على السيرفر
               </p>
             </div>
           </div>
@@ -462,7 +478,7 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
               <div className="flex items-center gap-2">
                 <label className="px-3 py-1.5 bg-[#2563EB] hover:bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs">
                   <Upload className="w-3.5 h-3.5" />
-                  <span>{uploadingProductImg ? 'جاري ضغط الصورة...' : 'رفع صورة من جهازك'}</span>
+                  <span>{uploadingProductImg ? 'جاري الرفع والحفظ...' : 'رفع صورة من جهازك'}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -530,10 +546,12 @@ export const ProductEditorModal: React.FC<ProductEditorModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (!extraGalleryUrl.trim()) return;
+                  const normExtra = normalizeProductImageUrl(extraGalleryUrl.trim());
+                  if (!normExtra) return;
                   setProductForm((prev) => ({
                     ...prev,
-                    galleryImages: [...prev.galleryImages, extraGalleryUrl.trim()],
+                    galleryImages: [...prev.galleryImages, normExtra],
+                    imageUrl: prev.imageUrl || normExtra,
                   }));
                   setExtraGalleryUrl('');
                 }}

@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B253F" />
+      <stop offset="60%" stop-color="#071829" />
+      <stop offset="100%" stop-color="#040D17" />
+    </linearGradient>
+    <linearGradient id="accentGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0D9488" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#2DD4BF" stop-opacity="0.05" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bgGrad)" />
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.06" stroke="#FFFFFF" stroke-width="1">
+    <line x1="0" y1="100" x2="800" y2="100" />
+    <line x1="0" y1="200" x2="800" y2="200" />
+    <line x1="0" y1="300" x2="800" y2="300" />
+    <line x1="0" y1="400" x2="800" y2="400" />
+    <line x1="0" y1="500" x2="800" y2="500" />
+    <line x1="160" y1="0" x2="160" y2="600" />
+    <line x1="320" y1="0" x2="320" y2="600" />
+    <line x1="480" y1="0" x2="480" y2="600" />
+    <line x1="640" y1="0" x2="640" y2="600" />
+  </g>
+
+  <!-- Glowing accent circle top right -->
+  <circle cx="680" cy="120" r="180" fill="#0D9488" opacity="0.12" filter="blur(40px)" />
+  <circle cx="120" cy="480" r="140" fill="#2DD4BF" opacity="0.08" filter="blur(40px)" />
+
+  <!-- Top Brand Navigation Bar inside thumbnail -->
+  <g transform="translate(60, 50)">
+    <rect x="0" y="0" width="32" height="32" rx="8" fill="#0D9488" />
+    <text x="16" y="21" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="16" font-weight="900" text-anchor="middle">S</text>
+    <text x="44" y="22" fill="#E2E8F0" font-family="Cairo, system-ui, sans-serif" font-size="14" font-weight="700">SIMPLER STORE</text>
+    
+    <!-- Category Pill Badge -->
+    <rect x="420" y="2" width="260" height="28" rx="14" fill="#14B8A6" />
+    <text x="550" y="20" fill="#042F2E" font-family="Cairo, system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">FAST SURROGATE · تجزئة الغاز</text>
+  </g>
+
+  <!-- Left Content Column -->
+  <g transform="translate(60, 160)">
+    <!-- English Title -->
+    <text x="0" y="24" fill="#2DD4BF" font-family="system-ui, sans-serif" font-size="18" font-weight="700" letter-spacing="1">NGL AI SURROGATE MODEL</text>
+    
+    <!-- Arabic Main Title -->
+    <text x="0" y="80" fill="#FFFFFF" font-family="Cairo, system-ui, sans-serif" font-size="34" font-weight="800">النموذج البديل السريع لتجزئة الغاز</text>
+    
+    <!-- Arabic Subtitle / Description -->
+    <text x="0" y="125" fill="#94A3B8" font-family="Cairo, system-ui, sans-serif" font-size="15" font-weight="400">
+      محاكاة عصبية لحظية لأبراج تقطير NGL لدعم التحكم المتقدم
+    </text>
+
+    <!-- Specs & Highlights Pills -->
+    <g transform="translate(0, 165)">
+      <rect x="0" y="0" width="130" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="18" cy="17" r="4" fill="#0D9488" />
+      <text x="32" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">تسليم فوري</text>
+
+      <rect x="145" y="0" width="130" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="163" cy="17" r="4" fill="#10B981" />
+      <text x="177" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">دعم وضمان</text>
+
+      <rect x="290" y="0" width="115" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="308" cy="17" r="4" fill="#38BDF8" />
+      <text x="322" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">كود أصلي</text>
+    </g>
+
+    <!-- Bottom Feature Bar -->
+    <g transform="translate(0, 245)">
+      <line x1="0" y1="0" x2="380" y2="0" stroke="#334155" stroke-width="1" />
+      <text x="0" y="25" fill="#64748B" font-family="Cairo, system-ui, sans-serif" font-size="12">
+        بواسطة م. جابر · متوافق مع كافة الأنظمة الحديثة
+      </text>
+    </g>
+  </g>
+
+  <!-- Right Graphic Element -->
+  <g filter="url(#shadow)">
+    
+        <!-- NGL Distillation Column Graphic -->
+        <g transform="translate(520, 150)">
+          <!-- Tall column shell -->
+          <rect x="70" y="20" width="70" height="260" rx="35" fill="#0F172A" stroke="#0D9488" stroke-width="2.5" />
+          <!-- Trays inside column -->
+          <line x1="80" y1="70" x2="130" y2="70" stroke="#2DD4BF" stroke-width="2" stroke-dasharray="4,3" />
+          <line x1="80" y1="110" x2="130" y2="110" stroke="#2DD4BF" stroke-width="2" stroke-dasharray="4,3" />
+          <line x1="80" y1="150" x2="130" y2="150" stroke="#2DD4BF" stroke-width="2" stroke-dasharray="4,3" />
+          <line x1="80" y1="190" x2="130" y2="190" stroke="#2DD4BF" stroke-width="2" stroke-dasharray="4,3" />
+          <line x1="80" y1="230" x2="130" y2="230" stroke="#2DD4BF" stroke-width="2" stroke-dasharray="4,3" />
+          <!-- Feed inlet -->
+          <line x1="20" y1="150" x2="70" y2="150" stroke="#38BDF8" stroke-width="3" />
+          <polygon points="65,145 75,150 65,155" fill="#38BDF8" />
+          <!-- Overhead Vapor line -->
+          <path d="M 105 20 L 105 5 L 180 5 L 180 40" fill="none" stroke="#F59E0B" stroke-width="3" />
+          <!-- Bottom Liquid line -->
+          <path d="M 105 280 L 105 295 L 180 295 L 180 270" fill="none" stroke="#EC4899" stroke-width="3" />
+          <!-- AI Speed badge -->
+          <rect x="145" y="115" width="85" height="50" rx="8" fill="#134E4A" stroke="#0D9488" stroke-width="1.5" />
+          <text x="187" y="137" fill="#5EEAD4" font-size="10" font-weight="bold" text-anchor="middle">&lt; 50ms</text>
+          <text x="187" y="152" fill="#E2E8F0" font-size="9" text-anchor="middle">REAL-TIME</text>
+        </g>
+      
+  </g>
+
+  <!-- Bottom Accent Stripe -->
+  <rect x="0" y="594" width="800" height="6" fill="#0D9488" />
+</svg>

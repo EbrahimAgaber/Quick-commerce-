@@ -49,6 +49,18 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
     product.stockQuantity > 0 &&
     product.stockQuantity <= 5;
 
+  const isFractional = Boolean(
+    ['kg', 'meter', 'liter', 'tola'].includes(product.unit || '') ||
+    (product.quantityStep !== undefined && product.quantityStep < 1) ||
+    (product.minQuantity !== undefined && product.minQuantity < 1)
+  );
+  const hasVariants = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي').length > 1;
+  const quickAddTooltip = isOutOfStock
+    ? 'غير متوفر'
+    : hasVariants || isFractional
+    ? 'اختيار الكمية أو الخيار'
+    : 'إضافة سريعة للسلة';
+
   return (
     <div
       onClick={() => onSelectProduct(product)}
@@ -191,7 +203,7 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
                 : 'bg-stone-200 text-stone-400 cursor-not-allowed'
             }`}
             style={{ backgroundColor: isAddedJustNow ? '#059669' : !isOutOfStock ? brand.accentColor : '#E5E7EB' }}
-            title={!isOutOfStock ? (((product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي')).length > 1 ? 'اختيار الخيار والإضافة' : 'إضافة سريعة للسلة') : 'غير متوفر'}
+            title={quickAddTooltip}
           >
             {isAddedJustNow ? (
               <Check className="w-5 h-5 animate-in zoom-in" />

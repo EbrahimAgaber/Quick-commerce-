@@ -19,6 +19,7 @@ import {
   generateSampleProductCsv,
   CsvProductImportResult,
 } from '../../utils/csvProductParser';
+import { ProductImage } from '../common/ProductImage';
 
 interface CsvProductImportModalProps {
   isOpen: boolean;
@@ -337,6 +338,7 @@ export const CsvProductImportModal: React.FC<CsvProductImportModalProps> = ({
                       <thead className="bg-stone-50 text-stone-500 sticky top-0 text-[11px]">
                         <tr>
                           <th className="px-3 py-2">#</th>
+                          <th className="px-3 py-2">الصورة</th>
                           <th className="px-3 py-2">اسم المنتج</th>
                           <th className="px-3 py-2">القسم</th>
                           <th className="px-3 py-2">السعر</th>
@@ -349,6 +351,20 @@ export const CsvProductImportModal: React.FC<CsvProductImportModalProps> = ({
                         {parseResult.validProducts.slice(0, 10).map((p, idx) => (
                           <tr key={idx} className="hover:bg-stone-50/60">
                             <td className="px-3 py-2 text-stone-400 font-mono text-[10px]">{idx + 1}</td>
+                            <td className="px-3 py-1.5">
+                              <div className="w-10 h-10 rounded-lg overflow-hidden bg-stone-100 border border-stone-200 relative">
+                                <ProductImage
+                                  src={p.imageUrl}
+                                  alt={p.name}
+                                  category={p.category}
+                                  size="xs"
+                                  width={80}
+                                  height={80}
+                                  className="w-full h-full"
+                                  imgClassName="w-full h-full object-cover"
+                                />
+                              </div>
+                            </td>
                             <td className="px-3 py-2 font-bold text-stone-900 truncate max-w-[160px]">
                               {p.name}
                             </td>

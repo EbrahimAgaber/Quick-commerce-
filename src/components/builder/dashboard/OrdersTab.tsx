@@ -10,11 +10,14 @@ import {
   MessageCircle,
   Eye,
   FileText,
+  Printer,
+  Tag,
   CheckCircle2,
   Clock,
   X,
 } from 'lucide-react';
 import type { Order, OrderStatus, StoreSettings, OrderItem } from '../../../types/store';
+import type { PrintDocumentFormat } from '../../storefront/InvoiceModal';
 
 interface OrdersTabProps {
   orders: Order[];
@@ -28,12 +31,14 @@ interface OrdersTabProps {
   onDispatchToDriver: (order: Order) => void;
   onContactCustomerWhatsApp: (order: Order) => void;
   onSelectOrderDetail: (order: Order) => void;
-  onOpenInvoice: (order: Order) => void;
+  onOpenInvoice: (order: Order, format?: PrintDocumentFormat) => void;
   onOpenSettlement: () => void;
   onExportCSV: () => void;
   localTrackingNotes: Record<string, string>;
   onTrackingNoteChange: (orderId: string, note: string) => void;
   onCommitTrackingNote: (orderId: string) => void;
+  onOpenWhatsAppConnect?: () => void;
+  isWhatsAppConnected?: boolean;
 }
 
 export const OrdersTab: React.FC<OrdersTabProps> = ({
@@ -50,6 +55,8 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
   localTrackingNotes,
   onTrackingNoteChange,
   onCommitTrackingNote,
+  onOpenWhatsAppConnect,
+  isWhatsAppConnected,
 }) => {
   const [orderStatusFilter, setOrderStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
@@ -152,6 +159,22 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {onOpenWhatsAppConnect && (
+            <button
+              type="button"
+              onClick={onOpenWhatsAppConnect}
+              className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer border ${
+                isWhatsAppConnected
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
+              }`}
+              title="ربط واتساب لإرسال مهام التوصيل للمندوب تلقائياً في الخلفية"
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{isWhatsAppConnected ? 'واتساب متصل بالخلفية 🟢' : 'ربط واتساب (QR) ⚡'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onOpenSettlement}
@@ -414,11 +437,19 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                   <button
                     type="button"
                     onClick={() => onDispatchToDriver(ord)}
-                    className="py-2 px-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
-                    title="إرسال تفاصيل الشحنة للمندوب عبر واتساب"
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer shadow-2xs text-white ${
+                      isWhatsAppConnected
+                        ? 'bg-emerald-600 hover:bg-emerald-700'
+                        : 'bg-blue-600 hover:bg-blue-700'
+                    }`}
+                    title={
+                      isWhatsAppConnected
+                        ? 'إرسال تفاصيل الشحنة للمندوب تلقائياً في الخلفية عبر واتساب ⚡'
+                        : 'إرسال تفاصيل الشحنة للمندوب عبر واتساب'
+                    }
                   >
                     <Truck className="w-3.5 h-3.5" />
-                    <span>للمندوب</span>
+                    <span>{isWhatsAppConnected ? 'للمندوب ⚡' : 'للمندوب'}</span>
                   </button>
                   <button
                     type="button"
@@ -437,9 +468,18 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onOpenInvoice(ord)}
+                    onClick={() => onOpenInvoice(ord, 'label')}
+                    className="p-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1 cursor-pointer"
+                    title="طباعة ملصق الطرد / بوليصة الشحن (Shipping Label)"
+                  >
+                    <Tag className="w-3.5 h-3.5" />
+                    <span className="text-[10px]">ملصق</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenInvoice(ord, 'a4')}
                     className="p-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold flex items-center justify-center cursor-pointer"
-                    title="الفاتورة الضريبية ZATCA"
+                    title="عرض وطباعة الفاتورة الضريبية ZATCA"
                   >
                     <FileText className="w-3.5 h-3.5" />
                   </button>
@@ -571,8 +611,16 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         <button
                           type="button"
                           onClick={() => onDispatchToDriver(ord)}
-                          className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors cursor-pointer"
-                          title="إرسال تفاصيل الشحنة للمندوب عبر واتساب (1-Tap Dispatch)"
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            isWhatsAppConnected
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
+                              : 'bg-blue-50 hover:bg-blue-100 text-blue-700'
+                          }`}
+                          title={
+                            isWhatsAppConnected
+                              ? 'إرسال تفاصيل الشحنة للمندوب تلقائياً في الخلفية عبر واتساب ⚡'
+                              : 'إرسال تفاصيل الشحنة للمندوب عبر واتساب (1-Tap Dispatch)'
+                          }
                         >
                           <Truck className="w-4 h-4" />
                         </button>
@@ -594,9 +642,18 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => onOpenInvoice(ord)}
+                          onClick={() => onOpenInvoice(ord, 'label')}
+                          className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                          title="طباعة ملصق الطرد / بوليصة الشحن للصقها على الكرتون (Shipping Label)"
+                        >
+                          <Tag className="w-4 h-4 text-amber-700" />
+                          <span className="text-[10px] font-bold hidden xl:inline">ملصق الطرد</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onOpenInvoice(ord, 'a4')}
                           className="p-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition-colors cursor-pointer"
-                          title="عرض وطباعة الفاتورة الضريبية ZATCA"
+                          title="عرض وطباعة الفاتورة الضريبية أو إيصال العميل (Receipt / Invoice)"
                         >
                           <FileText className="w-4 h-4 text-emerald-600" />
                         </button>

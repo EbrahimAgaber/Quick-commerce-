@@ -115,7 +115,7 @@ export class BusinessOwnerSimulator {
       price: productData.price,
       salePrice: productData.salePrice,
       variants: productData.variants || [],
-      imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500',
+      imageUrl: '',
       galleryImages: [],
       description: productData.description || 'منتج عالي الجودة',
       featured: true,

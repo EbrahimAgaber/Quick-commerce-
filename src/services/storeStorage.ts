@@ -362,13 +362,41 @@ const STORAGE_KEYS = {
   POLICIES: 'storelink_policies',
 };
 
+// In-memory runtime mirrors to ensure zero data loss even if browser localStorage quota is full
+let memorySettingsMirror: StoreSettings | null = null;
+let memoryProductsMirror: Product[] | null = null;
+let memoryOrdersMirror: Order[] | null = null;
+let memoryPoliciesMirror: StorePolicy[] | null = null;
+
+/**
+ * Strips bulky Base64 image data strings (>8KB) before writing to browser localStorage
+ * so the 5MB browser quota is never exceeded, while server `/data/stores.json` and `/public/uploads/`
+ * hold the full assets.
+ */
+export function stripBulkyBase64FromProduct(prod: Product): Product {
+  if (!prod || typeof prod !== 'object') return prod;
+  const fallbackImg = '';
+  const isBulky = (str?: string) => Boolean(str && str.startsWith('data:image/') && str.length > 8192);
+  const cleanPrimary = isBulky(prod.imageUrl) ? fallbackImg : prod.imageUrl;
+  const cleanGallery = Array.isArray(prod.galleryImages)
+    ? prod.galleryImages.map((img) => (isBulky(img) ? fallbackImg : img)).filter(Boolean)
+    : cleanPrimary
+    ? [cleanPrimary]
+    : [];
+  return {
+    ...prod,
+    imageUrl: cleanPrimary,
+    galleryImages: cleanGallery,
+  };
+}
+
 export function safeSetLocalStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch (e) {
     console.warn(`LocalStorage quota notice for key "${key}":`, e);
     try {
-      // Evict old cached orders first to free space
+      // 1. Evict old cached orders first to free space
       if (key !== STORAGE_KEYS.ORDERS) {
         const rawOrders = localStorage.getItem(STORAGE_KEYS.ORDERS);
         if (rawOrders) {
@@ -379,6 +407,17 @@ export function safeSetLocalStorage(key: string, value: string): void {
             }
           } catch {}
         }
+      }
+      // 2. If still failing due to bulky base64 strings in products, strip only the >8KB base64 strings for localStorage
+      if (key === STORAGE_KEYS.PRODUCTS) {
+        try {
+          const parsedProds = JSON.parse(value);
+          if (Array.isArray(parsedProds)) {
+            const compact = parsedProds.map(stripBulkyBase64FromProduct);
+            localStorage.setItem(key, JSON.stringify(compact));
+            return;
+          }
+        } catch {}
       }
       localStorage.setItem(key, value);
     } catch (retryErr) {
@@ -401,6 +440,13 @@ function deduplicateOrderList(orders: Order[]): Order[] {
 }
 
 export class StoreStorage {
+  static clearMemoryMirrors(): void {
+    memorySettingsMirror = null;
+    memoryProductsMirror = null;
+    memoryOrdersMirror = null;
+    memoryPoliciesMirror = null;
+  }
+
   static getSettings(): StoreSettings {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SETTINGS);
@@ -427,10 +473,12 @@ export class StoreStorage {
     } catch (e) {
       console.error('Error reading settings from localStorage', e);
     }
+    if (memorySettingsMirror) return memorySettingsMirror;
     return DEFAULT_SETTINGS;
   }
 
   static saveSettings(settings: StoreSettings): void {
+    memorySettingsMirror = settings;
     safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
     this.dispatchUpdate();
   }
@@ -441,7 +489,11 @@ export class StoreStorage {
       if (data !== null) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed)) {
-          return parsed.filter((p) => p && typeof p === 'object' && p.id);
+          const valid = parsed.filter((p) => p && typeof p === 'object' && p.id);
+          if (memoryProductsMirror && memoryProductsMirror.length === valid.length) {
+            return memoryProductsMirror;
+          }
+          return valid;
         }
       }
     } catch (e) {
@@ -451,7 +503,11 @@ export class StoreStorage {
   }
 
   static saveProducts(products: Product[]): void {
-    safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    const cleanList = Array.isArray(products)
+      ? products.map((p) => JSON.parse(JSON.stringify(p)))
+      : [];
+    memoryProductsMirror = cleanList;
+    safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(cleanList));
     this.dispatchUpdate();
   }
 
@@ -467,12 +523,14 @@ export class StoreStorage {
     } catch (e) {
       console.error('Error reading orders from localStorage', e);
     }
+    if (memoryOrdersMirror) return memoryOrdersMirror;
     return DEFAULT_ORDERS;
   }
 
   static saveOrders(orders: Order[]): void {
-    // Retain up to 300 most recent orders in local storage hot cache
-    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(deduplicateOrderList(orders || []).slice(0, 300)));
+    const deduped = deduplicateOrderList(orders || []).slice(0, 300);
+    memoryOrdersMirror = deduped;
+    safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(deduped));
     this.dispatchUpdate();
   }
 
@@ -514,10 +572,12 @@ export class StoreStorage {
     } catch (e) {
       console.error('Error reading policies from localStorage', e);
     }
+    if (memoryPoliciesMirror) return memoryPoliciesMirror;
     return DEFAULT_POLICIES;
   }
 
   static savePolicies(policies: StorePolicy[]): void {
+    memoryPoliciesMirror = policies;
     safeSetLocalStorage(STORAGE_KEYS.POLICIES, JSON.stringify(policies));
     this.dispatchUpdate();
   }
@@ -532,10 +592,13 @@ export class StoreStorage {
     policies: StorePolicy[];
   }): void {
     if (data.settings) {
+      memorySettingsMirror = data.settings;
       safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(data.settings));
     }
-    if (Array.isArray(data.products) && data.products.length > 0) {
-      safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(data.products));
+    if (Array.isArray(data.products)) {
+      const clonedProds = data.products.map((p) => JSON.parse(JSON.stringify(p)));
+      memoryProductsMirror = clonedProds;
+      safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(clonedProds));
     }
 
     // Merge existing and incoming orders to guarantee orders never disappear on reload
@@ -549,15 +612,21 @@ export class StoreStorage {
       if (o && o.id && !ordersMap.has(o.id)) ordersMap.set(o.id, o);
     });
     const mergedOrders = Array.from(ordersMap.values()).slice(0, 300);
+    memoryOrdersMirror = mergedOrders;
     safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(mergedOrders));
 
     if (Array.isArray(data.policies) && data.policies.length > 0) {
+      memoryPoliciesMirror = data.policies;
       safeSetLocalStorage(STORAGE_KEYS.POLICIES, JSON.stringify(data.policies));
     }
     this.dispatchUpdate();
   }
 
   static resetToDefault(): void {
+    memorySettingsMirror = DEFAULT_SETTINGS;
+    memoryProductsMirror = DEFAULT_PRODUCTS;
+    memoryOrdersMirror = DEFAULT_ORDERS;
+    memoryPoliciesMirror = DEFAULT_POLICIES;
     safeSetLocalStorage(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_SETTINGS));
     safeSetLocalStorage(STORAGE_KEYS.PRODUCTS, JSON.stringify(DEFAULT_PRODUCTS));
     safeSetLocalStorage(STORAGE_KEYS.ORDERS, JSON.stringify(DEFAULT_ORDERS));
@@ -566,6 +635,8 @@ export class StoreStorage {
   }
 
   private static dispatchUpdate(): void {
-    window.dispatchEvent(new Event('storelink_db_updated'));
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('storelink_db_updated'));
+    }
   }
 }

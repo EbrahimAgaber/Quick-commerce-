@@ -7,7 +7,8 @@ import {
   CartItem,
   MerchantUser,
   StoreInstance,
-  PromoCode
+  PromoCode,
+  getProductUnitMeta
 } from './types/store';
 import { StoreStorage, DEFAULT_PRODUCTS, MODERN_RETAIL_THEME, safeSetLocalStorage } from './services/storeStorage';
 import { StoreManager } from './services/storeManager';
@@ -158,6 +159,36 @@ export default function App() {
         policies: activeStore.policies || [],
       });
     }
+
+    // Hydrate from Local Server Database (/api/store/data -> /data/stores.json)
+    // so products & settings persist across Edge, Chrome, and browser cache clears
+    StoreManager.fetchStoresFromLocalServer()
+      .then((serverData) => {
+        if (serverData?.stores && serverData.stores.length > 0) {
+          setAllStores(StoreManager.getAllStores());
+          const currentBoundId = activeStoreIdRef.current;
+          const matchingStore =
+            serverData.stores.find((s) => s.id === currentBoundId) ||
+            (currentBoundId === 'store_aurora_01'
+              ? serverData.stores.find((s) => s.id !== 'store_aurora_01') || serverData.stores[0]
+              : null);
+          if (matchingStore) {
+            activeStoreIdRef.current = matchingStore.id;
+            setActiveStore(matchingStore);
+            setSettings(matchingStore.settings);
+            setProducts(matchingStore.products || []);
+            setOrders(matchingStore.orders || []);
+            setPolicies(matchingStore.policies || []);
+            StoreStorage.hydrateStore({
+              settings: matchingStore.settings,
+              products: matchingStore.products || [],
+              orders: matchingStore.orders || [],
+              policies: matchingStore.policies || [],
+            });
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Listen to local storage & cross-tab sync events
@@ -281,13 +312,27 @@ export default function App() {
   }, [settings]);
 
   // UI View Modes:
+  // - Persists dashboard/storefront view across dev reloads via sessionStorage when no explicit URL param overrides it.
   // - If `?store=<slug>` or `/s/<slug>` is present in the URL, open the customer's pure `'storefront'` directly.
   // - If visiting root `/` without `?store=`, show the SaaS platform `'landing'` page.
-  const [viewMode, setViewMode] = useState<AppViewMode>(() => {
+  const [viewMode, setViewModeState] = useState<AppViewMode>(() => {
     if (initialRoute.viewParam === 'dashboard') return 'dashboard';
     if (initialRoute.storeSlug || initialRoute.customDomainHostname || initialRoute.viewParam === 'storefront') return 'storefront';
+    try {
+      const savedView = sessionStorage.getItem('storelink_active_view_mode') as AppViewMode | null;
+      if (savedView === 'dashboard' || savedView === 'storefront') {
+        return savedView;
+      }
+    } catch {}
     return 'landing';
   });
+
+  const setViewMode = (nextMode: AppViewMode) => {
+    setViewModeState(nextMode);
+    try {
+      sessionStorage.setItem('storelink_active_view_mode', nextMode);
+    } catch {}
+  };
   const [devicePreview, setDevicePreview] = useState<DevicePreviewMode>('desktop');
 
   // Modals State
@@ -394,7 +439,7 @@ export default function App() {
           setViewMode('dashboard');
         } else if (targetSlugOrId || viewParam === 'storefront') {
           setViewMode('storefront');
-        } else if (viewParam === 'landing' || (!targetSlugOrId && !viewParam)) {
+        } else if (viewParam === 'landing') {
           setViewMode('landing');
         }
 
@@ -578,7 +623,7 @@ export default function App() {
   }, [cart]);
 
   // Cart handlers
-  const handleAddToCart = (product: Product, variant: string, quantity: number) => {
+  const handleAddToCart = (product: Product, variant: string, quantity: number, replaceExisting = false) => {
     const cleanVariant = (!variant || variant === 'الخيار الافتراضي') ? '' : variant;
     setCart((prev) => {
       const existingIdx = prev.findIndex((item) => {
@@ -591,10 +636,13 @@ export default function App() {
           : 99;
       if (existingIdx >= 0) {
         const updated = [...prev];
+        const nextQty = replaceExisting
+          ? quantity
+          : updated[existingIdx].quantity + quantity;
         updated[existingIdx] = {
           ...updated[existingIdx],
           selectedVariant: cleanVariant,
-          quantity: Math.min(maxAllowed, updated[existingIdx].quantity + quantity),
+          quantity: Math.min(maxAllowed, nextQty),
         };
         return updated;
       }
@@ -602,17 +650,24 @@ export default function App() {
     });
   };
 
-  // Smart Quick Add: If product has multiple variants, open ProductModal so buyer picks their option
+  // Smart Quick Add: If product has multiple variants or is sold by weight/fraction, open ProductModal so buyer picks their option
   const handleQuickAdd = (product: Product, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!product.inStock) return;
     const realVariants = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي');
-    if (realVariants.length > 1) {
+    const unitMeta = getProductUnitMeta(product.unit);
+    const isFractional = Boolean(unitMeta?.allowDecimal || ['kg', 'meter', 'liter', 'tola'].includes(product.unit || ''));
+    const hasFractionalStep = (product.quantityStep !== undefined && product.quantityStep < 1) || (product.minQuantity !== undefined && product.minQuantity < 1);
+
+    // If product has multiple variants or is fractional (e.g. nuts by kg, perfumes by tola), open modal for precision choice
+    if (realVariants.length > 1 || isFractional || hasFractionalStep) {
       setSelectedProduct(product);
       return;
     }
+
     const defaultVariant = realVariants.length > 0 ? realVariants[0] : '';
-    handleAddToCart(product, defaultVariant, 1);
+    const initialQty = product.minQuantity && product.minQuantity > 0 ? product.minQuantity : 1;
+    handleAddToCart(product, defaultVariant, initialQty);
     setJustAddedId(product.id);
     setTimeout(() => setJustAddedId(null), 1200);
   };
@@ -671,10 +726,11 @@ export default function App() {
   };
 
   const handleUpdateProducts = (newProducts: Product[]) => {
-    StoreStorage.saveProducts(newProducts);
-    setProducts(newProducts);
+    const clonedProducts: Product[] = JSON.parse(JSON.stringify(newProducts || []));
+    StoreStorage.saveProducts(clonedProducts);
+    setProducts(clonedProducts);
     setActiveStore((prev) => {
-      const updatedStore: StoreInstance = { ...prev, products: newProducts };
+      const updatedStore: StoreInstance = { ...prev, products: clonedProducts };
       StoreManager.updateStore(updatedStore, { immediateSync: true });
       return updatedStore;
     });
@@ -1365,7 +1421,11 @@ export default function App() {
           settings={settings}
           storeSlug={activeStore.slug}
           onClose={() => setSelectedProduct(null)}
-          onAddToCart={handleAddToCart}
+          onAddToCart={(prod, variant, qty) => {
+            // When buyer adds from the detailed modal, replace or set the exact configured quantity and open cart drawer for immediate visual confirmation
+            handleAddToCart(prod, variant, qty, true);
+            setIsCartOpen(true);
+          }}
         />
       )}
 

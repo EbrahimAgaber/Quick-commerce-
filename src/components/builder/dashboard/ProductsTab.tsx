@@ -8,9 +8,12 @@ import {
   ShoppingBag,
   Star,
   Edit3,
+  FileJson,
+  Upload,
 } from 'lucide-react';
 import type { Product, StoreSettings } from '../../../types/store';
 import { getProductUnitLabel } from '../../../types/store';
+import { ProductImage } from '../../common/ProductImage';
 
 interface ProductsTabProps {
   products: Product[];
@@ -22,6 +25,8 @@ interface ProductsTabProps {
   onOpenEditProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
   onToggleProductStock: (productId: string) => void;
+  onDownloadBackupJson?: () => void;
+  onOpenRestoreBackupModal?: () => void;
 }
 
 export const ProductsTab: React.FC<ProductsTabProps> = ({
@@ -34,6 +39,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   onOpenEditProduct,
   onDeleteProduct,
   onToggleProductStock,
+  onDownloadBackupJson,
+  onOpenRestoreBackupModal,
 }) => {
   const [productSearch, setProductSearch] = useState('');
 
@@ -59,8 +66,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-56 min-w-[160px]">
             <input
               type="text"
               value={productSearch}
@@ -71,15 +78,39 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
             <Search className="w-3.5 h-3.5 text-stone-400 absolute right-2.5 top-2.5 pointer-events-none" />
           </div>
 
+          {onDownloadBackupJson && (
+            <button
+              type="button"
+              onClick={onDownloadBackupJson}
+              className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-2xs"
+              title="تحميل نسخة احتياطية كاملة للمتجر والمنتجات والصور بصيغة JSON"
+            >
+              <FileJson className="w-3.5 h-3.5 text-emerald-400" />
+              <span>تحميل نسخة احتياطية (JSON)</span>
+            </button>
+          )}
+
+          {onOpenRestoreBackupModal && (
+            <button
+              type="button"
+              onClick={onOpenRestoreBackupModal}
+              className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-[#2563EB] font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-blue-200 shrink-0"
+              title="استعادة نسخة احتياطية محفوظة للمتجر والمنتجات من ملف JSON"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>استعادة نسخة احتياطية</span>
+            </button>
+          )}
+
           {products.length > 0 && (
             <button
               type="button"
               onClick={onExportCSV}
               className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-emerald-200 shrink-0"
-              title="تصدير المنتجات الحالية إلى ملف CSV لـ Excel أو Google Sheets"
+              title="تصدير المنتجات الحالية إلى ملف CSV / Excel"
             >
               <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">تصدير CSV</span>
+              <span className="hidden sm:inline">تصدير CSV / Excel</span>
             </button>
           )}
 
@@ -123,9 +154,18 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           </div>
           <h4 className="font-bold text-stone-800 text-sm">لا توجد منتجات حالياً</h4>
           <p className="text-xs text-stone-500 max-w-sm mx-auto">
-            {productSearch ? 'جرّب البحث بكلمة مختلفة' : 'ابدأ بإضافة أول منتج أو استورد كافة منتجاتك دفعة واحدة من Google Sheets'}
+            {productSearch ? 'جرّب البحث بكلمة مختلفة' : 'ابدأ بإضافة أول منتج أو استعد نسختك الاحتياطية (JSON) أو استورد منتجاتك من Google Sheets'}
           </p>
-          <div className="flex items-center justify-center gap-2 pt-1">
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+            {onOpenRestoreBackupModal && (
+              <button
+                onClick={onOpenRestoreBackupModal}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                <span>استعادة نسخة احتياطية (JSON)</span>
+              </button>
+            )}
             <button
               onClick={onOpenCsvImport}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
@@ -152,17 +192,20 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               <div className="p-4 space-y-3">
                 <div className="flex items-start gap-3">
                   <div className="w-16 h-16 rounded-xl overflow-hidden bg-stone-100 shrink-0 border border-stone-100 relative">
-                    <img
+                    <ProductImage
                       src={prod.imageUrl}
                       alt={prod.name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
-                      }}
+                      category={prod.category}
+                      size="sm"
+                      width={160}
+                      height={160}
+                      accentColor={settings.brandTheme?.accentColor || '#2563EB'}
+                      primaryColor={settings.brandTheme?.primaryColor || '#0F172A'}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover"
                     />
                     {prod.featured && (
-                      <span className="absolute top-1 right-1 bg-amber-400 text-stone-950 p-0.5 rounded-full">
+                      <span className="absolute top-1 right-1 bg-amber-400 text-stone-950 p-0.5 rounded-full z-20">
                         <Star className="w-2.5 h-2.5 fill-current" />
                       </span>
                     )}

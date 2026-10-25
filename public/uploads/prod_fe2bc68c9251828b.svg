@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B253F" />
+      <stop offset="60%" stop-color="#071829" />
+      <stop offset="100%" stop-color="#040D17" />
+    </linearGradient>
+    <linearGradient id="accentGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#0077FF" stop-opacity="0.05" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bgGrad)" />
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.06" stroke="#FFFFFF" stroke-width="1">
+    <line x1="0" y1="100" x2="800" y2="100" />
+    <line x1="0" y1="200" x2="800" y2="200" />
+    <line x1="0" y1="300" x2="800" y2="300" />
+    <line x1="0" y1="400" x2="800" y2="400" />
+    <line x1="0" y1="500" x2="800" y2="500" />
+    <line x1="160" y1="0" x2="160" y2="600" />
+    <line x1="320" y1="0" x2="320" y2="600" />
+    <line x1="480" y1="0" x2="480" y2="600" />
+    <line x1="640" y1="0" x2="640" y2="600" />
+  </g>
+
+  <!-- Glowing accent circle top right -->
+  <circle cx="680" cy="120" r="180" fill="#10B981" opacity="0.12" filter="blur(40px)" />
+  <circle cx="120" cy="480" r="140" fill="#0077FF" opacity="0.08" filter="blur(40px)" />
+
+  <!-- Top Brand Navigation Bar inside thumbnail -->
+  <g transform="translate(60, 50)">
+    <rect x="0" y="0" width="32" height="32" rx="8" fill="#10B981" />
+    <text x="16" y="21" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="16" font-weight="900" text-anchor="middle">S</text>
+    <text x="44" y="22" fill="#E2E8F0" font-family="Cairo, system-ui, sans-serif" font-size="14" font-weight="700">SIMPLER STORE</text>
+    
+    <!-- Category Pill Badge -->
+    <rect x="420" y="2" width="260" height="28" rx="14" fill="#A5F3B6" />
+    <text x="550" y="20" fill="#064E3B" font-family="Cairo, system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">SAAS ACCOUNTING · المحاسبة الذكية</text>
+  </g>
+
+  <!-- Left Content Column -->
+  <g transform="translate(60, 160)">
+    <!-- English Title -->
+    <text x="0" y="24" fill="#0077FF" font-family="system-ui, sans-serif" font-size="18" font-weight="700" letter-spacing="1">SMART DAFTER</text>
+    
+    <!-- Arabic Main Title -->
+    <text x="0" y="80" fill="#FFFFFF" font-family="Cairo, system-ui, sans-serif" font-size="34" font-weight="800">الدفتر الذكي المحاسبي</text>
+    
+    <!-- Arabic Subtitle / Description -->
+    <text x="0" y="125" fill="#94A3B8" font-family="Cairo, system-ui, sans-serif" font-size="15" font-weight="400">
+      نظام قيود وفواتير سحابي متوافق مع ضريبة القيمة المضافة
+    </text>
+
+    <!-- Specs & Highlights Pills -->
+    <g transform="translate(0, 165)">
+      <rect x="0" y="0" width="130" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="18" cy="17" r="4" fill="#10B981" />
+      <text x="32" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">تسليم فوري</text>
+
+      <rect x="145" y="0" width="130" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="163" cy="17" r="4" fill="#10B981" />
+      <text x="177" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">دعم وضمان</text>
+
+      <rect x="290" y="0" width="115" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="308" cy="17" r="4" fill="#38BDF8" />
+      <text x="322" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">كود أصلي</text>
+    </g>
+
+    <!-- Bottom Feature Bar -->
+    <g transform="translate(0, 245)">
+      <line x1="0" y1="0" x2="380" y2="0" stroke="#334155" stroke-width="1" />
+      <text x="0" y="25" fill="#64748B" font-family="Cairo, system-ui, sans-serif" font-size="12">
+        بواسطة م. جابر · متوافق مع كافة الأنظمة الحديثة
+      </text>
+    </g>
+  </g>
+
+  <!-- Right Graphic Element -->
+  <g filter="url(#shadow)">
+    
+        <!-- Smart Dafter Ledger Graphic -->
+        <rect x="520" y="160" width="220" height="280" rx="16" fill="#0F172A" stroke="#10B981" stroke-width="2" opacity="0.95" />
+        <rect x="540" y="185" width="180" height="20" rx="4" fill="#10B981" opacity="0.25" />
+        <rect x="540" y="220" width="80" height="12" rx="3" fill="#E2E8F0" />
+        <rect x="635" y="220" width="85" height="12" rx="3" fill="#10B981" />
+        <line x1="540" y1="250" x2="720" y2="250" stroke="#334155" stroke-width="1" />
+        <rect x="540" y="270" width="100" height="8" rx="2" fill="#94A3B8" />
+        <rect x="660" y="270" width="60" height="8" rx="2" fill="#E2E8F0" />
+        <rect x="540" y="295" width="90" height="8" rx="2" fill="#94A3B8" />
+        <rect x="660" y="295" width="60" height="8" rx="2" fill="#E2E8F0" />
+        <rect x="540" y="320" width="110" height="8" rx="2" fill="#94A3B8" />
+        <rect x="660" y="320" width="60" height="8" rx="2" fill="#E2E8F0" />
+        <!-- Micro sparkline -->
+        <path d="M 540 380 L 575 365 L 610 375 L 650 350 L 685 360 L 720 335" fill="none" stroke="#10B981" stroke-width="3" stroke-linecap="round" />
+        <circle cx="720" cy="335" r="5" fill="#0077FF" />
+      
+  </g>
+
+  <!-- Bottom Accent Stripe -->
+  <rect x="0" y="594" width="800" height="6" fill="#10B981" />
+</svg>

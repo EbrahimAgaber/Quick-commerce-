@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StoreSettings, Product, Order, StorePolicy, OrderStatus, MerchantUser, PromoCode } from '../../types/store';
-import { compressImageFile } from '../../utils/imageUploader';
+import { uploadImageToServer } from '../../utils/imageUploader';
 import { normalizeArabicDigits, toWhatsAppNumber } from '../../utils/digits';
 import { requestAIGeneration } from '../../services/aiService';
-import { StoreManager, CloudSyncStatus } from '../../services/storeManager';
+import { StoreManager, CloudSyncStatus, generateUniqueProductId } from '../../services/storeManager';
+import { StoreBackupRestoreModal } from './StoreBackupRestoreModal';
 import { AuthService } from '../../services/authService';
 import { auth } from '../../services/firebase';
-import { InvoiceModal } from '../storefront/InvoiceModal';
+import { InvoiceModal, PrintDocumentFormat } from '../storefront/InvoiceModal';
 import { DriverSettlementModal } from '../driver/DriverSettlementModal';
 import { MerchantCaptainsDirectory } from '../admin/MerchantCaptainsDirectory';
 import { OrderDetailModal } from './dashboard/OrderDetailModal';
@@ -14,6 +15,8 @@ import { ProductEditorModal } from './dashboard/ProductEditorModal';
 import { OrdersTab } from './dashboard/OrdersTab';
 import { ProductsTab } from './dashboard/ProductsTab';
 import { SettingsTab } from './dashboard/SettingsTab';
+import { WhatsAppConnectModal } from './dashboard/WhatsAppConnectModal';
+import { WhatsAppClientBridge } from '../../services/whatsAppClientBridge';
 import { 
   playOrderNotificationSound,
   NotificationHub,
@@ -142,10 +145,21 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   const [selectedOrderDetail, setSelectedOrderDetail] = useState<Order | null>(null);
   const [localTrackingNotes, setLocalTrackingNotes] = useState<Record<string, string>>({});
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
+  const [invoiceInitialFormat, setInvoiceInitialFormat] = useState<PrintDocumentFormat>('a4');
   const [isSettlementOpen, setIsSettlementOpen] = useState(false);
   const [showCsvImportModal, setShowCsvImportModal] = useState(false);
+  const [isBackupRestoreModalOpen, setIsBackupRestoreModalOpen] = useState(false);
+  const [isWhatsAppConnectOpen, setIsWhatsAppConnectOpen] = useState(false);
+  const [isWhatsAppConnected, setIsWhatsAppConnected] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
   const [newOrderBanner, setNewOrderBanner] = useState<string | null>(null);
+
+  // Check initial WhatsApp connection status
+  useEffect(() => {
+    WhatsAppClientBridge.getStatus().then((res) => {
+      setIsWhatsAppConnected(res.status === 'connected');
+    });
+  }, []);
 
   // Notification Hub State & Testing Handlers
   const [desktopPermission, setDesktopPermission] = useState<NotificationPermission>(() => {
@@ -519,7 +533,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     setTimeout(() => setSyncMessage(null), 2500);
   };
 
-  const handleDispatchToDriver = (order: Order) => {
+  const handleDispatchToDriver = async (order: Order) => {
     const driverPhone = editableSettings.driverPhone || order.courierPhone || prompt('أدخل رقم جوال المندوب (مثال: 9665XXXXXXXX):');
     if (!driverPhone) return;
 
@@ -553,6 +567,31 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     msg += `🔗 *رابط مسار التوصيل المباشر للمندوب:* \n${driverLink}\n`;
     msg += `(افتح الرابط بدون الحاجة لتحميل تطبيق لتأكيد الاستلام والتسليم بنقرة واحدة)`;
 
+    // Attempt background WhatsApp dispatch if connected
+    if (isWhatsAppConnected) {
+      setSyncMessage('⏳ جاري إرسال تفاصيل الشحنة للمندوب في الخلفية تلقائياً...');
+      const sendResult = await WhatsAppClientBridge.sendMessage(cleanPhone, msg);
+      if (sendResult.success) {
+        setSyncMessage(`⚡ تم إرسال مهمة التوصيل للطلب #${order.id} إلى جوال المندوب في الخلفية بنجاح!`);
+        setTimeout(() => setSyncMessage(null), 3500);
+
+        // Update order status to Out for Delivery
+        if (order.status === 'Received' || order.status === 'In Progress') {
+          handleOrderStatusChange(order.id, 'Out for Delivery');
+          if (selectedOrderDetail && selectedOrderDetail.id === order.id) {
+            setSelectedOrderDetail({ ...selectedOrderDetail, status: 'Out for Delivery' });
+          }
+        }
+        return;
+      } else {
+        // Fallback with user feedback
+        console.warn('Background WhatsApp send failed:', sendResult.error);
+        setSyncMessage('⚠️ تعذر الإرسال في الخلفية، سيتم فتح الرابط المباشر للواتساب.');
+        setTimeout(() => setSyncMessage(null), 3000);
+      }
+    }
+
+    // Default or Fallback: Direct WhatsApp link
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener,noreferrer');
 
     // If order was Received or In Progress, transition to Out for Delivery
@@ -731,13 +770,46 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     if (!file) return;
     setUploadingStoreLogo(true);
     try {
-      const dataUrl = await compressImageFile(file, 400, 400, 0.9);
-      setEditableSettings((prev) => ({ ...prev, logoUrl: dataUrl }));
+      const uploadedLogoUrl = await uploadImageToServer(file, {
+        maxWidth: 400,
+        maxHeight: 400,
+        quality: 0.9,
+        prefix: 'logo',
+      });
+      setEditableSettings((prev) => ({ ...prev, logoUrl: uploadedLogoUrl }));
     } catch {
       // Ignore
     } finally {
       setUploadingStoreLogo(false);
+      e.target.value = '';
     }
+  };
+
+  const handleDownloadBackupJson = async () => {
+    const ok = await StoreManager.downloadStoreBackupJson(storeId);
+    if (ok) {
+      setSyncMessage('📦 تم تحميل النسخة الاحتياطية للمتجر (JSON) بنجاح!');
+      setTimeout(() => setSyncMessage(null), 3000);
+    }
+  };
+
+  const handleRestoreComplete = (restoredStore: any) => {
+    if (restoredStore.settings) {
+      setEditableSettings({ ...restoredStore.settings });
+      onUpdateSettings(restoredStore.settings);
+    }
+    if (Array.isArray(restoredStore.products)) {
+      onUpdateProducts([...restoredStore.products]);
+    }
+    if (Array.isArray(restoredStore.orders)) {
+      onUpdateOrders([...restoredStore.orders]);
+    }
+    if (Array.isArray(restoredStore.policies)) {
+      setEditablePolicies([...restoredStore.policies]);
+      onUpdatePolicies(restoredStore.policies);
+    }
+    setSyncMessage('🎉 تم استعادة النسخة الاحتياطية وحفظها محلياً على السيرفر بنجاح!');
+    setTimeout(() => setSyncMessage(null), 3500);
   };
 
   const handleAddPromoCode = (code: string, type: 'percentage' | 'fixed', value: number) => {
@@ -836,8 +908,8 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
                 <h2 className="text-lg sm:text-2xl font-black" style={{ color: brand.primaryColor }}>
                   {settings.storeName}
                 </h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                  متجر نشط · Live
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  حالة التخزين: محفوظ محلياً على السيرفر 🟢 (آمن وغير مقيد بحجم المتصفح)
                 </span>
                 {/* Live Cloud Sync Badge */}
                 <button
@@ -1056,12 +1128,17 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
           onDispatchToDriver={handleDispatchToDriver}
           onContactCustomerWhatsApp={handleContactCustomerWhatsApp}
           onSelectOrderDetail={(ord) => setSelectedOrderDetail(ord)}
-          onOpenInvoice={(ord) => setInvoiceOrder(ord)}
+          onOpenInvoice={(ord, fmt) => {
+            setInvoiceInitialFormat(fmt || 'a4');
+            setInvoiceOrder(ord);
+          }}
           onOpenSettlement={() => setIsSettlementOpen(true)}
           onExportCSV={handleExportOrdersCSV}
           localTrackingNotes={localTrackingNotes}
           onTrackingNoteChange={(id, note) => setLocalTrackingNotes((prev) => ({ ...prev, [id]: note }))}
           onCommitTrackingNote={handleCommitTrackingNote}
+          onOpenWhatsAppConnect={() => setIsWhatsAppConnectOpen(true)}
+          isWhatsAppConnected={isWhatsAppConnected}
         />
       )}
 
@@ -1072,6 +1149,8 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
           settings={editableSettings}
           onExportCSV={handleExportProductsCSV}
           onOpenCsvImport={() => setShowCsvImportModal(true)}
+          onDownloadBackupJson={handleDownloadBackupJson}
+          onOpenRestoreBackupModal={() => setIsBackupRestoreModalOpen(true)}
           onClearCatalog={() => {
             if (confirm('هل أنت متأكد من رغبتك في حذف كافة المنتجات وتفريغ الكتالوج؟ لا يمكن التراجع عن هذا الإجراء.')) {
               onUpdateProducts([]);
@@ -1120,8 +1199,21 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
           onAddPromoCode={handleAddPromoCode}
           onTogglePromoCode={handleTogglePromoCode}
           onDeletePromoCode={handleDeletePromoCode}
+          onDownloadBackupJson={handleDownloadBackupJson}
+          onOpenRestoreBackupModal={() => setIsBackupRestoreModalOpen(true)}
+          onExportCSV={handleExportProductsCSV}
+          onOpenWhatsAppConnect={() => setIsWhatsAppConnectOpen(true)}
+          isWhatsAppConnected={isWhatsAppConnected}
         />
       )}
+
+      {/* MODAL: ONE-CLICK STORE BACKUP RESTORE */}
+      <StoreBackupRestoreModal
+        isOpen={isBackupRestoreModalOpen}
+        onClose={() => setIsBackupRestoreModalOpen(false)}
+        currentStoreId={storeId}
+        onRestoreComplete={handleRestoreComplete}
+      />
 
       {/* MODAL: ORDER DETAILS */}
       <OrderDetailModal
@@ -1132,19 +1224,24 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
         onStatusChange={handleOrderStatusChange}
         onSaveCourier={handleSaveCourierDetails}
         onDispatchToDriver={handleDispatchToDriver}
-        onOpenInvoice={(ord) => setInvoiceOrder(ord)}
+        onOpenInvoice={(ord, fmt) => {
+          setInvoiceInitialFormat(fmt || 'a4');
+          setInvoiceOrder(ord);
+        }}
         onRefundOrder={handleRefundOrder}
         onContactWhatsApp={handleContactCustomerWhatsApp}
         isRefunding={isRefunding}
+        isWhatsAppConnected={isWhatsAppConnected}
       />
 
 
-      {/* ZATCA Tax Invoice Modal */}
+      {/* ZATCA Tax Invoice & Shipping Label Modal */}
       <InvoiceModal
         isOpen={Boolean(invoiceOrder)}
         onClose={() => setInvoiceOrder(null)}
         order={invoiceOrder}
         settings={editableSettings}
+        initialFormat={invoiceInitialFormat}
       />
 
       {/* Driver Cash Settlement Ledger Modal */}
@@ -1167,26 +1264,53 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       {/* MODAL: ADD / EDIT PRODUCT */}
       <ProductEditorModal
         isOpen={isProductModalOpen}
-        onClose={() => setIsProductModalOpen(false)}
+        onClose={() => {
+          setIsProductModalOpen(false);
+          setEditingProduct(null);
+        }}
         editingProduct={editingProduct}
         settings={editableSettings}
         onSaveProduct={(productData) => {
-          if (editingProduct) {
+          const isEditingExisting = Boolean(editingProduct && editingProduct.id);
+          if (isEditingExisting && editingProduct) {
+            const targetId = String(editingProduct.id);
             const updated = products.map((p) =>
-              p.id === editingProduct.id ? ({ ...p, ...productData } as Product) : p
+              p.id === targetId
+                ? (JSON.parse(
+                    JSON.stringify({
+                      ...p,
+                      ...productData,
+                      id: targetId,
+                    })
+                  ) as Product)
+                : p
             );
             onUpdateProducts(updated);
-            setSyncMessage('✨ تم تحديث بيانات المنتج وحفظها في المتجر بنجاح!');
+            setEditingProduct(null);
+            setSyncMessage('✨ تم تحديث بيانات المنتج وحفظها على السيرفر المحلي بنجاح!');
           } else {
-            const newP: Product = {
-              id: `prod-${Date.now()}`,
-              ...productData,
-            } as Product;
+            const uniqueId = generateUniqueProductId(products);
+            const { id: _ignoredId, ...cleanProductData } = productData;
+            const newP: Product = JSON.parse(
+              JSON.stringify({
+                ...cleanProductData,
+                id: uniqueId,
+              })
+            );
             onUpdateProducts([...products, newP]);
-            setSyncMessage('🎉 تم إضافة المنتج الجديد للمتجر بنجاح!');
+            setEditingProduct(null);
+            setSyncMessage('🎉 تم إضافة المنتج الجديد للمتجر وحفظه على السيرفر المحلي بنجاح!');
           }
           setTimeout(() => setSyncMessage(null), 3000);
         }}
+      />
+
+      {/* MODAL: WHATSAPP QR CODE CONNECT */}
+      <WhatsAppConnectModal
+        isOpen={isWhatsAppConnectOpen}
+        onClose={() => setIsWhatsAppConnectOpen(false)}
+        brandTheme={brand}
+        onConnectionChange={(connected) => setIsWhatsAppConnected(connected)}
       />
 
     </div>

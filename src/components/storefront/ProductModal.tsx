@@ -5,11 +5,13 @@ import {
   getProductUnitLabel, 
   getProductUnitMeta 
 } from '../../types/store';
-import { X, Check, ShoppingBag, MessageCircle, Sparkles, Share2, Flame, Package } from 'lucide-react';
+import { X, Check, ShoppingBag, MessageCircle, Sparkles, Share2, Flame } from 'lucide-react';
 import { createWhatsAppUrl } from '../../utils/whatsappInvoice';
 import { buildShareableStoreUrl } from '../../utils/urlRouter';
 import { getZatcaComplianceType } from '../../utils/zatca';
 import { normalizeArabicDigits } from '../../utils/digits';
+import { ProductImage } from '../common/ProductImage';
+import { isLegacyWatchPlaceholder } from '../../utils/imageOptimizer';
 
 interface ProductModalProps {
   product: Product | null;
@@ -44,7 +46,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const minQty = product.minQuantity || (unitMeta?.defaultMin ?? (isFractional ? 0.5 : 1));
 
   const [selectedImage, setSelectedImage] = useState<string>(product.imageUrl);
-  const [imgError, setImgError] = useState<boolean>(false);
   const realVariants = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي');
   const [selectedVariant, setSelectedVariant] = useState<string>(
     realVariants.length > 0 ? realVariants[0] : ''
@@ -62,7 +63,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     const initialMin = product.minQuantity || (uMeta?.defaultMin ?? (isFrac ? 0.5 : 1));
 
     setSelectedImage(product.imageUrl);
-    setImgError(false);
     setSelectedVariant(realVars.length > 0 ? realVars[0] : '');
     setQuantity(initialMin);
     setQuantityInput(String(initialMin));
@@ -157,7 +157,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const allImages = [
     product.imageUrl,
     ...(product.galleryImages || []).filter((img) => img && img !== product.imageUrl),
-  ].filter(Boolean);
+  ].filter((img) => Boolean(img) && !isLegacyWatchPlaceholder(img));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/70 backdrop-blur-xs">
@@ -199,22 +199,21 @@ export const ProductModal: React.FC<ProductModalProps> = ({
         <div className="md:w-1/2 bg-stone-50 flex flex-col justify-between p-4 sm:p-6 border-b md:border-b-0 md:border-l border-stone-200 overflow-y-auto">
           {/* Main Selected Image */}
           <div className="aspect-4/3 w-full rounded-2xl overflow-hidden bg-stone-100 relative shadow-inner border border-stone-200">
-            {!imgError && selectedImage ? (
-              <img
-                src={selectedImage}
-                alt={product.name}
-                onError={() => setImgError(true)}
-                className="w-full h-full object-cover object-center transition-all duration-300"
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-stone-400 gap-2">
-                <Package className="w-10 h-10 opacity-50" />
-                <span className="text-xs font-medium">{product.name}</span>
-              </div>
-            )}
+            <ProductImage
+              src={selectedImage}
+              alt={product.name}
+              category={product.category}
+              size="lg"
+              width={800}
+              height={600}
+              accentColor={brand.accentColor}
+              primaryColor={brand.primaryColor}
+              className="w-full h-full"
+              imgClassName="w-full h-full object-cover object-center transition-all duration-300"
+            />
             {hasDiscount && (
               <span 
-                className="absolute top-3 right-3 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm"
+                className="absolute top-3 right-3 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm z-20"
                 style={{ backgroundColor: brand.accentColor }}
               >
                 وفر {discountPercent}%
@@ -230,7 +229,6 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   key={idx}
                   onClick={() => {
                     setSelectedImage(img);
-                    setImgError(false);
                   }}
                   className={`w-14 h-14 rounded-xl overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
                     selectedImage === img
@@ -239,7 +237,15 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                   }`}
                   style={{ borderColor: selectedImage === img ? brand.accentColor : 'transparent' }}
                 >
-                  <img src={img} alt={`thumb-${idx}`} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  <ProductImage
+                    src={img}
+                    alt={`thumb-${idx}`}
+                    size="xs"
+                    width={120}
+                    height={120}
+                    className="w-full h-full"
+                    imgClassName="w-full h-full object-cover"
+                  />
                 </button>
               ))}
             </div>

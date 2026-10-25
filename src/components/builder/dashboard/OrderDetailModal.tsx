@@ -9,6 +9,7 @@ import {
   FileText, 
   Loader2,
   Printer,
+  Tag,
   ExternalLink,
   Zap,
   CheckCircle2,
@@ -16,6 +17,8 @@ import {
 } from 'lucide-react';
 import { AuthService } from '../../../services/authService';
 import { CarrierService } from '../../../services/carrierService';
+import type { PrintDocumentFormat } from '../../storefront/InvoiceModal';
+import { ProductImage } from '../../common/ProductImage';
 
 interface OrderDetailModalProps {
   isOpen: boolean;
@@ -32,10 +35,11 @@ interface OrderDetailModalProps {
     estimatedDeliveryDate?: string;
   }) => void;
   onDispatchToDriver: (order: Order) => void;
-  onOpenInvoice: (order: Order) => void;
+  onOpenInvoice: (order: Order, format?: PrintDocumentFormat) => void;
   onRefundOrder: (order: Order) => void;
   onContactWhatsApp: (order: Order) => void;
   isRefunding?: boolean;
+  isWhatsAppConnected?: boolean;
 }
 
 export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
@@ -50,6 +54,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onRefundOrder,
   onContactWhatsApp,
   isRefunding = false,
+  isWhatsAppConnected = false,
 }) => {
   const [courierForm, setCourierForm] = useState({
     courierName: '',
@@ -309,9 +314,17 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             order.items.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl border border-stone-100 text-xs">
                 <div className="flex items-center gap-2.5">
-                  {item.imageUrl && (
-                    <img src={item.imageUrl} alt="" className="w-10 h-10 rounded-lg object-cover bg-stone-100" />
-                  )}
+                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-stone-100 shrink-0 border border-stone-200 relative">
+                    <ProductImage
+                      src={item.imageUrl}
+                      alt={item.name}
+                      size="xs"
+                      width={80}
+                      height={80}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover"
+                    />
+                  </div>
                   <div>
                     <div className="font-bold text-stone-900">{item.name}</div>
                     <div className="text-[11px] text-stone-500">
@@ -564,23 +577,42 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           <button
             type="button"
             onClick={() => onDispatchToDriver(order)}
-            className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+            className={`w-full py-2 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs text-white ${
+              isWhatsAppConnected
+                ? 'bg-emerald-600 hover:bg-emerald-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
             <Truck className="w-4 h-4" />
-            <span>إرسال تفاصيل الشحنة للمندوب عبر واتساب (1-Tap Dispatch)</span>
+            <span>
+              {isWhatsAppConnected
+                ? 'إرسال تفاصيل الشحنة للمندوب تلقائياً في الخلفية ⚡'
+                : 'إرسال تفاصيل الشحنة للمندوب عبر واتساب (1-Tap Dispatch)'}
+            </span>
           </button>
         </div>
 
         {/* Actions Bar */}
         <div className="space-y-2 pt-2">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => onOpenInvoice(order)}
-              className="flex-1 py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+              onClick={() => onOpenInvoice(order, 'label')}
+              className="flex-1 py-2.5 px-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+              title="طباعة بوليصة الشحن / ملصق الطرد للصقه على الكرتون (Shipping Label 4x6)"
+            >
+              <Tag className="w-4 h-4" />
+              <span>طباعة ملصق الطرد (بوليصة الشحن)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onOpenInvoice(order, 'a4')}
+              className="flex-1 py-2.5 px-3 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+              title="عرض وطباعة الفاتورة الضريبية أو الإيصال الحراري (Invoice / Receipt)"
             >
               <FileText className="w-4 h-4 text-emerald-400" />
-              <span>عرض وطباعة الفاتورة (ZATCA)</span>
+              <span>طباعة الفاتورة / الإيصال</span>
             </button>
 
             {isElectronicPayment && order.status !== 'Cancelled' && (

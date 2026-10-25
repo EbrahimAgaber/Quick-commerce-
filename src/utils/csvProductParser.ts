@@ -1,5 +1,10 @@
 import { Product } from '../types/store';
 import { normalizeArabicDigits } from './digits';
+import {
+  extractGoogleDriveFileId,
+  isLegacyWatchPlaceholder,
+  resolveStaticGoogleDriveAsset,
+} from './imageOptimizer';
 
 export interface CsvParseError {
   row: number;
@@ -92,12 +97,14 @@ function normalizeHeaderKey(key: string): string {
  */
 export function normalizeProductImageUrl(rawUrl: string): string {
   const trimmed = (rawUrl || '').trim();
-  if (!trimmed) return '';
+  if (!trimmed || isLegacyWatchPlaceholder(trimmed)) return '';
 
-  const filePathMatch = trimmed.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
-  const queryIdMatch = trimmed.match(/drive\.google\.com\/(?:uc|open|thumbnail)\?[^#]*[?&]id=([a-zA-Z0-9_-]+)/i);
-  const driveFileId = filePathMatch?.[1] || queryIdMatch?.[1];
+  const staticAsset = resolveStaticGoogleDriveAsset(trimmed);
+  if (staticAsset) {
+    return staticAsset;
+  }
 
+  const driveFileId = extractGoogleDriveFileId(trimmed);
   if (driveFileId) {
     return `https://lh3.googleusercontent.com/d/${driveFileId}=w1000`;
   }
@@ -431,10 +438,20 @@ export function parseProductsCsv(csvString: string): CsvProductImportResult {
     const variants = parseList(parsed.variants);
 
     // 7. Images (Automatically normalize Google Drive view/uc links into direct embeddable image URLs)
-    const imageUrl =
-      normalizeProductImageUrl(parsed.imageUrl || '') ||
-      'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
-    const galleryImages = parseList(parsed.galleryImages).map(normalizeProductImageUrl).filter(Boolean);
+    // Collect any secondary image URL columns into galleryImages so no image column in the CSV is ever lost
+    const extraImageUrls: string[] = [];
+    rowCells.forEach((cellVal, idx) => {
+      if (fieldMap[idx] === 'imageUrl') {
+        const norm = normalizeProductImageUrl(cellVal || '');
+        if (norm && !extraImageUrls.includes(norm)) {
+          extraImageUrls.push(norm);
+        }
+      }
+    });
+
+    const imageUrl = normalizeProductImageUrl(parsed.imageUrl || '') || extraImageUrls[0] || '';
+    const parsedGallery = parseList(parsed.galleryImages).map(normalizeProductImageUrl).filter(Boolean);
+    const galleryImages = Array.from(new Set([imageUrl, ...extraImageUrls, ...parsedGallery].filter(Boolean)));
 
     // 8. ID (use provided or auto-generate)
     const id = (parsed.id || '').trim() || `prod_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -465,7 +482,7 @@ export function parseProductsCsv(csvString: string): CsvProductImportResult {
       salePrice: salePrice && salePrice > 0 ? salePrice : undefined,
       variants,
       imageUrl,
-      galleryImages: galleryImages.length > 0 ? galleryImages : [imageUrl],
+      galleryImages,
       description: (parsed.description || '').trim(),
       featured: parseCleanBoolean(parsed.featured, false),
       inStock,

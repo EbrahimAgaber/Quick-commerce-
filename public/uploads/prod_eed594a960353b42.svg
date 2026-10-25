@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B253F" />
+      <stop offset="60%" stop-color="#071829" />
+      <stop offset="100%" stop-color="#040D17" />
+    </linearGradient>
+    <linearGradient id="accentGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366F1" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#A78BFA" stop-opacity="0.05" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bgGrad)" />
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.06" stroke="#FFFFFF" stroke-width="1">
+    <line x1="0" y1="100" x2="800" y2="100" />
+    <line x1="0" y1="200" x2="800" y2="200" />
+    <line x1="0" y1="300" x2="800" y2="300" />
+    <line x1="0" y1="400" x2="800" y2="400" />
+    <line x1="0" y1="500" x2="800" y2="500" />
+    <line x1="160" y1="0" x2="160" y2="600" />
+    <line x1="320" y1="0" x2="320" y2="600" />
+    <line x1="480" y1="0" x2="480" y2="600" />
+    <line x1="640" y1="0" x2="640" y2="600" />
+  </g>
+
+  <!-- Glowing accent circle top right -->
+  <circle cx="680" cy="120" r="180" fill="#6366F1" opacity="0.12" filter="blur(40px)" />
+  <circle cx="120" cy="480" r="140" fill="#A78BFA" opacity="0.08" filter="blur(40px)" />
+
+  <!-- Top Brand Navigation Bar inside thumbnail -->
+  <g transform="translate(60, 50)">
+    <rect x="0" y="0" width="32" height="32" rx="8" fill="#6366F1" />
+    <text x="16" y="21" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="16" font-weight="900" text-anchor="middle">S</text>
+    <text x="44" y="22" fill="#E2E8F0" font-family="Cairo, system-ui, sans-serif" font-size="14" font-weight="700">SIMPLER STORE</text>
+    
+    <!-- Category Pill Badge -->
+    <rect x="420" y="2" width="260" height="28" rx="14" fill="#818CF8" />
+    <text x="550" y="20" fill="#1E1B4B" font-family="Cairo, system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">INDUSTRIAL AI · الذكاء الاصطناعي</text>
+  </g>
+
+  <!-- Left Content Column -->
+  <g transform="translate(60, 160)">
+    <!-- English Title -->
+    <text x="0" y="24" fill="#A78BFA" font-family="system-ui, sans-serif" font-size="18" font-weight="700" letter-spacing="1">HX FOULING ML MODEL</text>
+    
+    <!-- Arabic Main Title -->
+    <text x="0" y="80" fill="#FFFFFF" font-family="Cairo, system-ui, sans-serif" font-size="34" font-weight="800">نموذج التنبؤ باتساخ المبادلات</text>
+    
+    <!-- Arabic Subtitle / Description -->
+    <text x="0" y="125" fill="#94A3B8" font-family="Cairo, system-ui, sans-serif" font-size="15" font-weight="400">
+      تنبؤ استباقي بمعدل الرواسب الحرارية وجدولة الصيانة
+    </text>
+
+    <!-- Specs & Highlights Pills -->
+    <g transform="translate(0, 165)">
+      <rect x="0" y="0" width="130" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="18" cy="17" r="4" fill="#6366F1" />
+      <text x="32" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">تسليم فوري</text>
+
+      <rect x="145" y="0" width="130" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="163" cy="17" r="4" fill="#10B981" />
+      <text x="177" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">دعم وضمان</text>
+
+      <rect x="290" y="0" width="115" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="308" cy="17" r="4" fill="#38BDF8" />
+      <text x="322" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">كود أصلي</text>
+    </g>
+
+    <!-- Bottom Feature Bar -->
+    <g transform="translate(0, 245)">
+      <line x1="0" y1="0" x2="380" y2="0" stroke="#334155" stroke-width="1" />
+      <text x="0" y="25" fill="#64748B" font-family="Cairo, system-ui, sans-serif" font-size="12">
+        بواسطة م. جابر · متوافق مع كافة الأنظمة الحديثة
+      </text>
+    </g>
+  </g>
+
+  <!-- Right Graphic Element -->
+  <g filter="url(#shadow)">
+    
+        <!-- HX Fouling ML Schematic -->
+        <rect x="500" y="170" width="240" height="150" rx="16" fill="#0F172A" stroke="#6366F1" stroke-width="2" />
+        <!-- Tube lines -->
+        <line x1="520" y1="205" x2="720" y2="205" stroke="#38BDF8" stroke-width="3" stroke-dasharray="8,4" />
+        <line x1="520" y1="230" x2="720" y2="230" stroke="#F43F5E" stroke-width="4" />
+        <line x1="520" y1="255" x2="720" y2="255" stroke="#38BDF8" stroke-width="3" stroke-dasharray="8,4" />
+        <line x1="520" y1="280" x2="720" y2="280" stroke="#F43F5E" stroke-width="4" />
+        <!-- Fouling Layer indicator -->
+        <rect x="600" y="226" width="60" height="8" rx="2" fill="#F59E0B" opacity="0.9" />
+        <!-- Neural Net Nodes -->
+        <g transform="translate(520, 335)">
+          <circle cx="30" cy="30" r="10" fill="#6366F1" />
+          <circle cx="30" cy="70" r="10" fill="#6366F1" />
+          <circle cx="100" cy="20" r="10" fill="#A78BFA" />
+          <circle cx="100" cy="50" r="10" fill="#A78BFA" />
+          <circle cx="100" cy="80" r="10" fill="#A78BFA" />
+          <circle cx="170" cy="50" r="12" fill="#10B981" />
+          <line x1="30" y1="30" x2="100" y2="20" stroke="#475569" stroke-width="1.5" />
+          <line x1="30" y1="30" x2="100" y2="50" stroke="#475569" stroke-width="1.5" />
+          <line x1="30" y1="70" x2="100" y2="50" stroke="#475569" stroke-width="1.5" />
+          <line x1="30" y1="70" x2="100" y2="80" stroke="#475569" stroke-width="1.5" />
+          <line x1="100" y1="20" x2="170" y2="50" stroke="#475569" stroke-width="1.5" />
+          <line x1="100" y1="50" x2="170" y2="50" stroke="#6366F1" stroke-width="2" />
+          <line x1="100" y1="80" x2="170" y2="50" stroke="#475569" stroke-width="1.5" />
+        </g>
+      
+  </g>
+
+  <!-- Bottom Accent Stripe -->
+  <rect x="0" y="594" width="800" height="6" fill="#6366F1" />
+</svg>

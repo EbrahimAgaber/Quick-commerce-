@@ -12,6 +12,7 @@ import { normalizeArabicDigits, toWhatsAppNumber } from '../utils/digits';
 import { generateOrderId, getOrderDeliveryPin, generateDeliveryPin } from '../utils/whatsappInvoice';
 import { NotificationHub } from './notificationService';
 import { getZatcaComplianceType, calculateVatBreakdown } from '../utils/zatca';
+import { isLegacyWatchPlaceholder, resolveStaticGoogleDriveAsset } from '../utils/imageOptimizer';
 import { 
   doc, 
   getDoc, 
@@ -56,8 +57,68 @@ export const INITIAL_AURORA_STORE: StoreInstance = {
 
 // In-memory cache and deduplication maps for high-concurrency performance
 let memoryStoresCache: StoreInstance[] | null = null;
+let lastRawStoresStorageSnapshot: string | null = null;
 const inFlightStoreFetches = new Map<string, Promise<StoreInstance | null>>();
 const syncDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let localServerSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSyncedServerPayloadHash: string | null = null;
+
+/**
+ * Generates a collision-resistant unique product ID using crypto.randomUUID() when available.
+ */
+export function generateUniqueProductId(existingProducts: Product[] = []): string {
+  const existingIds = new Set((existingProducts || []).map((p) => p?.id).filter(Boolean));
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const candidate =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? `prod_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
+        : `prod_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    if (!existingIds.has(candidate)) {
+      return candidate;
+    }
+  }
+  return `prod_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Strips bulky Base64 image data URLs from a store's products & logo when localStorage is full,
+ * while keeping full images in memory and on the local server disk.
+ */
+function stripBulkyBase64FromStoreForQuota(store: StoreInstance): StoreInstance {
+  const cleanLogo =
+    typeof store.settings?.logoUrl === 'string' &&
+    store.settings.logoUrl.startsWith('data:image/') &&
+    store.settings.logoUrl.length > 4096
+      ? ''
+      : store.settings?.logoUrl || '';
+
+  const cleanProducts = (store.products || []).map((p) => {
+    const cleanImg =
+      typeof p.imageUrl === 'string' && p.imageUrl.startsWith('data:image/') && p.imageUrl.length > 4096
+        ? ''
+        : p.imageUrl;
+    const cleanGallery = Array.isArray(p.galleryImages)
+      ? p.galleryImages.filter(
+          (img) => !(typeof img === 'string' && img.startsWith('data:image/') && img.length > 4096)
+        )
+      : undefined;
+    return {
+      ...p,
+      imageUrl: cleanImg,
+      ...(cleanGallery ? { galleryImages: cleanGallery } : {}),
+    };
+  });
+
+  return {
+    ...store,
+    settings: {
+      ...store.settings,
+      logoUrl: cleanLogo,
+    },
+    products: cleanProducts,
+    orders: (store.orders || []).slice(0, 50),
+  };
+}
 
 /**
  * Strips duplicate orders by order ID (case-insensitive), preventing duplicated records
@@ -143,7 +204,24 @@ export function sanitizeStoreInstance(raw: any): StoreInstance | null {
       : DEFAULT_SETTINGS.paymentMethods,
   };
   let products = Array.isArray(raw.products)
-    ? raw.products.filter((p: any) => p && typeof p === 'object' && p.id)
+    ? raw.products
+        .filter((p: any) => p && typeof p === 'object' && p.id)
+        .map((p: Product) => {
+          const rawPrimary = isLegacyWatchPlaceholder(p.imageUrl) ? '' : (p.imageUrl || '');
+          const cleanPrimary = resolveStaticGoogleDriveAsset(rawPrimary) || rawPrimary;
+          const cleanGallery = Array.isArray(p.galleryImages)
+            ? p.galleryImages
+                .filter((img) => Boolean(img) && !isLegacyWatchPlaceholder(img))
+                .map((img) => resolveStaticGoogleDriveAsset(img) || img)
+            : cleanPrimary
+            ? [cleanPrimary]
+            : [];
+          return {
+            ...p,
+            imageUrl: cleanPrimary,
+            galleryImages: cleanGallery,
+          };
+        })
     : [];
   if (isDemo && products.length === 0) {
     products = DEFAULT_PRODUCTS;
@@ -174,14 +252,20 @@ export function sanitizeStoreInstance(raw: any): StoreInstance | null {
 
 export class StoreManager {
   static getAllStores(): StoreInstance[] {
-    if (memoryStoresCache && memoryStoresCache.length > 0) {
-      return memoryStoresCache;
-    }
-
     try {
-      const stored = localStorage.getItem(STORES_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
+      const currentRaw = localStorage.getItem(STORES_STORAGE_KEY);
+      // Return in-memory cache if localStorage was not externally mutated or cleared
+      if (
+        memoryStoresCache &&
+        memoryStoresCache.length > 0 &&
+        currentRaw !== null &&
+        currentRaw === lastRawStoresStorageSnapshot
+      ) {
+        return memoryStoresCache;
+      }
+
+      if (currentRaw) {
+        const parsed = JSON.parse(currentRaw);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const sanitized = parsed
             .map(sanitizeStoreInstance)
@@ -193,6 +277,7 @@ export class StoreManager {
               sanitized.push(INITIAL_AURORA_STORE);
             }
             memoryStoresCache = sanitized;
+            lastRawStoresStorageSnapshot = currentRaw;
             return sanitized;
           }
         }
@@ -212,6 +297,7 @@ export class StoreManager {
    */
   static resetCorruptedStorage(): void {
     memoryStoresCache = null;
+    lastRawStoresStorageSnapshot = null;
     try {
       localStorage.removeItem(STORES_STORAGE_KEY);
       localStorage.removeItem(ACTIVE_STORE_KEY);
@@ -267,31 +353,346 @@ export class StoreManager {
     return updated.filter((s) => s.ownerId === ownerId);
   }
 
-  static saveAllStores(stores: StoreInstance[]): void {
+  static saveAllStores(stores: StoreInstance[], options?: { skipLocalServerSync?: boolean }): void {
     memoryStoresCache = stores;
     try {
-      localStorage.setItem(STORES_STORAGE_KEY, JSON.stringify(stores));
+      const serialized = JSON.stringify(stores);
+      localStorage.setItem(STORES_STORAGE_KEY, serialized);
+      lastRawStoresStorageSnapshot = serialized;
     } catch (e) {
-      console.warn('LocalStorage quota reached on saveAllStores, applying LRU eviction:', e);
+      console.warn('LocalStorage quota reached on saveAllStores, stripping bulky Base64 assets for localStorage cache:', e);
       try {
         const currentUserId = auth.currentUser?.uid;
-        // Keep owned stores + active store + INITIAL_AURORA_STORE, and trim cached orders
         const activeId = localStorage.getItem(ACTIVE_STORE_KEY);
-        const trimmed = stores
-          .filter((s, idx) => s.ownerId === currentUserId || s.id === activeId || idx < 4)
-          .map((s) => ({
-            ...s,
-            orders: (s.orders || []).slice(0, 50),
-          }));
-        memoryStoresCache = trimmed.length > 0 ? trimmed : [INITIAL_AURORA_STORE];
-        localStorage.setItem(STORES_STORAGE_KEY, JSON.stringify(memoryStoresCache));
+        const lightweightStores = stores
+          .filter((s, idx) => s.ownerId === currentUserId || s.id === activeId || idx < 6)
+          .map(stripBulkyBase64FromStoreForQuota);
+        const serializedLightweight = JSON.stringify(
+          lightweightStores.length > 0 ? lightweightStores : [INITIAL_AURORA_STORE]
+        );
+        localStorage.setItem(STORES_STORAGE_KEY, serializedLightweight);
+        lastRawStoresStorageSnapshot = serializedLightweight;
       } catch (retryErr) {
-        console.warn('Could not persist stores after LRU eviction:', retryErr);
+        console.warn('Could not persist stores to localStorage after Base64 stripping (in-memory & local server storage remain intact):', retryErr);
       }
     }
+
+    if (!options?.skipLocalServerSync && typeof window !== 'undefined' && typeof fetch === 'function') {
+      if (localServerSyncTimer) {
+        clearTimeout(localServerSyncTimer);
+      }
+      localServerSyncTimer = setTimeout(() => {
+        localServerSyncTimer = null;
+        this.syncStoresToLocalServer(stores).catch(() => {});
+      }, 250);
+    }
+
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new Event('storelink_stores_changed'));
     }
+  }
+
+  /**
+   * Synchronizes the store or stores list with the local server database (`/api/store/save` -> `/data/stores.json`).
+   * Ensures zero 5MB browser quota limits and automatic Base64-to-file asset conversion.
+   */
+  static async syncStoresToLocalServer(
+    storesOrSingle: StoreInstance[] | StoreInstance
+  ): Promise<StoreInstance | null> {
+    if (typeof fetch !== 'function' || typeof window === 'undefined') {
+      return null;
+    }
+    try {
+      const payload = Array.isArray(storesOrSingle)
+        ? { stores: storesOrSingle }
+        : { store: storesOrSingle };
+
+      const serializedBody = JSON.stringify(payload);
+      if (serializedBody === lastSyncedServerPayloadHash) {
+        return null;
+      }
+      lastSyncedServerPayloadHash = serializedBody;
+
+      const res = await fetch('/api/store/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: serializedBody,
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data?.success && data?.store) {
+          return sanitizeStoreInstance(data.store);
+        }
+      }
+    } catch {
+      // Quiet fallback when running without local server middleware (e.g., static hosting or unit tests)
+    }
+    return null;
+  }
+
+  /**
+   * Hydrates stores from the local server `/api/store/data` endpoint (`/data/stores.json`).
+   * Preserves and merges any local products so merchant work is never lost.
+   */
+  static async fetchStoresFromLocalServer(storeId?: string): Promise<{
+    store?: StoreInstance | null;
+    stores?: StoreInstance[];
+  } | null> {
+    if (typeof fetch !== 'function' || typeof window === 'undefined') {
+      return null;
+    }
+    try {
+      const queryParam = storeId ? `?storeId=${encodeURIComponent(storeId)}` : '';
+      const res = await fetch(`/api/store/data${queryParam}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('application/json')) {
+        return null;
+      }
+
+      const data = await res.json();
+      if (!data?.success) return null;
+
+      if (Array.isArray(data.stores) && data.stores.length > 0) {
+        const serverStores = data.stores
+          .map(sanitizeStoreInstance)
+          .filter((s: StoreInstance | null): s is StoreInstance => s !== null);
+
+        if (serverStores.length > 0) {
+          const localStores = this.getAllStores();
+          const mergedMap = new Map<string, StoreInstance>();
+
+          // Merge server stores with local stores, keeping whichever has more products if one is empty
+          for (const srvStore of serverStores) {
+            const locMatch = localStores.find((l) => l.id === srvStore.id || l.slug === srvStore.slug);
+            const resolvedProducts =
+              (srvStore.products || []).length > 0
+                ? srvStore.products
+                : locMatch?.products || [];
+            const resolvedOrders = deduplicateOrders([
+              ...(srvStore.orders || []),
+              ...(locMatch?.orders || []),
+            ]);
+            mergedMap.set(srvStore.id, {
+              ...srvStore,
+              products: resolvedProducts,
+              orders: resolvedOrders,
+            });
+          }
+
+          for (const locStore of localStores) {
+            if (!mergedMap.has(locStore.id)) {
+              mergedMap.set(locStore.id, locStore);
+            }
+          }
+
+          const mergedList = Array.from(mergedMap.values());
+          this.saveAllStores(mergedList, { skipLocalServerSync: true });
+          const targetStore = storeId
+            ? mergedList.find((s) => s.id === storeId || s.slug === storeId) || mergedList[0]
+            : mergedList[0];
+
+          return { store: targetStore, stores: mergedList };
+        }
+      }
+
+      if (data.store) {
+        const sanitized = sanitizeStoreInstance(data.store);
+        if (sanitized) {
+          this.cacheStoreLocally(sanitized);
+          return { store: sanitized, stores: this.getAllStores() };
+        }
+      }
+    } catch {
+      // Quiet fallback when offline
+    }
+    return null;
+  }
+
+  /**
+   * Triggers a one-click browser download of the full store backup as a `.json` file.
+   */
+  static async downloadStoreBackupJson(storeId?: string): Promise<boolean> {
+    const targetStore =
+      (storeId ? this.getStoreById(storeId) : null) || this.getActiveStore();
+
+    // Sync latest state to local server first
+    await this.syncStoresToLocalServer(this.getAllStores());
+
+    const safeSlug = (targetStore.slug || targetStore.id || 'store')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .toLowerCase();
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const filename = `storelink_backup_${safeSlug}_${dateStamp}.json`;
+
+    const backupEnvelope = {
+      backupVersion: '2.0',
+      exportedAt: new Date().toISOString(),
+      platform: 'StoreLink Local Server Storage Engine',
+      storeCount: 1,
+      store: targetStore,
+      stores: [targetStore],
+    };
+
+    if (typeof document !== 'undefined') {
+      const jsonString = JSON.stringify(backupEnvelope, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Restores a store from a parsed JSON backup object (supports both 'replace' and 'merge' modes),
+   * persisting to `/api/store/backup/restore` (`/data/stores.json`), `localStorage`, and `StoreStorage`.
+   */
+  static async restoreStoreFromBackup(
+    rawBackupData: any,
+    mode: 'replace' | 'merge' = 'replace',
+    targetStoreId?: string
+  ): Promise<{ success: boolean; store?: StoreInstance; error?: string }> {
+    if (!rawBackupData || typeof rawBackupData !== 'object') {
+      return { success: false, error: 'ملف النسخة الاحتياطية غير صالح.' };
+    }
+
+    // Extract candidate store from envelope or direct store object
+    const incomingRaw =
+      rawBackupData.store && typeof rawBackupData.store === 'object'
+        ? rawBackupData.store
+        : Array.isArray(rawBackupData.stores) && rawBackupData.stores.length > 0
+        ? rawBackupData.stores[0]
+        : rawBackupData.settings || rawBackupData.products
+        ? rawBackupData
+        : null;
+
+    if (!incomingRaw) {
+      return {
+        success: false,
+        error: 'لم يتم العثور على بيانات متجر صالحة داخل ملف JSON المرفق.',
+      };
+    }
+
+    const currentStore =
+      (targetStoreId ? this.getStoreById(targetStoreId) : null) || this.getActiveStore();
+
+    // Try server-side restore endpoint first so Base64 images are converted to /uploads/ files
+    if (typeof fetch === 'function' && typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/store/backup/restore', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            backup: rawBackupData,
+            mode,
+            targetStoreId: currentStore.id,
+          }),
+        });
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data?.success && data?.store) {
+            const restored = sanitizeStoreInstance({
+              ...data.store,
+              id: currentStore.id,
+              slug: data.store.slug || currentStore.slug,
+              ownerId: currentStore.ownerId,
+            });
+            if (restored) {
+              this.updateStore(restored, { immediateSync: true });
+              StoreStorage.hydrateStore({
+                settings: restored.settings,
+                products: restored.products,
+                orders: restored.orders,
+                policies: restored.policies,
+              });
+              return { success: true, store: restored };
+            }
+          }
+        }
+      } catch {
+        // Fall through to client-side restore if server endpoint is unreachable
+      }
+    }
+
+    // Client-side restore fallback
+    const sanitizedIncoming = sanitizeStoreInstance({
+      ...incomingRaw,
+      id: currentStore.id,
+      slug: incomingRaw.slug || currentStore.slug,
+      ownerId: currentStore.ownerId,
+    });
+
+    if (!sanitizedIncoming) {
+      return { success: false, error: 'تعذر قراءة بيانات المتجر من النسخة الاحتياطية.' };
+    }
+
+    let finalProducts: Product[] = [];
+    let finalOrders: Order[] = [];
+
+    if (mode === 'merge') {
+      const productMap = new Map<string, Product>();
+      for (const p of currentStore.products || []) {
+        if (p?.id) productMap.set(String(p.id), p);
+      }
+      for (const p of sanitizedIncoming.products || []) {
+        if (p?.id) productMap.set(String(p.id), p);
+      }
+      finalProducts = Array.from(productMap.values());
+      finalOrders = deduplicateOrders([
+        ...(sanitizedIncoming.orders || []),
+        ...(currentStore.orders || []),
+      ]);
+    } else {
+      finalProducts = sanitizedIncoming.products || [];
+      finalOrders = deduplicateOrders(sanitizedIncoming.orders || []);
+    }
+
+    const restoredStore: StoreInstance = {
+      ...currentStore,
+      ...sanitizedIncoming,
+      id: currentStore.id,
+      slug: currentStore.slug,
+      ownerId: currentStore.ownerId,
+      settings: {
+        ...currentStore.settings,
+        ...sanitizedIncoming.settings,
+      },
+      products: finalProducts,
+      orders: finalOrders,
+      policies:
+        Array.isArray(sanitizedIncoming.policies) && sanitizedIncoming.policies.length > 0
+          ? sanitizedIncoming.policies
+          : currentStore.policies,
+    };
+
+    this.updateStore(restoredStore, { immediateSync: true });
+    StoreStorage.hydrateStore({
+      settings: restoredStore.settings,
+      products: restoredStore.products,
+      orders: restoredStore.orders,
+      policies: restoredStore.policies,
+    });
+
+    return { success: true, store: restoredStore };
   }
 
   static getActiveStore(): StoreInstance {
@@ -515,10 +916,14 @@ export class StoreManager {
             }
           }
 
-          // Preserve cached local orders when hydrating from public catalog document
+          // Preserve cached local orders and non-empty local products when hydrating from public catalog document
           const existingStore = this.getStoreById(storeIdToFetch) || this.getStoreBySlug(cleanQuery);
-          // Never borrow another store's orders from the shared StoreStorage snapshot
           const cachedOrders: Order[] = existingStore?.orders || [];
+
+          // CRITICAL SAFEGUARD: Never overwrite non-empty local products with an empty Firestore product list
+          if (productsList.length === 0 && existingStore && Array.isArray(existingStore.products) && existingStore.products.length > 0) {
+            productsList = existingStore.products;
+          }
 
           // If the authenticated merchant owns this store, fetch latest live orders from Firestore orders subcollection
           let liveOrders: Order[] = cachedOrders;
@@ -561,7 +966,9 @@ export class StoreManager {
   }
 
   private static dispatchSyncStatus(status: CloudSyncStatus): void {
-    window.dispatchEvent(new CustomEvent('storelink_sync_status', { detail: status }));
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('storelink_sync_status', { detail: status }));
+    }
   }
 
   /**
@@ -720,7 +1127,7 @@ export class StoreManager {
 
           // Fetch products from subcollection if not present in main doc
           let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
-          if (!Array.isArray(raw.products)) {
+          if (!Array.isArray(raw.products) || productsList.length === 0) {
             try {
               const productsSubCol = collection(db, 'stores', raw.id, 'products');
               const productsSnap = await getDocs(productsSubCol);
@@ -1363,11 +1770,7 @@ export class StoreManager {
             };
           }
         }
-        // If the endpoint is not returning JSON (e.g. Firebase Hosting SPA index.html rewrite),
-        // proceed gracefully to the verified catalog engine below which validates prices and commits to Firestore.
       } catch (err: any) {
-        // In environments where fetch('/api/createOrder') is unreachable or returns non-JSON,
-        // safely fall through to the verified catalog engine so orders succeed seamlessly.
         console.warn('API /api/createOrder offline or unreachable, using verified catalog engine:', err?.message || err);
       }
     }
@@ -1549,15 +1952,11 @@ export class StoreManager {
       const targetStoreId = store?.id || params.storeId || 'store_aurora_01';
       await this.submitOrderToStore(targetStoreId, verifiedOrder);
 
-      // Alert merchant via REMOTE channels only (Telegram, Webhook, Sheets, Email).
-      // Device alerts (chime/toast/desktop) are raised on the merchant's device by its
-      // real-time orders listener — never on the shopper's browser.
       try {
         await NotificationHub.dispatchOrderPlaced(verifiedOrder, storeSettings);
       } catch (notifErr) {
         console.warn('Order notification dispatch error:', notifErr);
       }
-      // Exception: the merchant placing a test order on their own store (or offline demo mode).
       if (auth.currentUser && store?.ownerId === auth.currentUser.uid) {
         NotificationHub.alertMerchantLocally(verifiedOrder, storeSettings);
       }
@@ -1580,10 +1979,17 @@ export class StoreManager {
     const idx = all.findIndex(s => s.id === store.id || s.slug === store.slug);
     let updated: StoreInstance[];
     if (idx >= 0) {
+      const existing = all[idx];
+      // Preserve local products if incoming store has empty products array
+      const resolvedProducts =
+        Array.isArray(store.products) && store.products.length > 0
+          ? store.products
+          : existing.products || [];
       updated = [...all];
       updated[idx] = {
         ...store,
-        orders: updated[idx].orders?.length ? updated[idx].orders : store.orders || [],
+        products: resolvedProducts,
+        orders: existing.orders?.length ? existing.orders : store.orders || [],
       };
     } else {
       updated = [store, ...all];
@@ -1637,7 +2043,7 @@ export class StoreManager {
         businessType: params.businessType || '',
         logoLetter: params.logoLetter || params.storeName.trim().charAt(0) || 'S',
         logoUrl: params.logoUrl || '',
-        tagline: params.tagline.trim() || 'تسوق أسهل وأسرع مع الطلب المباشر عبر واتساب',
+        tagline: params.tagline?.trim() || 'تسوق أسهل وأسرع مع الطلب المباشر عبر واتساب',
         whatsappNumber: cleanWhatsapp,
         supportPhone: cleanWhatsapp ? `+${cleanWhatsapp}` : '',
         supportEmail: '',
@@ -1656,7 +2062,7 @@ export class StoreManager {
         },
         orderNotificationEmail: '',
         heroTitle: `أهلاً بك في ${params.storeName.trim()}`,
-        heroSubtitle: params.tagline.trim() || 'تصفح أحدث منتجاتنا واطلبها مباشرة عبر الواتساب بضغطة زر.',
+        heroSubtitle: params.tagline?.trim() || 'تصفح أحدث منتجاتنا واطلبها مباشرة عبر الواتساب بضغطة زر.',
         announcementText:
           typeof params.freeShippingThreshold === 'number' && params.freeShippingThreshold > 0
             ? `✨ شحن مجاني للطلبات فوق ${params.freeShippingThreshold} ${params.currency || 'ر.س'} — اطلب الآن عبر واتساب!`
@@ -1676,8 +2082,8 @@ export class StoreManager {
         },
         primaryColor: params.primaryColor || '#0F172A',
         secondaryColor: params.accentColor || '#2563EB',
-        metaTitle: `${params.storeName.trim()} | ${params.tagline.trim() || 'المتجر الإلكتروني المعتمد في السعودية'}`,
-        metaDescription: `${params.storeName.trim()}: ${params.tagline.trim() || 'تسوق أفضل المنتجات مع شحن فوري ودفع آمن عند الاستلام وبطاقات مدى وأبل باي.'}`,
+        metaTitle: `${params.storeName.trim()} | ${params.tagline?.trim() || 'المتجر الإلكتروني المعتمد في السعودية'}`,
+        metaDescription: `${params.storeName.trim()}: ${params.tagline?.trim() || 'تسوق أفضل المنتجات مع شحن فوري ودفع آمن عند الاستلام وبطاقات مدى وأبل باي.'}`,
         metaKeywords: [params.storeName.trim(), 'تسوق أونلاين السعودية', 'الدفع عند الاستلام', 'توصيل سريع'],
       },
       products: params.initialProducts !== undefined ? params.initialProducts : [],

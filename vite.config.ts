@@ -2,9 +2,11 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import { handleLocalStoreApiRequest, ensureStorageDirectories } from './server';
 
 export default defineConfig(() => {
   const currentBuildTime = Date.now();
+  ensureStorageDirectories();
   return {
     define: {
       __APP_BUILD_TIME__: JSON.stringify(currentBuildTime),
@@ -12,6 +14,35 @@ export default defineConfig(() => {
     plugins: [
       react(),
       tailwindcss(),
+      {
+        name: 'local-server-storage-engine',
+        configureServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            try {
+              const handled = await handleLocalStoreApiRequest(req, res);
+              if (!handled) {
+                next();
+              }
+            } catch (err) {
+              console.error('Local server storage middleware error:', err);
+              next();
+            }
+          });
+        },
+        configurePreviewServer(server) {
+          server.middlewares.use(async (req, res, next) => {
+            try {
+              const handled = await handleLocalStoreApiRequest(req, res);
+              if (!handled) {
+                next();
+              }
+            } catch (err) {
+              console.error('Local preview storage middleware error:', err);
+              next();
+            }
+          });
+        },
+      },
       {
         name: 'generate-version-json',
         generateBundle() {
@@ -61,8 +92,18 @@ export default defineConfig(() => {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Ignore /data and /public/uploads so local server JSON writes and image uploads never trigger Vite full-page reloads!
+      watch:
+        process.env.DISABLE_HMR === 'true'
+          ? null
+          : {
+              ignored: [
+                '**/data/**',
+                '**/public/uploads/**',
+                '**/*.bak',
+                '**/*.tmp',
+              ],
+            },
     },
   };
 });

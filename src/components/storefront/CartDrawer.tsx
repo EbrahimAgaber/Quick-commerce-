@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CartItem, PromoCode, StoreSettings, getProductUnitLabel, getProductUnitMeta } from '../../types/store';
-import { X, Trash2, ShoppingBag, ArrowLeft, Sparkles, Truck, Tag, Check, Package, Loader2 } from 'lucide-react';
+import { X, Trash2, ShoppingBag, ArrowLeft, Sparkles, Truck, Tag, Check, Loader2 } from 'lucide-react';
+import { ProductImage } from '../common/ProductImage';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -266,23 +267,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               return (
                 <div key={`${item.product.id}-${item.selectedVariant}-${index}`} className="pt-3 first:pt-0 flex gap-3">
                   {/* Image */}
-                  {item.product.imageUrl ? (
-                    <img
+                  <div
+                    className="w-18 h-20 rounded-xl bg-stone-100 shrink-0 border overflow-hidden relative"
+                    style={{ borderColor: brand.neutralColor }}
+                  >
+                    <ProductImage
                       src={item.product.imageUrl}
                       alt={item.product.name}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-18 h-20 object-cover rounded-xl bg-stone-100 shrink-0 border"
-                      style={{ borderColor: brand.neutralColor }}
+                      category={item.product.category}
+                      size="sm"
+                      width={160}
+                      height={160}
+                      accentColor={brand.accentColor}
+                      primaryColor={brand.primaryColor}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover"
                     />
-                  ) : (
-                    <div
-                      className="w-18 h-20 rounded-xl bg-stone-100 shrink-0 border flex items-center justify-center text-stone-400"
-                      style={{ borderColor: brand.neutralColor }}
-                    >
-                      <Package className="w-6 h-6" />
-                    </div>
-                  )}
+                  </div>
 
                   {/* Info */}
                   <div className="flex-1 flex flex-col justify-between">

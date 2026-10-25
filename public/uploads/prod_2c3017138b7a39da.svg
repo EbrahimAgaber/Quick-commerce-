@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B253F" />
+      <stop offset="60%" stop-color="#071829" />
+      <stop offset="100%" stop-color="#040D17" />
+    </linearGradient>
+    <linearGradient id="accentGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0.05" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bgGrad)" />
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.06" stroke="#FFFFFF" stroke-width="1">
+    <line x1="0" y1="100" x2="800" y2="100" />
+    <line x1="0" y1="200" x2="800" y2="200" />
+    <line x1="0" y1="300" x2="800" y2="300" />
+    <line x1="0" y1="400" x2="800" y2="400" />
+    <line x1="0" y1="500" x2="800" y2="500" />
+    <line x1="160" y1="0" x2="160" y2="600" />
+    <line x1="320" y1="0" x2="320" y2="600" />
+    <line x1="480" y1="0" x2="480" y2="600" />
+    <line x1="640" y1="0" x2="640" y2="600" />
+  </g>
+
+  <!-- Glowing accent circle top right -->
+  <circle cx="680" cy="120" r="180" fill="#06B6D4" opacity="0.12" filter="blur(40px)" />
+  <circle cx="120" cy="480" r="140" fill="#22D3EE" opacity="0.08" filter="blur(40px)" />
+
+  <!-- Top Brand Navigation Bar inside thumbnail -->
+  <g transform="translate(60, 50)">
+    <rect x="0" y="0" width="32" height="32" rx="8" fill="#06B6D4" />
+    <text x="16" y="21" fill="#FFFFFF" font-family="system-ui, sans-serif" font-size="16" font-weight="900" text-anchor="middle">S</text>
+    <text x="44" y="22" fill="#E2E8F0" font-family="Cairo, system-ui, sans-serif" font-size="14" font-weight="700">SIMPLER STORE</text>
+    
+    <!-- Category Pill Badge -->
+    <rect x="420" y="2" width="260" height="28" rx="14" fill="#06B6D4" />
+    <text x="550" y="20" fill="#164E63" font-family="Cairo, system-ui, sans-serif" font-size="11" font-weight="bold" text-anchor="middle">1-ON-1 ADVISORY · جلسة استشارية</text>
+  </g>
+
+  <!-- Left Content Column -->
+  <g transform="translate(60, 160)">
+    <!-- English Title -->
+    <text x="0" y="24" fill="#22D3EE" font-family="system-ui, sans-serif" font-size="18" font-weight="700" letter-spacing="1">PROCESS & AI CONSULTING</text>
+    
+    <!-- Arabic Main Title -->
+    <text x="0" y="80" fill="#FFFFFF" font-family="Cairo, system-ui, sans-serif" font-size="34" font-weight="800">استشارة محاكاة العمليات والـ AI</text>
+    
+    <!-- Arabic Subtitle / Description -->
+    <text x="0" y="125" fill="#94A3B8" font-family="Cairo, system-ui, sans-serif" font-size="15" font-weight="400">
+      جلسة خاصة لتحليل النماذج الهندسية ودعم المشاريع
+    </text>
+
+    <!-- Specs & Highlights Pills -->
+    <g transform="translate(0, 165)">
+      <rect x="0" y="0" width="130" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="18" cy="17" r="4" fill="#06B6D4" />
+      <text x="32" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">تسليم فوري</text>
+
+      <rect x="145" y="0" width="130" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="163" cy="17" r="4" fill="#10B981" />
+      <text x="177" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">دعم وضمان</text>
+
+      <rect x="290" y="0" width="115" height="34" rx="8" fill="#1E293B" stroke="#334155" stroke-width="1" />
+      <circle cx="308" cy="17" r="4" fill="#38BDF8" />
+      <text x="322" y="22" fill="#E2E8F0" font-family="Cairo, sans-serif" font-size="12" font-weight="600">كود أصلي</text>
+    </g>
+
+    <!-- Bottom Feature Bar -->
+    <g transform="translate(0, 245)">
+      <line x1="0" y1="0" x2="380" y2="0" stroke="#334155" stroke-width="1" />
+      <text x="0" y="25" fill="#64748B" font-family="Cairo, system-ui, sans-serif" font-size="12">
+        بواسطة م. جابر · متوافق مع كافة الأنظمة الحديثة
+      </text>
+    </g>
+  </g>
+
+  <!-- Right Graphic Element -->
+  <g filter="url(#shadow)">
+    
+        <!-- Advisory Consulting Graphic -->
+        <rect x="520" y="160" width="220" height="170" rx="16" fill="#0F172A" stroke="#06B6D4" stroke-width="2" />
+        <circle cx="630" cy="225" r="34" fill="#1E293B" stroke="#06B6D4" stroke-width="2" />
+        <!-- Person icon silhouette -->
+        <circle cx="630" cy="215" r="14" fill="#22D3EE" />
+        <path d="M 610 248 C 610 236, 650 236, 650 248" fill="#22D3EE" />
+        <!-- Live Call indicator -->
+        <circle cx="705" cy="185" r="6" fill="#10B981" />
+        <rect x="550" y="280" width="160" height="30" rx="8" fill="#1E293B" />
+        <rect x="565" y="291" width="70" height="8" rx="2" fill="#E2E8F0" />
+        <rect x="670" y="288" width="30" height="14" rx="4" fill="#06B6D4" />
+        <!-- Calendar floating badge -->
+        <rect x="540" y="325" width="180" height="110" rx="12" fill="#0B132B" stroke="#334155" stroke-width="1.5" />
+        <rect x="540" y="325" width="180" height="25" rx="12" fill="#06B6D4" opacity="0.3" />
+        <circle cx="580" cy="380" r="12" fill="#06B6D4" />
+        <circle cx="630" cy="380" r="12" fill="#1E293B" />
+        <circle cx="680" cy="380" r="12" fill="#1E293B" />
+      
+  </g>
+
+  <!-- Bottom Accent Stripe -->
+  <rect x="0" y="594" width="800" height="6" fill="#06B6D4" />
+</svg>
