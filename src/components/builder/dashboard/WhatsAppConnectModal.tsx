@@ -190,9 +190,27 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({
               )}
 
               {statusData.error && (
-                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>{statusData.error}</span>
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="font-bold">تنبيه الربط المباشر:</span>
+                  </div>
+                  <p className="leading-relaxed text-[11px] text-amber-800">
+                    {statusData.error}
+                  </p>
+                  {statusData.isHostedStatic && (
+                    <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-stone-500 font-mono">http://localhost:3000</span>
+                      <a
+                        href="http://localhost:3000/?view=dashboard"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 bg-amber-600 text-white font-bold rounded-lg text-[10px] hover:bg-amber-700 transition-colors shrink-0"
+                      >
+                        فتح السيرفر المحلي للربط ↗
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
