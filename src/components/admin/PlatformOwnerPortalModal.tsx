@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Lock, X, KeyRound, AlertCircle } from 'lucide-react';
-import { StoreSettings } from '../../types/store';
+import { ShieldCheck, Lock, X, KeyRound, AlertCircle, Ban } from 'lucide-react';
+import { StoreSettings, MerchantUser } from '../../types/store';
 import { MerchantCaptainsDirectory } from './MerchantCaptainsDirectory';
+import { isPlatformSuperOwner, PLATFORM_OWNER_EMAIL } from '../../utils/security';
 
 interface PlatformOwnerPortalModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: StoreSettings;
   storeSlug?: string;
+  currentUser?: MerchantUser | null;
 }
 
 const OWNER_SESSION_KEY = 'quick_platform_owner_verified_v1';
@@ -17,7 +19,10 @@ export const PlatformOwnerPortalModal: React.FC<PlatformOwnerPortalModalProps> =
   onClose,
   settings,
   storeSlug,
+  currentUser,
 }) => {
+  const isSuperOwnerEmail = isPlatformSuperOwner(currentUser);
+
   const [isVerifiedOwner, setIsVerifiedOwner] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return window.sessionStorage?.getItem(OWNER_SESSION_KEY) === 'true';
@@ -28,6 +33,38 @@ export const PlatformOwnerPortalModal: React.FC<PlatformOwnerPortalModalProps> =
   const [authError, setAuthError] = useState('');
 
   if (!isOpen) return null;
+
+  // Strict Identity Gate: If logged-in email is not gaberibra48@gmail.com, completely block and reject
+  if (!isSuperOwnerEmail) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/80 backdrop-blur-sm animate-in fade-in" dir="rtl">
+        <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
+        <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 text-center space-y-4 border border-rose-200 z-10 my-auto">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-200">
+            <Ban className="w-6 h-6" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="text-base font-bold text-stone-900">غير مصرح لك بالوصول</h3>
+            <p className="text-xs text-stone-600 leading-relaxed">
+              هذه البوابة مخصصة حصرياً لمالك المنصة الرئيسي (<strong>{PLATFORM_OWNER_EMAIL}</strong>).
+            </p>
+            {currentUser?.email && (
+              <p className="text-[11px] text-stone-400 font-mono">
+                الحساب المسجل حالياً: {currentUser.email}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+          >
+            إغلاق
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleVerifyOwner = (e: React.FormEvent) => {
     e.preventDefault();

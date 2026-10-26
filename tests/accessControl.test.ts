@@ -57,4 +57,21 @@ describe('Firestore Rules & Access Control (S1, S4, S6, S7)', () => {
     expect(RESERVED_SLUGS.has('checkout')).toBe(true);
     expect(RESERVED_SLUGS.has('aurora')).toBe(true);
   });
+
+  it('strictly restricts platform super-owner privileges to gaberibra48@gmail.com', async () => {
+    const { isPlatformSuperOwner, PLATFORM_OWNER_EMAIL } = await import('../src/utils/security');
+    expect(PLATFORM_OWNER_EMAIL).toBe('gaberibra48@gmail.com');
+
+    // Super owner email
+    expect(isPlatformSuperOwner('gaberibra48@gmail.com')).toBe(true);
+    expect(isPlatformSuperOwner('GABERIBRA48@GMAIL.COM')).toBe(true);
+    expect(isPlatformSuperOwner({ email: 'gaberibra48@gmail.com' })).toBe(true);
+
+    // Any other user or merchant
+    expect(isPlatformSuperOwner('merchant@quick.sa')).toBe(false);
+    expect(isPlatformSuperOwner('attacker@gmail.com')).toBe(false);
+    expect(isPlatformSuperOwner(null)).toBe(false);
+    expect(isPlatformSuperOwner(undefined)).toBe(false);
+    expect(isPlatformSuperOwner({ email: 'other@gmail.com' })).toBe(false);
+  });
 });

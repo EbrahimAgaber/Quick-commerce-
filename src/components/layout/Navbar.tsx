@@ -369,13 +369,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
 
-              {/* Delivery Captain Portal Button */}
-              {onOpenCaptainPortal && (
+              {/* Delivery Captain Portal Button - Visible ONLY to Store Owners / Admins, never to public shoppers */}
+              {isStoreOwner && onOpenCaptainPortal && (
                 <button
                   type="button"
                   onClick={onOpenCaptainPortal}
                   className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors cursor-pointer"
-                  title="بوابة كباتن التوصيل وتسجيل المناديب"
+                  title="بوابة كباتن التوصيل وتسجيل المناديب (لوحة الإدارة)"
                 >
                   <Truck className="w-4 h-4 text-emerald-600" />
                   <span className="hidden sm:inline">الكباتن</span>

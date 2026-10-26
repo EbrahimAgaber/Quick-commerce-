@@ -19,6 +19,7 @@ import { initializeMarketingPixels } from './utils/analytics';
 import { matchesSearch } from './utils/arabicSearch';
 import { parseStoreRouteFromLocation } from './utils/urlRouter';
 import { injectStoreSEO, injectPlatformSEO } from './utils/seoManager';
+import { isPlatformSuperOwner } from './utils/security';
 
 // Core Storefront Layout & Components (Eagerly loaded for instant First Contentful Paint)
 import { Navbar, AppViewMode, DevicePreviewMode } from './components/layout/Navbar';
@@ -369,17 +370,22 @@ export default function App() {
     }
     return false;
   });
-  const [isPlatformOwnerPortalOpen, setIsPlatformOwnerPortalOpen] = useState(() => {
+  const [isPlatformOwnerPortalOpen, setIsPlatformOwnerPortalOpen] = useState(false);
+
+  // Auto-open platform owner portal on URL request ONLY if logged in as platform owner
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      return (
+      const isOwnerUrl =
         params.get('view') === 'platform-owner' ||
         params.get('platform_owner') === 'true' ||
-        window.location.pathname.startsWith('/platform-admin')
-      );
+        window.location.pathname.startsWith('/platform-admin');
+
+      if (isOwnerUrl && isPlatformSuperOwner(currentUser)) {
+        setIsPlatformOwnerPortalOpen(true);
+      }
     }
-    return false;
-  });
+  }, [currentUser]);
   const [isBrandStudioOpen, setIsBrandStudioOpen] = useState(false);
   const [isNewStoreWizardOpen, setIsNewStoreWizardOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
@@ -1123,6 +1129,8 @@ export default function App() {
                 onOpenBrandStudio={() => setIsBrandStudioOpen(true)}
                 onOpenNewStoreWizard={() => setIsNewStoreWizardOpen(true)}
                 currentUser={currentUser}
+                onOpenCaptainPortal={() => setIsCaptainPortalOpen(true)}
+                onOpenPlatformOwnerPortal={() => setIsPlatformOwnerPortalOpen(true)}
               />
             </Suspense>
           )}
@@ -1319,6 +1327,7 @@ export default function App() {
               setIsTrackerOpen(true);
             }}
             onOpenCaptainPortal={() => setIsCaptainPortalOpen(true)}
+            isStoreOwner={isStoreOwner}
           />
         </>
       )}
@@ -1382,6 +1391,7 @@ export default function App() {
             isOpen={isPoliciesOpen}
             onClose={() => setIsPoliciesOpen(false)}
             policies={policies}
+            storeName={settings.storeName}
           />
         )}
 
@@ -1410,6 +1420,7 @@ export default function App() {
             onClose={() => setIsPlatformOwnerPortalOpen(false)}
             settings={settings}
             storeSlug={activeStore.slug}
+            currentUser={currentUser}
           />
         )}
       </Suspense>

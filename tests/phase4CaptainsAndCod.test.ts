@@ -199,6 +199,29 @@ describe('Phase 1-4 Core Capabilities: City Mapping, COD Restriction, and Delive
       expect(ownerRes.captain?.platformFeePercent).toBe(1.5);
       expect(ownerRes.whatsAppUrl).toContain('wa.me');
     });
+
+    it('generates random activation codes and supports customized activation codes', async () => {
+      const code = CaptainService.generateActivationCode('VIP');
+      expect(code).toMatch(/^VIP-\d{4}$/);
+
+      const reg = await CaptainService.registerCaptain({
+        name: 'كابتن فهد السبيعي',
+        phone: '0559988776',
+        city: 'الرياض',
+        vehicleType: 'car'
+      });
+      const captain = reg.captain!;
+
+      const updateRes = CaptainService.setCaptainActivationCodeAndFee(captain.id, 'VIP-9999', 1.0);
+      expect(updateRes.success).toBe(true);
+      expect(updateRes.captain?.activationCode).toBe('VIP-9999');
+      expect(updateRes.captain?.platformFeePercent).toBe(1.0);
+
+      // Verify captain activates with new custom code
+      const actRes = CaptainService.activateCaptain(captain.id, 'VIP-9999');
+      expect(actRes.success).toBe(true);
+      expect(actRes.captain?.status).toBe('active');
+    });
   });
 
   describe('Phase 1: Moyasar Key Validation & Zero Liability Protection', () => {

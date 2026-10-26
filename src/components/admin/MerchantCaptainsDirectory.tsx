@@ -42,6 +42,7 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
 
   // Owner activation inputs per captain { [captainId]: number (fee percentage) }
   const [customFees, setCustomFees] = useState<Record<string, number>>({});
+  const [customCodes, setCustomCodes] = useState<Record<string, string>>({});
   const [activatedNotice, setActivatedNotice] = useState<string | null>(null);
 
   const loadCaptains = async () => {
@@ -100,6 +101,13 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
   const handleOwnerActivate = (captain: DeliveryCaptain) => {
     if (!isPlatformOwner) return;
     const feePct = customFees[captain.id] ?? captain.platformFeePercent ?? DEFAULT_PLATFORM_FEE_PERCENT;
+    const preferredCode = customCodes[captain.id] || captain.activationCode;
+    
+    // If owner customized code, save code first
+    if (preferredCode && preferredCode !== captain.activationCode) {
+      CaptainService.setCaptainActivationCodeAndFee(captain.id, preferredCode, feePct);
+    }
+    
     const res = CaptainService.ownerActivateCaptain(captain.id, feePct);
 
     if (res.success && res.whatsAppUrl) {
@@ -108,6 +116,11 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
       // Open WhatsApp to deliver activation code directly to captain
       window.open(res.whatsAppUrl, '_blank');
     }
+  };
+
+  const handleGenerateNewCode = (captainId: string) => {
+    const newCode = CaptainService.generateActivationCode('CAP');
+    setCustomCodes((prev) => ({ ...prev, [captainId]: newCode }));
   };
 
   const totalPlatformCommissionsEarned = isPlatformOwner
@@ -352,8 +365,26 @@ export const MerchantCaptainsDirectory: React.FC<MerchantCaptainsDirectoryProps>
                         </div>
                       </div>
 
-                      <div className="text-[11px] font-mono text-stone-400 bg-stone-50 px-2 py-1 rounded-lg border">
-                        كود مقترح: <strong>{cap.activationCode || 'CAP-AUTO'}</strong>
+                      <div className="flex items-center gap-1.5">
+                        <div className="text-[11px] font-mono text-stone-700 bg-amber-50/70 border border-amber-200 px-2.5 py-1 rounded-xl flex items-center gap-1.5">
+                          <KeyRound className="w-3 h-3 text-amber-600" />
+                          <span>كود التفعيل:</span>
+                          <input
+                            type="text"
+                            value={customCodes[cap.id] !== undefined ? customCodes[cap.id] : (cap.activationCode || '')}
+                            onChange={(e) => setCustomCodes({ ...customCodes, [cap.id]: e.target.value.toUpperCase() })}
+                            className="w-24 px-1.5 py-0.5 bg-white border border-amber-300 rounded font-bold text-stone-900 text-center font-mono text-xs focus:ring-1 focus:ring-amber-500"
+                            placeholder="CAP-XXXX"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateNewCode(cap.id)}
+                          className="p-1.5 text-stone-500 hover:text-amber-700 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer"
+                          title="توليد كود تفعيل جديد عشوائياً"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
 

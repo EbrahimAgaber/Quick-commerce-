@@ -137,13 +137,13 @@ export const Footer: React.FC<FooterProps> = ({
                   السياسات والشحن والضمان
                 </button>
               </li>
-              {onOpenCaptainPortal && (
+              {isStoreOwner && onOpenCaptainPortal && (
                 <li>
                   <button
                     onClick={onOpenCaptainPortal}
                     className="text-stone-300 hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer text-emerald-300"
                   >
-                    <span>انضم ككابتن توصيل</span>
+                    <span>انضم ككابتن توصيل (إدارة المناديب)</span>
                     <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-bold">
                       جديد 🚗
                     </span>

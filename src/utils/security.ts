@@ -56,3 +56,18 @@ export function normalizeArabicDigits(str: string): string {
   }
   return res;
 }
+
+/**
+ * Platform Owner authorized master email
+ */
+export const PLATFORM_OWNER_EMAIL = 'gaberibra48@gmail.com';
+
+/**
+ * Returns true strictly if the given user/email corresponds to the platform super-owner.
+ */
+export function isPlatformSuperOwner(userOrEmail?: { email?: string | null } | string | null): boolean {
+  if (!userOrEmail) return false;
+  const email = typeof userOrEmail === 'string' ? userOrEmail : userOrEmail.email;
+  if (!email || typeof email !== 'string') return false;
+  return email.trim().toLowerCase() === PLATFORM_OWNER_EMAIL.toLowerCase();
+}

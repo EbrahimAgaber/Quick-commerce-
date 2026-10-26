@@ -413,4 +413,53 @@ export class CaptainService {
       captainNetEarnings,
     };
   }
+
+  /**
+   * Generates a unique, high-entropy captain activation code (e.g. CAP-8392)
+   */
+  static generateActivationCode(prefix: string = 'CAP'): string {
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    return `${prefix.toUpperCase()}-${randomSuffix}`;
+  }
+
+  /**
+   * Owner action: Updates the activation code and commission rate for a captain without requiring full activation
+   */
+  static setCaptainActivationCodeAndFee(
+    captainId: string,
+    code: string,
+    feePercent?: number
+  ): { success: boolean; captain?: DeliveryCaptain; error?: string } {
+    const cleanCode = code.trim().toUpperCase();
+    if (!cleanCode) {
+      return { success: false, error: 'كود التفعيل لا يمكن أن يكون فارغاً' };
+    }
+
+    const all = this.getAllCaptains();
+    const idx = all.findIndex((c) => c.id === captainId);
+    if (idx < 0) return { success: false, error: 'الكابتن غير موجود' };
+
+    const captain = all[idx];
+    captain.activationCode = cleanCode;
+    if (typeof feePercent === 'number' && feePercent >= 0.5 && feePercent <= 10) {
+      captain.platformFeePercent = feePercent;
+    }
+
+    all[idx] = captain;
+    this.saveAllCaptains(all);
+
+    if (isFirebaseConfigured && typeof window !== 'undefined') {
+      try {
+        const docRef = doc(db, 'captains', captain.id);
+        updateDoc(docRef, {
+          activationCode: captain.activationCode,
+          platformFeePercent: captain.platformFeePercent,
+        }).catch(console.warn);
+      } catch (e) {
+        console.warn('Firestore set code error:', e);
+      }
+    }
+
+    return { success: true, captain };
+  }
 }

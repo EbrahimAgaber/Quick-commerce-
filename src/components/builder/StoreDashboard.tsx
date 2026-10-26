@@ -72,6 +72,7 @@ import {
 import { buildShareableStoreUrl } from '../../utils/urlRouter';
 import { generateAIOptimizedSEO, SAUDI_CITIES_GEO } from '../../utils/seoManager';
 import { buildMerchantCustomerUpdateMessage } from '../../utils/whatsappInvoice';
+import { isPlatformSuperOwner } from '../../utils/security';
 import { CsvProductImportModal } from './CsvProductImportModal';
 import { exportProductsToCsv } from '../../utils/csvProductParser';
 
@@ -91,6 +92,8 @@ interface StoreDashboardProps {
   onOpenBrandStudio: () => void;
   onOpenNewStoreWizard: () => void;
   currentUser?: MerchantUser | null;
+  onOpenCaptainPortal?: () => void;
+  onOpenPlatformOwnerPortal?: () => void;
 }
 
 export const StoreDashboard: React.FC<StoreDashboardProps> = ({
@@ -109,6 +112,8 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   onOpenBrandStudio,
   onOpenNewStoreWizard,
   currentUser,
+  onOpenCaptainPortal,
+  onOpenPlatformOwnerPortal,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'settings'>('overview');
   const [copiedLink, setCopiedLink] = useState(false);
@@ -1008,6 +1013,28 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
             <Palette className="w-4 h-4" style={{ color: brand.accentColor }} />
             <span>تخصيص الهوية</span>
           </button>
+
+          {onOpenCaptainPortal && (
+            <button
+              onClick={onOpenCaptainPortal}
+              className="px-3 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl text-xs sm:text-sm border border-emerald-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="بوابة تسجيل ودخول كباتن التوصيل"
+            >
+              <Truck className="w-4 h-4 text-emerald-600" />
+              <span>بوابة الكباتن</span>
+            </button>
+          )}
+
+          {isPlatformSuperOwner(currentUser) && onOpenPlatformOwnerPortal && (
+            <button
+              onClick={onOpenPlatformOwnerPortal}
+              className="px-3 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 font-bold rounded-xl text-xs sm:text-sm border border-amber-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="لوحة تحكم مالك المنصة (توليد أكواد التفعيل واعتماد المناديب والعمولات)"
+            >
+              <ShieldCheck className="w-4 h-4 text-amber-600" />
+              <span>بوابة المالك & الأكواد</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenNewStoreWizard}

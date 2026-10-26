@@ -1971,39 +1971,138 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
       </div>
 
-      {/* Store Policies Column */}
-      <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4 h-fit">
-        <h3 className="text-sm font-bold text-stone-900 border-b border-stone-100 pb-2">
-          سياسات المتجر والضمان
-        </h3>
-        <p className="text-xs text-stone-500">
-          تظهر هذه السياسات للعملاء عند النقر على أيقونة السياسات في المتجر:
-        </p>
-        <div className="space-y-3">
-          {editablePolicies.map((pol, idx) => (
-            <div key={pol.id} className="space-y-1">
-              <label className="block text-xs font-bold text-stone-800">{pol.title}</label>
-              <textarea
-                rows={3}
-                value={pol.content}
-                onChange={(e) => {
-                  const updated = [...editablePolicies];
-                  updated[idx] = { ...pol, content: e.target.value };
-                  setEditablePolicies(updated);
-                }}
-                className="w-full p-2.5 text-xs bg-stone-50 border border-stone-200 rounded-xl leading-relaxed focus:bg-white focus:outline-none"
-              />
-            </div>
-          ))}
+      {/* Store Policies & Warranties Customizer */}
+      <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-5 h-fit shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-stone-100 pb-3">
+          <div>
+            <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+              <span className="p-1 rounded-lg bg-blue-50 text-blue-600">
+                <ShieldCheck className="w-4 h-4" />
+              </span>
+              <span>سياسات المتجر والضمان المخصصة (100% ديناميكية)</span>
+            </h3>
+            <p className="text-xs text-stone-500 mt-0.5">
+              يمكنك تخصيص وحذف وإضافة أي عدد من السياسات المستقلة الخاصة بمتجرك (استبدال، شحن، جودة، خصوصية).
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const newId = `policy-${Date.now()}`;
+              setEditablePolicies([
+                ...editablePolicies,
+                {
+                  id: newId,
+                  title: 'سياسة جديدة',
+                  icon: 'ShieldCheck',
+                  content: 'اكتب تفاصيل وشروط هذه السياسة هنا...',
+                },
+              ]);
+            }}
+            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#2563EB] border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>إضافة بند سياسة جديد</span>
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onSavePolicies}
-          className="w-full py-2.5 bg-[#0F172A] hover:bg-stone-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-        >
-          <Save className="w-3.5 h-3.5 text-[#86EFAC]" />
-          <span>حفظ السياسات</span>
-        </button>
+
+        {editablePolicies.length === 0 ? (
+          <div className="p-6 text-center rounded-2xl bg-stone-50 border border-dashed border-stone-200 space-y-2">
+            <p className="text-xs font-bold text-stone-600">لا توجد سياسات مضافة لمتجرك حالياً</p>
+            <p className="text-[11px] text-stone-400">انقر فوق "إضافة بند سياسة جديد" لكتابة شروط وضمانات متجرك الخاصة.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {editablePolicies.map((pol, idx) => (
+              <div 
+                key={pol.id} 
+                className="p-4 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-3 relative group transition-all hover:bg-stone-50"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-white border border-stone-200 text-stone-600 flex items-center justify-center text-xs font-bold shrink-0">
+                      {idx + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={pol.title}
+                      placeholder="عنوان السياسة (مثال: سياسة الاستبدال والاسترجاع)"
+                      onChange={(e) => {
+                        const updated = [...editablePolicies];
+                        updated[idx] = { ...pol, title: e.target.value };
+                        setEditablePolicies(updated);
+                      }}
+                      className="w-full px-3 py-1.5 text-xs font-bold bg-white border border-stone-200 rounded-xl text-stone-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Icon selector */}
+                    <select
+                      value={pol.icon || 'ShieldCheck'}
+                      onChange={(e) => {
+                        const updated = [...editablePolicies];
+                        updated[idx] = { ...pol, icon: e.target.value };
+                        setEditablePolicies(updated);
+                      }}
+                      className="px-2 py-1 text-xs bg-white border border-stone-200 rounded-lg text-stone-700 cursor-pointer font-sans"
+                      title="اختر أيقونة السياسة"
+                    >
+                      <option value="Truck">🚚 شحن وتوصيل</option>
+                      <option value="RefreshCw">🔄 استرجاع واستبدال</option>
+                      <option value="ShieldCheck">🛡️ ضمان وجودة</option>
+                      <option value="Sparkles">✨ ميزات خاصة</option>
+                      <option value="CreditCard">💳 دفع وأمان</option>
+                      <option value="Lock">🔒 خصوصية وسرية</option>
+                      <option value="Clock">⏱️ مواعيد وساعات العمل</option>
+                      <option value="Package">📦 استلام وتغليف</option>
+                      <option value="MessageCircle">💬 خدمة عملاء وتواصل</option>
+                      <option value="FileText">📄 شروط وأحكام عامة</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = editablePolicies.filter((_, i) => i !== idx);
+                        setEditablePolicies(updated);
+                      }}
+                      className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="حذف هذا البند"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <textarea
+                    rows={4}
+                    value={pol.content}
+                    placeholder="اكتب نصوص وشروط هذه السياسة هنا بالتفصيل (يدعم الأسطر المتعددة)..."
+                    onChange={(e) => {
+                      const updated = [...editablePolicies];
+                      updated[idx] = { ...pol, content: e.target.value };
+                      setEditablePolicies(updated);
+                    }}
+                    className="w-full p-3 text-xs bg-white border border-stone-200 rounded-xl leading-relaxed text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={onSavePolicies}
+            className="w-full py-3 bg-[#0F172A] hover:bg-stone-800 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+          >
+            <Save className="w-4 h-4 text-[#86EFAC]" />
+            <span>حفظ جميع سياسات المتجر والضمان</span>
+          </button>
+        </div>
       </div>
     </div>
   );
