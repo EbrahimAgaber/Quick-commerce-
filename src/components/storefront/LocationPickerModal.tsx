@@ -27,8 +27,7 @@ import {
 import { getSaudiCityCoordinates } from '../../utils/cityUtils';
 
 const GOOGLE_MAPS_API_KEY =
-  import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
-  'AIzaSyBcmeQAMm_4cNErqam3lYDI5RhvPXlEqCc';
+  (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) || '';
 
 interface LocationPickerModalProps {
   isOpen: boolean;
@@ -569,20 +568,41 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
         {/* Map & Address Picking Body */}
         <div className="p-4 sm:p-5 space-y-4 flex-1 overflow-y-auto">
-          {/* Interactive Google Map with Places API Autocomplete */}
-          <APIProvider apiKey={GOOGLE_MAPS_API_KEY} language="ar" region="SA">
-            <MapContent
-              city={city}
-              lat={lat}
-              lng={lng}
-              setLat={setLat}
-              setLng={setLng}
-              detectedAddress={detectedAddress}
-              setDetectedAddress={setDetectedAddress}
-              onReverseGeocode={handleReverseGeocode}
-              accentColor={accentColor}
-            />
-          </APIProvider>
+          {/* Interactive Google Map with Places API Autocomplete or Manual Fallback */}
+          {GOOGLE_MAPS_API_KEY ? (
+            <APIProvider apiKey={GOOGLE_MAPS_API_KEY} language="ar" region="SA">
+              <MapContent
+                city={city}
+                lat={lat}
+                lng={lng}
+                setLat={setLat}
+                setLng={setLng}
+                detectedAddress={detectedAddress}
+                setDetectedAddress={setDetectedAddress}
+                onReverseGeocode={handleReverseGeocode}
+                accentColor={accentColor}
+              />
+            </APIProvider>
+          ) : (
+            <div className="p-5 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                <MapPin className="w-5 h-5" />
+              </div>
+              <p className="text-xs font-bold text-amber-900 leading-relaxed">
+                خدمة الخرائط التفاعلية غير مفعلة حالياً. يمكنك كتابة العنوان يدوياً وتأكيده مباشرة أدناه.
+              </p>
+              <div className="text-right space-y-1.5">
+                <label className="block text-[11px] font-bold text-stone-700">العنوان أو اسم الحي:</label>
+                <input
+                  type="text"
+                  value={detectedAddress}
+                  onChange={(e) => setDetectedAddress(e.target.value)}
+                  placeholder="مثال: حي النرجس، شارع أنس بن مالك"
+                  className="w-full px-3.5 py-2.5 bg-white border border-stone-200 rounded-xl text-stone-900 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Real-time Address Card */}
           <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-2xl space-y-2">

@@ -323,6 +323,34 @@ function sendJson(res: ServerResponse, statusCode: number, data: unknown): void 
  * Handles all /api/store/* and /api/upload/image HTTP requests in both Vite middleware and standalone Node server.
  * Returns true if the request was handled, false otherwise.
  */
+
+/**
+ * Verifies if local storage API is enabled and whether the request possesses valid admin authorization.
+ */
+export function isLocalStorageApiEnabled(): boolean {
+  return process.env.NODE_ENV !== 'production' || process.env.LOCAL_STORAGE_API === 'true';
+}
+
+export function verifyLocalStorageAuth(req: IncomingMessage): boolean {
+  const adminToken = process.env.LOCAL_STORAGE_ADMIN_TOKEN;
+  if (!adminToken) {
+    // If no explicit token is configured, allow in dev/test when not in production
+    return process.env.NODE_ENV !== 'production';
+  }
+
+  const rawAuth = req.headers['authorization'] || req.headers['x-admin-token'] || '';
+  const authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+
+  if (!token) return false;
+  if (token.length !== adminToken.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(adminToken));
+  } catch {
+    return false;
+  }
+}
+
 export async function handleLocalStoreApiRequest(
   req: IncomingMessage,
   res: ServerResponse
@@ -355,6 +383,19 @@ export async function handleLocalStoreApiRequest(
         'Cache-Control': 'public, max-age=31536000, immutable',
       });
       fs.createReadStream(filePath).pipe(res);
+      return true;
+    }
+  }
+
+  // Gate /api/store/*: only enabled if NODE_ENV !== 'production' or LOCAL_STORAGE_API === 'true'
+  // and requires shared admin token if configured.
+  if (pathname.startsWith('/api/store/')) {
+    if (!isLocalStorageApiEnabled()) {
+      sendJson(res, 403, { success: false, error: 'Local storage API is disabled in production.' });
+      return true;
+    }
+    if (!verifyLocalStorageAuth(req)) {
+      sendJson(res, 401, { success: false, error: 'Unauthorized: Valid admin token required for local storage API.' });
       return true;
     }
   }
