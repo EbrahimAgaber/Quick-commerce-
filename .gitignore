@@ -16,3 +16,4 @@ firebase-applet-config.json
 data/
 !data/stores.sample.json
 *.bak
+public/uploads/test_*
