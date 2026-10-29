@@ -13,5 +13,6 @@ firebase-applet-config.json
 .aistudio/
 
 # Local database runtime session and cache
-data/whatsapp_session/
+data/
+!data/stores.sample.json
 *.bak

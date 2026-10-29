@@ -1,0 +1,310 @@
+{
+  "version": "2.0.0",
+  "updatedAt": "2026-10-29T00:00:00.000Z",
+  "stores": [
+    {
+      "id": "store_aurora_01",
+      "slug": "aurora",
+      "ownerId": "system_demo",
+      "createdAt": "2026-10-16T12:00:00Z",
+      "settings": {
+        "storeName": "أورورا ريتيل | Aurora Store",
+        "storeSubtitle": "تشكيلة حصرية منتقاة بعناية",
+        "logoLetter": "A",
+        "tagline": "تسوق أحدث المنتجات العصرية الفاخرة مع توصيل سريع وضمان جودة معتمد",
+        "currency": "ر.س",
+        "whatsappNumber": "966500000000",
+        "supportPhone": "+966 50 000 0000",
+        "supportEmail": "support@aurorastore.com",
+        "instagramHandle": "@aurora.boutique",
+        "tiktokHandle": "@aurora.store",
+        "websiteUrl": "",
+        "freeShippingThreshold": 250,
+        "standardShippingRate": 20,
+        "paymentMethods": [
+          "الدفع عند الاستلام (Cash on Delivery)",
+          "تحويل بنكي فوري (Bank Transfer)",
+          "بطاقات مدى / فيزا / Apple Pay"
+        ],
+        "bankDetails": {
+          "bankName": "مصرف الراجحي / البنك الأهلي",
+          "iban": "SA0000000000000000000000",
+          "accountHolder": "متجر أورورا للتجزئة الحديثة"
+        },
+        "orderNotificationEmail": "orders@aurorastore.com",
+        "primaryColor": "#0F172A",
+        "secondaryColor": "#2563EB",
+        "brandTheme": {
+          "primaryColor": "#0F172A",
+          "accentColor": "#2563EB",
+          "highlightColor": "#86EFAC",
+          "backgroundColor": "#F8FAFC",
+          "neutralColor": "#E2E8F0",
+          "textColor": "#0F172A",
+          "secondaryAccentColor": "#F59E0B",
+          "fontFamily": "Cairo",
+          "borderRadius": 14
+        },
+        "heroTitle": "أناقة عصرية وتجربة تسوق استثنائية",
+        "heroSubtitle": "استكشف تشكيلة واسعة من الإكسسوارات والمقتنيات الفاخرة بجودة فائقة وضمان ذهبي مع شحن فوري لكافة المدن.",
+        "announcementText": "✨ شحن مجاني لكافة الطلبات فوق 250 ر.س · طلب فوري عبر الواتساب والدفع عند الاستلام",
+        "deliveryEstimationDays": "1 - 3 أيام عمل للتسليم المباشر",
+        "googleWebAppUrl": "",
+        "enableOnlinePayments": true,
+        "restrictCodToStoreCity": false,
+        "moyasarPublishableKey": "",
+        "moyasarTestMode": true,
+        "enableAudioNotifications": true,
+        "enableDesktopNotifications": true,
+        "enableEmailNotifications": true,
+        "notificationWebhookUrl": "",
+        "telegramBotToken": "",
+        "telegramChatId": "",
+        "customDomain": "",
+        "metaTitle": "أورورا ريتيل | تسوق أرقى المنتجات العصرية الفاخرة في السعودية",
+        "metaDescription": "تسوق أحدث المنتجات العصرية الفاخرة من متجر أورورا مع شحن فوري لكافة مدن المملكة ودفع آمن عند الاستلام أو ببطاقات مدى وأبل باي.",
+        "metaKeywords": [
+          "متجر أورورا",
+          "تسوق أونلاين السعودية",
+          "ساعات فاخرة",
+          "إكسسوارات",
+          "الدفع عند الاستلام"
+        ],
+        "geoCity": "الرياض",
+        "geoCoordinates": {
+          "lat": 24.7136,
+          "lng": 46.6753
+        }
+      },
+      "products": [
+        {
+          "id": "prod-001",
+          "name": "ساعة يد كلاسيكية فاخرة بإطار ستانلس ستيل",
+          "category": "ساعات وإكسسوارات",
+          "price": 360,
+          "salePrice": 280,
+          "variants": [
+            "ميناء كحلي داكن",
+            "ميناء أسود مطفي",
+            "ميناء فضي كلاسيكي"
+          ],
+          "imageUrl": "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=80",
+          "galleryImages": [
+            "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=800&q=80"
+          ],
+          "description": "ساعة يد فاخرة مصنعة من أجود أنواع الستانلس ستيل المقاوم للصدأ 316L مع زجاج ياقوتي مضاد للخدش ومقاومة للماء حتى عمق 50 متراً. ملائمة لجميع المناسبات الرسمية واليومية.",
+          "featured": true,
+          "inStock": true,
+          "fabricComposition": "ستانلس ستيل 316L · زجاج ياقوتي",
+          "colorName": "كحلي ملوكي"
+        },
+        {
+          "id": "prod-002",
+          "name": "حقيبة ظهر جلدية عصرية متعددة الجيوب",
+          "category": "حقائب ومقتنيات",
+          "price": 320,
+          "salePrice": 245,
+          "variants": [
+            "جلد هافان بني كلاسيكي",
+            "جلد أسود كربوني"
+          ],
+          "imageUrl": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80",
+          "galleryImages": [
+            "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80",
+            "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=800&q=80"
+          ],
+          "description": "حقيبة ظهر عملية وأنيقة من الجلد الطبيعي المعالج، تحتوي على جيب مبطن ومخصص لأجهزة الحاسوب حتى 15.6 بوصة، مع حمالات كتف مريحة وتوزيع ذكي للوزن.",
+          "featured": true,
+          "inStock": true,
+          "fabricComposition": "جلد طبيعي فاخر · بطانة مقاومة للمياه",
+          "colorName": "هافان بني"
+        },
+        {
+          "id": "prod-003",
+          "name": "نظارة شمسية بإطار تيتانيوم مصقول وعدسات مستقطبة",
+          "category": "ساعات وإكسسوارات",
+          "price": 210,
+          "salePrice": 165,
+          "variants": [
+            "إطار رمادي تيتانيوم",
+            "إطار ذهبي مطفي"
+          ],
+          "imageUrl": "https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=800&q=80",
+          "galleryImages": [
+            "https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=800&q=80"
+          ],
+          "description": "نظارة شمسية خفيفة الوزن للغاية مع حماية كاملة 100% من الأشعة فوق البنفسجية UV400 وعدسات بولارايزد تمنع التوهج وتمنحك رؤية بالغة النقاء.",
+          "featured": true,
+          "inStock": true,
+          "fabricComposition": "تيتانيوم فائق الخفة · عدسات مستقطبة",
+          "colorName": "رمادي تيتانيوم"
+        },
+        {
+          "id": "prod-004",
+          "name": "سماعة رأس لاسلكية مريحة مع إلغاء الضوضاء النشط",
+          "category": "إلكترونيات ذكية",
+          "price": 390,
+          "salePrice": 295,
+          "variants": [
+            "فضي بلاتينيوم",
+            "أسود ليلي"
+          ],
+          "imageUrl": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80",
+          "galleryImages": [
+            "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80"
+          ],
+          "description": "تجربة صوتية فائقة النقاء بتقنية Hi-Res Audio مع بطارية تدوم حتى 40 ساعة متواصلة وشحن سريع يمنحك 4 ساعات تشغيل خلال 10 دقائق فقط.",
+          "featured": true,
+          "inStock": true,
+          "fabricComposition": "ألمنيوم مفرغ · وسائد أذن ميموري فوم",
+          "colorName": "فضي بلاتينيوم"
+        },
+        {
+          "id": "prod-005",
+          "name": "عطر أورورا نوار المركز 100 مل",
+          "category": "عطور ومستحضرات",
+          "price": 260,
+          "salePrice": 195,
+          "variants": [
+            "عبوة 100 مل",
+            "عبوة 50 مل السفر"
+          ],
+          "imageUrl": "https://images.unsplash.com/photo-1594035910387-fea47794261f?auto=format&fit=crop&w=800&q=80",
+          "galleryImages": [
+            "https://images.unsplash.com/photo-1594035910387-fea47794261f?auto=format&fit=crop&w=800&q=80"
+          ],
+          "description": "توليفة عطرية شرقية حديثة بنفحات البرغموت والعود الأبيض وخشب الأرز والعنبر الدافئ، بثبات استثنائي يدوم لأكثر من 24 ساعة.",
+          "featured": false,
+          "inStock": true,
+          "fabricComposition": "تركيز أو دو بارفان (Eau de Parfum)",
+          "colorName": "أورورا نوار"
+        },
+        {
+          "id": "prod-006",
+          "name": "محفظة بطاقات نحيفة ذكية بتقنية حماية RFID",
+          "category": "حقائب ومقتنيات",
+          "price": 110,
+          "salePrice": 85,
+          "variants": [
+            "جلد كربوني أسود",
+            "جلد عسلي أصلي"
+          ],
+          "imageUrl": "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=800&q=80",
+          "galleryImages": [
+            "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=800&q=80"
+          ],
+          "description": "محفظة بطاقات مدمجة تتسع لـ 8 بطاقات مع آلية إخراج سريعة بلمسة زر واحدة وطبقة حماية تمنع سرقة بيانات البطاقات اللاسلكية.",
+          "featured": false,
+          "inStock": true,
+          "fabricComposition": "جلد طبيعي · حماية RFID مدمجة",
+          "colorName": "كربون أسود",
+          "unit": "piece",
+          "minQuantity": 1,
+          "quantityStep": 1
+        },
+        {
+          "id": "prod-007",
+          "name": "عسل سدر جبلي حر فاخر",
+          "category": "أغذية وعسل طبيعي",
+          "price": 180,
+          "salePrice": 150,
+          "variants": [],
+          "imageUrl": "https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=800&q=80",
+          "galleryImages": [
+            "https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=800&q=80"
+          ],
+          "description": "عسل سدر بلدي نقي 100% مستخرج من مناحل جنوب المملكة الجبلية غني بالفوائد الغذائية، متوفر بالطلب بالكيلوجرام والكسور (نصف كيلو، كيلو ونصف، وغيرها).",
+          "featured": true,
+          "inStock": true,
+          "stockQuantity": 45,
+          "unit": "kg",
+          "unitLabel": "كجم",
+          "minQuantity": 0.5,
+          "quantityStep": 0.5
+        },
+        {
+          "id": "prod-008",
+          "name": "قماش كتان إيطالي نقي فاخر للمتر",
+          "category": "أقمشة ومنسوجات",
+          "price": 65,
+          "variants": [
+            "أبيض ناصع",
+            "بيج صحراوي",
+            "كحلي ليلي"
+          ],
+          "imageUrl": "https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?auto=format&fit=crop&w=800&q=80",
+          "galleryImages": [
+            "https://images.unsplash.com/photo-1584269600464-37b1b58a9fe7?auto=format&fit=crop&w=800&q=80"
+          ],
+          "description": "قماش كتان طبيعي نقي 100% عالي الجودة والنعومة، مناسب للملابس الصيفية والعبايات والديكور المنزلي. يُقاس ويُباع بالمتر مع إمكانية طلب كسور الأمتار.",
+          "featured": true,
+          "inStock": true,
+          "stockQuantity": 150,
+          "unit": "meter",
+          "unitLabel": "متر",
+          "minQuantity": 1,
+          "quantityStep": 0.5
+        }
+      ],
+      "orders": [
+        {
+          "id": "ORD-1088",
+          "timestamp": "2026-10-16T10:15:00Z",
+          "customerName": "سارة الشمري",
+          "customerPhone": "+966501234567",
+          "city": "الرياض",
+          "deliveryAddress": "حي الياسمين - شارع أنس بن مالك",
+          "landmarkNotes": "التواصل عبر الواتساب قبل الوصول",
+          "paymentMethod": "الدفع عند الاستلام",
+          "itemsSummary": "1x ساعة يد كلاسيكية فاخرة بإطار ستانلس ستيل - 280 ر.س",
+          "items": [
+            {
+              "productId": "prod-001",
+              "name": "ساعة يد كلاسيكية فاخرة بإطار ستانلس ستيل",
+              "variant": "ميناء كحلي داكن",
+              "price": 280,
+              "quantity": 1,
+              "imageUrl": "https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=80"
+            }
+          ],
+          "subtotal": 280,
+          "shippingFee": 0,
+          "grandTotal": 280,
+          "status": "In Progress",
+          "trackingNotes": "تم تأكيد الطلب وجاري تجهيز الشحنة مع شركة الشحن."
+        }
+      ],
+      "policies": [
+        {
+          "id": "policy-01",
+          "title": "سرعة الشحن والتوصيل المباشر",
+          "icon": "Truck",
+          "content": "• يتم تجهيز وشحن الطلبات فور تأكيدها خلال 24 ساعة عمل.\n• التوصيل لجميع المدن الرئيسية خلال 1 إلى 3 أيام عمل كحد أقصى.\n• كود تتبع مباشر للشحنة يتم إرساله للعميل لمتابعة مسار الطلب لحظة بلحظة."
+        },
+        {
+          "id": "policy-02",
+          "title": "الضمان الذهبي والاستبدال المرن",
+          "icon": "RefreshCw",
+          "content": "• ضمان ذهبي شامل 100% ضد عيوب الصناعة مع استبدال فوري.\n• إمكانية الاستبدال أو الاسترجاع بكل سهولة خلال 14 يوماً من استلام الطلب."
+        },
+        {
+          "id": "policy-03",
+          "title": "طرق دفع آمنة ومتنوعة",
+          "icon": "Sparkles",
+          "content": "• خيارات مرنة تشمل الدفع عند الاستلام، التحويل البنكي المباشر، وبطاقات مدى وApple Pay.\n• بياناتك الشخصية ومعاملاتك مشفرة ومحمية بأعلى معايير الأمان العالمية."
+        },
+        {
+          "id": "policy-04",
+          "title": "خدمة عملاء ودعم مباشر عبر الواتساب",
+          "icon": "MessageCircle",
+          "content": "• فريق دعم متواجد لخدمتك والإجابة على أي استفسارات على مدار الساعة.\n• متابعة شخصية لكل عميل لضمان تجربة تسوق راقية ومرضية تماماً."
+        }
+      ],
+      "googleSheetConfig": {
+        "status": "connected",
+        "lastSyncedAt": "2026-10-24T21:12:14.452Z"
+      }
+    }
+  ]
+}
