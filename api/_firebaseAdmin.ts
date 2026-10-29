@@ -54,3 +54,16 @@ export function getAdminAuth(): Auth {
   const app = getFirebaseAdminApp();
   return getAuth(app);
 }
+
+/**
+ * Returns true if server environment has genuine Firebase Admin credentials configured
+ * or a local Firestore emulator host running.
+ */
+export function hasFirebaseAdminCredentials(): boolean {
+  return Boolean(
+    (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+    process.env.FIRESTORE_EMULATOR_HOST
+  );
+}
+

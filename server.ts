@@ -11,6 +11,15 @@ import {
 } from './src/services/storeStorage';
 
 import { serverWhatsAppManager } from './src/services/serverWhatsAppService';
+import reverseGeocodeHandler from './api/geo/reverseGeocode';
+import nationalAddressHandler from './api/geo/nationalAddress';
+import createOrderHandler from './api/createOrder';
+import updateOrderStatusHandler from './api/updateOrderStatus';
+import trackingHandler from './api/tracking';
+import validatePromoHandler from './api/validatePromo';
+import { hasFirebaseAdminCredentials } from './api/_firebaseAdmin';
+import { generateOrderId, generateDeliveryPin } from './src/utils/whatsappInvoice';
+import { getZatcaComplianceType, calculateVatBreakdown } from './src/utils/zatca';
 
 export const DATA_DIR = path.resolve(process.cwd(), 'data');
 export const STORES_DB_PATH = path.join(DATA_DIR, 'stores.json');
@@ -646,6 +655,539 @@ export async function handleLocalStoreApiRequest(
       return true;
     } catch (err: any) {
       sendJson(res, 500, { success: false, error: err?.message || 'خطأ أثناء إرسال رسالة الواتساب' });
+      return true;
+    }
+  }
+
+  // 11. Helper to adapt Node IncomingMessage & ServerResponse into Express/Vercel-like req/res
+  const adaptVercelHandler = (handler: (vReq: any, vRes: any) => Promise<any> | any) => {
+    return async (bodyObj?: any) => {
+      const queryObj: Record<string, string> = {};
+      parsedUrl.searchParams.forEach((v, k) => {
+        queryObj[k] = v;
+      });
+
+      let ended = false;
+      const vReq: any = {
+        method: req.method,
+        url: req.url,
+        headers: req.headers || {},
+        query: queryObj,
+        body: bodyObj || {},
+        socket: req.socket,
+        connection: (req as any).connection,
+      };
+
+      const vRes: any = {
+        statusCode: 200,
+        setHeader: (key: string, value: any) => {
+          if (!ended) res.setHeader(key, value);
+          return vRes;
+        },
+        status: (code: number) => {
+          vRes.statusCode = code;
+          return vRes;
+        },
+        json: (data: any) => {
+          if (ended) return vRes;
+          ended = true;
+          const payload = JSON.stringify(data);
+          vRes.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.writeHead(vRes.statusCode);
+          res.end(payload);
+          return vRes;
+        },
+        send: (data: any) => {
+          if (ended) return vRes;
+          ended = true;
+          res.writeHead(vRes.statusCode);
+          res.end(typeof data === 'string' ? data : JSON.stringify(data));
+          return vRes;
+        },
+        end: (data?: any) => {
+          if (ended) return vRes;
+          ended = true;
+          res.writeHead(vRes.statusCode);
+          res.end(data);
+          return vRes;
+        },
+      };
+
+      await handler(vReq, vRes);
+      return true;
+    };
+  };
+
+  // 12. GET /api/geo/reverseGeocode
+  if (pathname === '/api/geo/reverseGeocode') {
+    const runner = adaptVercelHandler(reverseGeocodeHandler);
+    let parsedBody: any = {};
+    if (req.method === 'POST') {
+      try {
+        const raw = await readRequestBody(req);
+        parsedBody = JSON.parse(raw || '{}');
+      } catch {}
+    }
+    await runner(parsedBody);
+    return true;
+  }
+
+  // 13. GET /api/geo/nationalAddress
+  if (pathname === '/api/geo/nationalAddress') {
+    const runner = adaptVercelHandler(nationalAddressHandler);
+    let parsedBody: any = {};
+    if (req.method === 'POST') {
+      try {
+        const raw = await readRequestBody(req);
+        parsedBody = JSON.parse(raw || '{}');
+      } catch {}
+    }
+    await runner(parsedBody);
+    return true;
+  }
+
+  // 14. GET /api/tracking
+  if (pathname === '/api/tracking') {
+    if (hasFirebaseAdminCredentials()) {
+      const runner = adaptVercelHandler(trackingHandler);
+      await runner();
+      return true;
+    }
+    // Local / Dev Fallback: query from /data/stores.json
+    const orderId = (parsedUrl.searchParams.get('orderId') || '').trim().toUpperCase().replace('#', '');
+    const phoneLast4 = (parsedUrl.searchParams.get('phoneLast4') || '').trim();
+    if (!orderId) {
+      sendJson(res, 400, { success: false, error: 'رقم الطلب مطلوب للتتبع.' });
+      return true;
+    }
+
+    const stores = readStoresFromDisk();
+    let foundOrder: any = null;
+    let foundStore: StoreInstance | null = null;
+    for (const s of stores) {
+      const match = (s.orders || []).find((o) => o.id?.toUpperCase().replace('#', '') === orderId);
+      if (match) {
+        foundOrder = match;
+        foundStore = s;
+        break;
+      }
+    }
+
+    if (!foundOrder) {
+      sendJson(res, 404, { success: false, error: 'لم يتم العثور على شحنة أو طلب بهذا الرقم.' });
+      return true;
+    }
+
+    const publicTracking = {
+      orderId: foundOrder.id,
+      status: foundOrder.status || 'Received',
+      timestamp: foundOrder.timestamp || foundOrder.createdAt,
+      itemsSummary: foundOrder.itemsSummary,
+      grandTotal: foundOrder.grandTotal,
+      shippingFee: foundOrder.shippingFee,
+      paymentMethod: foundOrder.paymentMethod,
+      trackingNotes: foundOrder.trackingNotes,
+      courierName: foundOrder.courierName,
+      courierPhone: foundOrder.courierPhone,
+      trackingNumber: foundOrder.trackingNumber,
+      trackingUrl: foundOrder.trackingUrl,
+      deliveryType: foundOrder.deliveryType || 'delivery',
+      returnStatus: foundOrder.returnStatus || null,
+      returnEligibleUntil: foundOrder.returnEligibleUntil || null,
+    };
+
+    const isAuthorized = Boolean(
+      phoneLast4 && (foundOrder.customerPhone || '').replace(/\D/g, '').endsWith(phoneLast4)
+    );
+
+    if (isAuthorized) {
+      sendJson(res, 200, {
+        success: true,
+        orderId,
+        tracking: {
+          ...publicTracking,
+          customerName: foundOrder.customerName,
+          customerPhone: foundOrder.customerPhone,
+          city: foundOrder.city,
+          deliveryAddress: foundOrder.deliveryAddress,
+          landmarkNotes: foundOrder.landmarkNotes,
+          items: foundOrder.items,
+          subtotal: foundOrder.subtotal,
+          discountAmount: foundOrder.discountAmount,
+          deliveryPin: foundOrder.deliveryPin,
+        },
+      });
+      return true;
+    }
+
+    sendJson(res, 200, {
+      success: true,
+      orderId,
+      tracking: publicTracking,
+    });
+    return true;
+  }
+
+  // 15. POST /api/validatePromo
+  if (pathname === '/api/validatePromo' && req.method === 'POST') {
+    if (hasFirebaseAdminCredentials()) {
+      let rawBody = '';
+      try {
+        rawBody = await readRequestBody(req);
+      } catch {}
+      const parsed = JSON.parse(rawBody || '{}');
+      const runner = adaptVercelHandler(validatePromoHandler);
+      await runner(parsed);
+      return true;
+    }
+
+    // Local / Dev Fallback: validate against /data/stores.json
+    try {
+      const rawBody = await readRequestBody(req);
+      const parsed = JSON.parse(rawBody || '{}');
+      const { storeId, promoCode, subtotal = 0 } = parsed;
+
+      if (!storeId || !promoCode) {
+        sendJson(res, 400, { valid: false, error: 'Invalid parameters.' });
+        return true;
+      }
+
+      const stores = readStoresFromDisk();
+      const store = stores.find((s) => s.id === storeId || s.slug?.toLowerCase() === storeId.toLowerCase());
+      const promoList = store?.settings?.promoCodes || [];
+      const cleanCode = promoCode.trim().toUpperCase();
+      const promo = promoList.find((p) => p.code?.toUpperCase() === cleanCode && p.active !== false);
+
+      if (!promo) {
+        sendJson(res, 200, { valid: false, error: 'كوبون الخصم غير صحيح أو غير مفعل.' });
+        return true;
+      }
+
+      if (promo.expiryDate && new Date(promo.expiryDate).getTime() < Date.now()) {
+        sendJson(res, 200, { valid: false, error: 'انتهت صلاحية كوبون الخصم.' });
+        return true;
+      }
+
+      if (promo.minOrderAmount && Number(subtotal) < promo.minOrderAmount) {
+        sendJson(res, 200, {
+          valid: false,
+          error: `الحد الأدنى لتطبيق هذا الكوبون هو ${promo.minOrderAmount} ر.س.`,
+        });
+        return true;
+      }
+
+      if (promo.maxUses && (promo.usageCount || 0) >= promo.maxUses) {
+        sendJson(res, 200, { valid: false, error: 'تم استنفاد الحد الأقصى لاستخدام هذا الكوبون.' });
+        return true;
+      }
+
+      let discountAmount = 0;
+      if (promo.type === 'percentage') {
+        discountAmount = Math.round((Number(subtotal) * promo.value) / 100);
+      } else {
+        discountAmount = Math.min(Number(subtotal), promo.value);
+      }
+
+      sendJson(res, 200, {
+        valid: true,
+        promoCode: promo.code,
+        discountType: promo.type,
+        discountValue: promo.value,
+        discountAmount,
+        minOrderAmount: promo.minOrderAmount || 0,
+      });
+      return true;
+    } catch (err: any) {
+      sendJson(res, 400, { valid: false, error: err?.message || 'Failed to validate promo code.' });
+      return true;
+    }
+  }
+
+  // 16. POST /api/updateOrderStatus
+  if (pathname === '/api/updateOrderStatus' && req.method === 'POST') {
+    let rawBody = '';
+    try {
+      rawBody = await readRequestBody(req);
+    } catch {}
+    const parsed = JSON.parse(rawBody || '{}');
+
+    if (hasFirebaseAdminCredentials()) {
+      const runner = adaptVercelHandler(updateOrderStatusHandler);
+      await runner(parsed);
+      return true;
+    }
+
+    // Local / Dev Fallback: update in /data/stores.json
+    try {
+      const { storeId, orderId, status } = parsed;
+      if (!storeId || !orderId) {
+        sendJson(res, 400, { success: false, error: 'storeId and orderId are required.' });
+        return true;
+      }
+
+      const stores = readStoresFromDisk();
+      const store = stores.find((s) => s.id === storeId || s.slug?.toLowerCase() === storeId.toLowerCase());
+      if (!store) {
+        sendJson(res, 404, { success: false, error: 'المتجر غير موجود.' });
+        return true;
+      }
+
+      const orderIdx = (store.orders || []).findIndex(
+        (o) => o.id?.toUpperCase().replace('#', '') === orderId.toUpperCase().replace('#', '')
+      );
+      if (orderIdx < 0) {
+        sendJson(res, 404, { success: false, error: 'الطلب غير موجود.' });
+        return true;
+      }
+
+      const existingOrder = store.orders[orderIdx];
+      const updatedOrder = {
+        ...existingOrder,
+        ...(status ? { status } : {}),
+        ...(parsed.trackingNotes ? { trackingNotes: parsed.trackingNotes } : {}),
+        ...(parsed.courierName ? { courierName: parsed.courierName } : {}),
+        ...(parsed.courierPhone ? { courierPhone: parsed.courierPhone } : {}),
+        ...(parsed.trackingNumber ? { trackingNumber: parsed.trackingNumber } : {}),
+        ...(parsed.trackingUrl ? { trackingUrl: parsed.trackingUrl } : {}),
+        ...(parsed.driverCashCollected !== undefined ? { driverCashCollected: parsed.driverCashCollected } : {}),
+        ...(parsed.driverDeliveredAt ? { driverDeliveredAt: parsed.driverDeliveredAt } : {}),
+        ...(parsed.driverSettled !== undefined ? { driverSettled: parsed.driverSettled } : {}),
+      };
+
+      store.orders[orderIdx] = updatedOrder;
+      await saveStoreOnDisk(store);
+
+      sendJson(res, 200, {
+        success: true,
+        orderId,
+        status: updatedOrder.status,
+      });
+      return true;
+    } catch (err: any) {
+      sendJson(res, 400, { success: false, error: err?.message || 'Failed to update order status.' });
+      return true;
+    }
+  }
+
+  // 17. POST /api/createOrder
+  if (pathname === '/api/createOrder' && req.method === 'POST') {
+    let rawBody = '';
+    try {
+      rawBody = await readRequestBody(req);
+    } catch {}
+    const parsed = JSON.parse(rawBody || '{}');
+
+    // If genuine Firebase Admin credentials exist AND store is not local demo:
+    if (hasFirebaseAdminCredentials() && parsed.storeId !== 'store_aurora_01') {
+      const runner = adaptVercelHandler(createOrderHandler);
+      await runner(parsed);
+      return true;
+    }
+
+    // Local Dev / Demo Server-Authoritative Processing against /data/stores.json
+    try {
+      const { storeId, items, customer, paymentMethod, promoCode, idempotencyKey } = parsed;
+
+      if (!storeId || !Array.isArray(items) || items.length === 0 || !customer || !paymentMethod) {
+        sendJson(res, 400, {
+          success: false,
+          error: 'بيانات الطلب غير مكتملة.',
+        });
+        return true;
+      }
+
+      const stores = readStoresFromDisk();
+      const store = stores.find((s) => s.id === storeId || s.slug?.toLowerCase() === storeId.toLowerCase()) || stores[0];
+      if (!store) {
+        sendJson(res, 404, { success: false, error: 'المتجر غير موجود.' });
+        return true;
+      }
+
+      const storeProducts = Array.isArray(store.products) ? store.products : [];
+      const storeSettings = store.settings || DEFAULT_SETTINGS;
+
+      // Idempotency check: if order with this idempotencyKey already exists in store
+      if (idempotencyKey) {
+        const existingOrder = (store.orders || []).find((o: any) => o.idempotencyKey === idempotencyKey);
+        if (existingOrder) {
+          sendJson(res, 200, {
+            success: true,
+            orderId: existingOrder.id,
+            subtotal: existingOrder.subtotal,
+            discountAmount: existingOrder.discountAmount || 0,
+            shippingFee: existingOrder.shippingFee,
+            grandTotal: existingOrder.grandTotal,
+            amountHalalas: Math.round(existingOrder.grandTotal * 100),
+            status: existingOrder.status,
+            order: existingOrder,
+          });
+          return true;
+        }
+      }
+
+      // Verify items, compute subtotal and check stock
+      let subtotal = 0;
+      const verifiedItems: any[] = [];
+      const updatedProducts = [...storeProducts];
+
+      for (const item of items) {
+        const qty = Number(item.qty) || 1;
+        const pIdx = updatedProducts.findIndex((p) => p.id === item.productId);
+        if (pIdx < 0) {
+          sendJson(res, 400, { success: false, error: `المنتج المطلوب غير موجود في المتجر.` });
+          return true;
+        }
+
+        const prod = updatedProducts[pIdx];
+        if (prod.inStock === false) {
+          sendJson(res, 400, { success: false, error: `عذراً، المنتج "${prod.name}" نفد من المخزون.` });
+          return true;
+        }
+        if (typeof prod.stockQuantity === 'number' && prod.stockQuantity < qty) {
+          sendJson(res, 400, {
+            success: false,
+            error: `الكمية المطلوبة من "${prod.name}" غير متوفرة. المتبقي: ${prod.stockQuantity}`,
+          });
+          return true;
+        }
+
+        const unitPrice =
+          typeof prod.salePrice === 'number' && prod.salePrice > 0 && prod.salePrice < prod.price
+            ? prod.salePrice
+            : prod.price;
+
+        const lineTotal = Math.round(unitPrice * qty * 100) / 100;
+        subtotal = Math.round((subtotal + lineTotal) * 100) / 100;
+
+        // Decrement stock
+        if (typeof prod.stockQuantity === 'number') {
+          const remaining = Math.max(0, Math.round((prod.stockQuantity - qty) * 1000) / 1000);
+          updatedProducts[pIdx] = {
+            ...prod,
+            stockQuantity: remaining,
+            inStock: remaining > 0 ? prod.inStock : false,
+          };
+        }
+
+        verifiedItems.push({
+          productId: prod.id,
+          name: prod.name,
+          variant: item.variant || '',
+          price: unitPrice,
+          quantity: qty,
+          imageUrl: prod.imageUrl || '',
+          unit: prod.unit,
+        });
+      }
+
+      // Validate promo
+      let discountAmount = 0;
+      let appliedPromoCode: string | undefined;
+      const promoList = storeSettings.promoCodes || [];
+      if (promoCode && typeof promoCode === 'string') {
+        const cleanCode = promoCode.trim().toUpperCase();
+        const promo = promoList.find((p) => p.code?.toUpperCase() === cleanCode && p.active !== false);
+        if (promo) {
+          const isExpired = promo.expiryDate && new Date(promo.expiryDate).getTime() < Date.now();
+          const meetsMin = !promo.minOrderAmount || subtotal >= promo.minOrderAmount;
+          const withinUsageLimit = !promo.maxUses || (promo.usageCount || 0) < promo.maxUses;
+          if (!isExpired && meetsMin && withinUsageLimit) {
+            appliedPromoCode = promo.code;
+            discountAmount =
+              promo.type === 'percentage'
+                ? Math.round((subtotal * promo.value) / 100)
+                : Math.min(subtotal, promo.value);
+          }
+        }
+      }
+
+      // Shipping
+      const isPickup = customer.deliveryType === 'pickup';
+      let shippingFee = isPickup
+        ? 0
+        : typeof storeSettings.shippingFee === 'number'
+        ? storeSettings.shippingFee
+        : typeof storeSettings.standardShippingRate === 'number'
+        ? storeSettings.standardShippingRate
+        : 25;
+
+      if (!isPickup && storeSettings.freeShippingThreshold && subtotal >= storeSettings.freeShippingThreshold) {
+        shippingFee = 0;
+      }
+
+      const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee);
+      const complianceType = getZatcaComplianceType(storeSettings);
+      const vatCalc = calculateVatBreakdown(
+        grandTotal,
+        storeSettings.pricesIncludeVat ?? true,
+        storeSettings.vatRate ?? 0.15,
+        complianceType
+      );
+
+      const orderId = generateOrderId('ORD');
+      const deliveryPin = generateDeliveryPin();
+      const isBankTransfer = paymentMethod === 'bank_transfer';
+      const isOnline = ['card', 'apple_pay', 'stc_pay'].includes(paymentMethod);
+
+      const itemsSummary = verifiedItems
+        .map((i) => `${i.quantity}x ${i.name}${i.variant ? ` (${i.variant})` : ''}`)
+        .join('، ');
+
+      const newOrder: any = {
+        id: orderId,
+        storeSlug: store.slug,
+        storeId: store.id,
+        timestamp: new Date().toISOString(),
+        deliveryPin,
+        customerName: customer.name.trim(),
+        customerPhone: customer.phone.trim(),
+        city: isPickup ? storeSettings.city || 'الفرع الرئيسي' : customer.city.trim(),
+        deliveryAddress: isPickup ? storeSettings.storePickupAddress || 'استلام مباشر من مقر المتجر' : customer.address.trim(),
+        landmarkNotes: customer.landmark || '',
+        googleMapsUrl: customer.googleMapsUrl || '',
+        deliveryType: customer.deliveryType || 'delivery',
+        paymentMethod,
+        paymentStatus: isBankTransfer ? 'pending_receipt_review' : isOnline ? 'pending_payment' : 'pending_payment',
+        bankTransferReceiptUrl: isBankTransfer ? parsed.bankTransferReceiptUrl : undefined,
+        bankTransferReceiptFileName: isBankTransfer ? parsed.bankTransferReceiptFileName : undefined,
+        bankTransferSenderName: isBankTransfer ? parsed.bankTransferSenderName : undefined,
+        itemsSummary,
+        items: verifiedItems,
+        subtotal,
+        discountCode: appliedPromoCode,
+        discountAmount: discountAmount > 0 ? discountAmount : undefined,
+        shippingFee,
+        grandTotal,
+        vatAmount: vatCalc.vatAmount,
+        vatRate: vatCalc.vatRate,
+        zatcaComplianceType: complianceType,
+        status: isOnline ? 'In Progress' : 'Received',
+        trackingNotes: isBankTransfer
+          ? 'تحويل بنكي — تم إرفاق إيصال التحويل وبانتظار مراجعة التاجر واعتماد الدفع.'
+          : isOnline
+          ? 'في انتظار استكمال الدفع الإلكتروني'
+          : 'تم استلام الطلب وتأكيده بنجاح.',
+        idempotencyKey,
+      };
+
+      store.products = updatedProducts;
+      store.orders = [newOrder, ...(store.orders || [])].slice(0, 150);
+      await saveStoreOnDisk(store);
+
+      sendJson(res, 200, {
+        success: true,
+        orderId,
+        subtotal,
+        discountAmount,
+        shippingFee,
+        grandTotal,
+        amountHalalas: Math.round(grandTotal * 100),
+        status: newOrder.status,
+        order: newOrder,
+      });
+      return true;
+    } catch (err: any) {
+      sendJson(res, 400, { success: false, error: err?.message || 'فشلت معالجة الطلب في الخادم المحلي.' });
       return true;
     }
   }
