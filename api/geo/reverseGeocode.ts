@@ -36,9 +36,9 @@ export default async function handler(req: any, res: any) {
   }
 
   const apiKey =
-    process.env.VITE_GOOGLE_MAPS_API_KEY ||
     process.env.GOOGLE_MAPS_API_KEY ||
-    'AIzaSyBcmeQAMm_4cNErqam3lYDI5RhvPXlEqCc';
+    process.env.VITE_GOOGLE_MAPS_API_KEY ||
+    '';
 
   const directMapsUrl = `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`;
 
