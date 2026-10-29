@@ -38,6 +38,7 @@ interface CreateOrderRequest {
   bankTransferSenderName?: string;
   hp?: string; // Honeypot field
   turnstileToken?: string;
+  idempotencyKey?: string;
 }
 
 function normalizePhone(p: string): string {
@@ -98,6 +99,7 @@ export default async function handler(req: any, res: any) {
     promoCode,
     utm,
     bankTransferReceiptUrl,
+    idempotencyKey,
     bankTransferReceiptFileName,
     bankTransferSenderName,
   } = body;
@@ -167,6 +169,36 @@ export default async function handler(req: any, res: any) {
       const privateConfigRef = storeRef.collection('private').doc('config');
       const privateSnap = await transaction.get(privateConfigRef);
       const privateData = privateSnap.exists ? privateSnap.data() || {} : {};
+
+      // 1b. Idempotency Check: if key provided, check if order was already created
+      const cleanIdempotencyKey = idempotencyKey ? String(idempotencyKey).trim() : '';
+      if (cleanIdempotencyKey) {
+        const idempDocRef = storeRef.collection('idempotency').doc(cleanIdempotencyKey);
+        const idempSnap = await transaction.get(idempDocRef);
+        if (idempSnap.exists) {
+          const existingOrderId = idempSnap.data()?.orderId;
+          if (existingOrderId) {
+            const existingOrderRef = storeRef.collection('orders').doc(existingOrderId);
+            const existingOrderSnap = await transaction.get(existingOrderRef);
+            if (existingOrderSnap.exists) {
+              const existingOrder = existingOrderSnap.data();
+              return {
+                isExisting: true,
+                orderId: existingOrder.id,
+                subtotal: existingOrder.subtotal,
+                discountAmount: existingOrder.discountAmount,
+                shippingFee: existingOrder.shippingFee,
+                grandTotal: existingOrder.grandTotal,
+                amountHalalas: Math.round(existingOrder.grandTotal * 100),
+                status: existingOrder.status,
+                order: existingOrder,
+                settings,
+                webhookSecret: privateData.webhookSecret,
+              };
+            }
+          }
+        }
+      }
 
       // Combine private promos and public fallback promos
       const promoList = Array.isArray(privateData.promoCodes)
@@ -404,6 +436,15 @@ export default async function handler(req: any, res: any) {
       // 10. Persist Full Order
       const newOrderDocRef = storeRef.collection('orders').doc(orderId);
       transaction.set(newOrderDocRef, fullOrderRecord);
+
+      // 10b. Persist Idempotency Record
+      if (cleanIdempotencyKey) {
+        const idempDocRef = storeRef.collection('idempotency').doc(cleanIdempotencyKey);
+        transaction.set(idempDocRef, {
+          orderId,
+          createdAt: timestamp,
+        });
+      }
 
       // 11. Persist Stock Decrements
       for (const update of stockUpdatesToApply) {
