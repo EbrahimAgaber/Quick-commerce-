@@ -1,4 +1,5 @@
 import { getAdminFirestore } from './_firebaseAdmin';
+import { releaseOrderStock } from './_stockManager';
 
 export interface ReconcilePaymentOptions {
   storeId: string;

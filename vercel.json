@@ -64,5 +64,11 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/releaseExpiredOrders",
+      "schedule": "*/10 * * * *"
+    }
   ]
 }
