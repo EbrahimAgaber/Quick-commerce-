@@ -29,11 +29,8 @@ import {
   Unsubscribe
 } from 'firebase/firestore';
 
-export const RESERVED_SLUGS = new Set([
-  'admin', 'api', 'app', 'login', 'register', 'auth', 's', 'aurora', 'store',
-  'dashboard', 'checkout', 'orders', 'cart', 'static', 'assets', 'tracking',
-  'null', 'undefined', 'privacy', 'terms', 'help', 'settings'
-]);
+import { RESERVED_SLUGS_SET, RESERVED_SLUGS as RESERVED_SLUGS_LIST } from '../constants/slugs';
+export const RESERVED_SLUGS = RESERVED_SLUGS_SET;
 
 const STORES_STORAGE_KEY = 'storelink_all_stores';
 const ACTIVE_STORE_KEY = 'storelink_active_store_id';
@@ -1367,39 +1364,8 @@ export class StoreManager {
       }
     }
 
-    if (isFirebaseConfigured && storeId && storeId !== 'store_aurora_01') {
-      try {
-        const orderRef = doc(db, 'stores', storeId, 'orders', order.id);
-        const sanitizedOrder = JSON.parse(JSON.stringify(order));
-        await setDoc(orderRef, sanitizedOrder);
-
-        // Also persist minimal public tracking projection directly to Firestore
-        try {
-          const trackingRef = doc(db, 'tracking', order.id);
-          const cleanPhone = (order.customerPhone || '').replace(/\D/g, '');
-          await setDoc(trackingRef, {
-            orderId: order.id,
-            storeId,
-            status: order.status || 'Received',
-            timestamp: order.timestamp || new Date().toISOString(),
-            itemsSummary: order.itemsSummary || '',
-            grandTotal: order.grandTotal || 0,
-            shippingFee: order.shippingFee || 0,
-            paymentMethod: order.paymentMethod || '',
-            phoneLast4: cleanPhone.slice(-4),
-            returnStatus: null,
-            returnEligibleUntil: null,
-          });
-        } catch (trackErr) {
-          console.warn('Tracking projection write notice:', trackErr);
-        }
-
-        return true;
-      } catch (err) {
-        console.warn('Could not write customer order to Firestore:', err);
-        return false;
-      }
-    }
+    // Server-write-only: In production, orders are created exclusively via /api/createOrder Admin SDK.
+    // Direct client write to Firestore is removed to comply with zero-trust security rules.
 
     // Merchant notifications are dispatched once by the order placement path
     // (NotificationHub.dispatchOrderPlaced for remote channels) and by the merchant's
@@ -1417,41 +1383,44 @@ export class StoreManager {
     const localMatch = localOrders.find((o) => o.id.toUpperCase().trim() === cleanId);
     if (localMatch) return localMatch;
 
-    if (isFirebaseConfigured) {
+    if (typeof fetch === 'function' && typeof window !== 'undefined' && window.location?.origin) {
       try {
-        const trackingRef = doc(db, 'tracking', cleanId);
-        const snap = await getDoc(trackingRef);
-        if (snap.exists()) {
-          const trackData = snap.data();
-          const mappedOrder: Order = {
-            id: trackData.orderId || cleanId,
-            timestamp: trackData.timestamp || new Date().toISOString(),
-            customerName: 'عميل المتجر',
-            customerPhone: trackData.phoneLast4 ? `***-****-${trackData.phoneLast4}` : '***',
-            city: '',
-            deliveryAddress: '',
-            paymentMethod: trackData.paymentMethod || 'الدفع عند الاستلام',
-            itemsSummary: trackData.itemsSummary || '',
-            items: [],
-            subtotal: trackData.subtotal || 0,
-            shippingFee: trackData.shippingFee || 0,
-            grandTotal: trackData.grandTotal || 0,
-            status: trackData.status || 'Received',
-            trackingNotes: trackData.trackingNotes,
-            courierName: trackData.courierName,
-            courierPhone: trackData.courierPhone,
-            trackingNumber: trackData.trackingNumber,
-            trackingUrl: trackData.trackingUrl,
-            driverDeliveredAt: trackData.driverDeliveredAt,
-            deliveryPin: trackData.deliveryPin || getOrderDeliveryPin({ id: cleanId }),
-            returnEligibleUntil: trackData.returnEligibleUntil,
-            returnStatus: trackData.returnStatus,
-            returnReason: trackData.returnReason,
-          };
-          return mappedOrder;
+        const url = `${window.location.origin}/api/tracking?orderId=${encodeURIComponent(cleanId)}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.tracking) {
+            const trackData = json.tracking;
+            const mappedOrder: Order = {
+              id: trackData.orderId || cleanId,
+              timestamp: trackData.timestamp || new Date().toISOString(),
+              customerName: 'عميل المتجر',
+              customerPhone: '***',
+              city: '',
+              deliveryAddress: '',
+              paymentMethod: trackData.paymentMethod || 'الدفع عند الاستلام',
+              itemsSummary: trackData.itemsSummary || '',
+              items: [],
+              subtotal: (trackData.grandTotal || 0) - (trackData.shippingFee || 0),
+              shippingFee: trackData.shippingFee || 0,
+              grandTotal: trackData.grandTotal || 0,
+              status: trackData.status || 'Received',
+              trackingNotes: trackData.trackingNotes,
+              courierName: trackData.courierName,
+              courierPhone: trackData.courierPhone,
+              trackingNumber: trackData.trackingNumber,
+              trackingUrl: trackData.trackingUrl,
+              driverDeliveredAt: trackData.driverDeliveredAt,
+              deliveryPin: getOrderDeliveryPin({ id: cleanId }),
+              returnEligibleUntil: trackData.returnEligibleUntil,
+              returnStatus: trackData.returnStatus,
+              returnReason: trackData.returnReason,
+            };
+            return mappedOrder;
+          }
         }
-      } catch (err) {
-        console.warn('Tracking projection lookup notice:', err);
+      } catch (apiErr) {
+        console.warn('API /api/tracking notice:', apiErr);
       }
     }
     return null;
@@ -1538,55 +1507,9 @@ export class StoreManager {
       }
     }
 
-    // 2. Direct client Firestore update (Owner or Driver) using granular updateDoc
-    if (!isFirebaseConfigured || (!auth.currentUser && options?.source !== 'driver')) return false;
-    try {
-      const orderRef = doc(db, 'stores', storeId, 'orders', updatedOrder.id);
-      const updatePayload: Record<string, any> = {
-        status: updatedOrder.status,
-        updatedAt: new Date().toISOString(),
-      };
-      if (updatedOrder.trackingNotes !== undefined) updatePayload.trackingNotes = updatedOrder.trackingNotes;
-      if (updatedOrder.courierName !== undefined) updatePayload.courierName = updatedOrder.courierName;
-      if (updatedOrder.courierPhone !== undefined) updatePayload.courierPhone = updatedOrder.courierPhone;
-      if (updatedOrder.trackingNumber !== undefined) updatePayload.trackingNumber = updatedOrder.trackingNumber;
-      if (updatedOrder.trackingUrl !== undefined) updatePayload.trackingUrl = updatedOrder.trackingUrl;
-      if (updatedOrder.driverDeliveredAt !== undefined) updatePayload.driverDeliveredAt = updatedOrder.driverDeliveredAt;
-      if (updatedOrder.driverCashCollected !== undefined) updatePayload.driverCashCollected = updatedOrder.driverCashCollected;
-      if (updatedOrder.driverSettled !== undefined) updatePayload.driverSettled = updatedOrder.driverSettled;
-      if (updatedOrder.driverSettledAt !== undefined) updatePayload.driverSettledAt = updatedOrder.driverSettledAt;
-      if (updatedOrder.returnEligibleUntil !== undefined) updatePayload.returnEligibleUntil = updatedOrder.returnEligibleUntil;
-      if (updatedOrder.returnRequestedAt !== undefined) updatePayload.returnRequestedAt = updatedOrder.returnRequestedAt;
-      if (updatedOrder.returnReason !== undefined) updatePayload.returnReason = updatedOrder.returnReason;
-      if (updatedOrder.returnNotes !== undefined) updatePayload.returnNotes = updatedOrder.returnNotes;
-      if (updatedOrder.returnStatus !== undefined) updatePayload.returnStatus = updatedOrder.returnStatus;
-      if (updatedOrder.returnItems !== undefined) updatePayload.returnItems = updatedOrder.returnItems;
-      if (updatedOrder.returnedAt !== undefined) updatePayload.returnedAt = updatedOrder.returnedAt;
-
-      await updateDoc(orderRef, updatePayload);
-
-      // Also sync minimal public tracking projection directly in Firestore
-      try {
-        const trackingRef = doc(db, 'tracking', updatedOrder.id);
-        const trackingPayload: Record<string, any> = {
-          status: updatedOrder.status,
-          updatedAt: new Date().toISOString(),
-        };
-        if (updatedOrder.trackingNotes !== undefined) trackingPayload.trackingNotes = updatedOrder.trackingNotes;
-        if (updatedOrder.driverDeliveredAt !== undefined) trackingPayload.driverDeliveredAt = updatedOrder.driverDeliveredAt;
-        if (updatedOrder.returnEligibleUntil !== undefined) trackingPayload.returnEligibleUntil = updatedOrder.returnEligibleUntil;
-        if (updatedOrder.returnStatus !== undefined) trackingPayload.returnStatus = updatedOrder.returnStatus;
-        if (updatedOrder.returnReason !== undefined) trackingPayload.returnReason = updatedOrder.returnReason;
-        await setDoc(trackingRef, trackingPayload, { merge: true });
-      } catch (trackErr) {
-        console.warn('Could not update tracking projection in Firestore:', trackErr);
-      }
-
-      return true;
-    } catch (err) {
-      console.warn('Could not update order in Firestore:', err);
-      return false;
-    }
+    // Server-write-only: Client direct Firestore updates for orders & tracking are removed.
+    // All status updates and delivery confirmations must route via /api/updateOrderStatus.
+    return false;
   }
 
   /**
@@ -1637,37 +1560,7 @@ export class StoreManager {
       }
     }
 
-    // Direct Firestore update for shopper return request on Firebase Hosting
-    if (isFirebaseConfigured && params.storeId && params.storeId !== 'store_aurora_01') {
-      try {
-        const orderRef = doc(db, 'stores', params.storeId, 'orders', cleanId);
-        const nowIso = new Date().toISOString();
-        const returnPayload: Record<string, any> = {
-          status: 'Return Requested',
-          returnStatus: 'pending',
-          returnRequestedAt: nowIso,
-          returnReason: params.reason,
-          returnNotes: params.notes || '',
-          returnItems: params.items || [],
-          updatedAt: nowIso,
-        };
-        await updateDoc(orderRef, returnPayload);
-
-        try {
-          const trackingRef = doc(db, 'tracking', cleanId);
-          await setDoc(trackingRef, {
-            status: 'Return Requested',
-            returnStatus: 'pending',
-            returnReason: params.reason,
-            updatedAt: nowIso,
-          }, { merge: true });
-        } catch {}
-
-        return { success: true };
-      } catch (firestoreErr) {
-        console.warn('Direct Firestore return submission notice:', firestoreErr);
-      }
-    }
+    // Server-write-only: Direct client writes removed. Return requests route exclusively through /api/updateOrderStatus.
 
     // Local / offline fallback
     const store = this.getStoreById(params.storeId) || this.getActiveStore();

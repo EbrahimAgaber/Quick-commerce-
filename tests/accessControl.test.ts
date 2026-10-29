@@ -11,7 +11,8 @@ describe('Firestore Rules & Access Control (S1, S4, S6, S7)', () => {
     expect(orderMatch).not.toBeNull();
     const orderRules = orderMatch![0];
 
-    expect(orderRules).toContain('allow create: if isValidId(orderId) && isValidNewOrder(request.resource.data, orderId);');
+    // Phase 1 lock down: orders are server-write only
+    expect(orderRules).toContain('allow create: if false;');
     expect(orderRules).toContain('allow get, list: if isStoreOwner(storeId);');
     expect(orderRules).toContain('allow delete: if false;');
     expect(orderRules).toContain('returnStatus');
@@ -32,9 +33,8 @@ describe('Firestore Rules & Access Control (S1, S4, S6, S7)', () => {
     expect(trackingMatch).not.toBeNull();
     const trackingRules = trackingMatch![0];
 
-    expect(trackingRules).toContain('allow get: if isValidId(orderId);');
-    expect(trackingRules).toContain('allow list: if false;');
-    expect(trackingRules).toContain('allow create: if isValidId(orderId)');
+    // Phase 1 lock down: tracking is server-write and server-read only (via /api/tracking.ts)
+    expect(trackingRules).toContain('allow read, write: if false;');
   });
 
   it('rules prevent creating or deleting the demo store store_aurora_01', () => {
