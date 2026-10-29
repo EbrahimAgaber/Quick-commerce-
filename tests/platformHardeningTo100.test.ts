@@ -18,6 +18,15 @@ vi.mock('../api/_firebaseAdmin', () => ({
     verifyIdToken: mockVerifyIdToken,
   }),
   getAdminFirestore: () => ({
+    runTransaction: async (updateFunction: any) => {
+      const tx = {
+        get: async (ref: any) => ref.get(),
+        set: async (ref: any, data: any) => ref.set(data),
+        create: async (ref: any, data: any) => ref.set(data),
+        update: async (ref: any, data: any) => ref.update(data),
+      };
+      return await updateFunction(tx);
+    },
     collection: (collName: string) => ({
       doc: (docId: string) => {
         const fullPath = `${collName}/${docId}`;
@@ -59,6 +68,7 @@ vi.mock('../api/_firebaseAdmin', () => ({
           }),
         };
       },
+
       where: (field: string, op: string, val: string) => ({
         limit: () => ({
           get: async () => {
@@ -255,6 +265,9 @@ describe('Moyasar Distributed Idempotency Key Registry', () => {
       ownerId: 'merchant_1',
       storeName: 'Test Store',
     };
+    mockFirestoreData['stores/store_1/private/payment'] = {
+      webhookSecret: 'test_sec_123',
+    };
     mockFirestoreData['stores/store_1/orders/ord_100'] = {
       id: 'ord_100',
       status: 'In Progress',
@@ -269,8 +282,12 @@ describe('Moyasar Distributed Idempotency Key Registry', () => {
 
     const req = {
       method: 'POST',
+      headers: {
+        'x-moyasar-secret': 'test_sec_123',
+      },
       body: {
         id: 'event_1',
+        secret_token: 'test_sec_123',
         data: {
           id: 'pay_dup',
           status: 'paid',
