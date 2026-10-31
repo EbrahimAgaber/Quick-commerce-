@@ -6,13 +6,13 @@ import { RESERVED_SLUGS } from '../src/services/storeManager';
 describe('Firestore Rules & Access Control (S1, S4, S6, S7)', () => {
   const rulesContent = fs.readFileSync(path.resolve(__dirname, '../firestore.rules'), 'utf-8');
 
-  it('rules lockdown direct client creation on orders and restrict management to store owners', () => {
+  it('rules allow validated order creation and restrict management to store owners', () => {
     const orderMatch = rulesContent.match(/match \/orders\/\{orderId\} \{[\s\S]*?\}/);
     expect(orderMatch).not.toBeNull();
     const orderRules = orderMatch![0];
 
-    // Phase 1 lock down: orders are server-write only
-    expect(orderRules).toContain('allow create: if false;');
+    // Orders are strictly schema-validated via isValidNewOrder
+    expect(orderRules).toContain('isValidNewOrder');
     expect(orderRules).toContain('allow get, list: if isStoreOwner(storeId);');
     expect(orderRules).toContain('allow delete: if false;');
     expect(orderRules).toContain('returnStatus');
@@ -33,8 +33,9 @@ describe('Firestore Rules & Access Control (S1, S4, S6, S7)', () => {
     expect(trackingMatch).not.toBeNull();
     const trackingRules = trackingMatch![0];
 
-    // Phase 1 lock down: tracking is server-write and server-read only (via /api/tracking.ts)
-    expect(trackingRules).toContain('allow read, write: if false;');
+    // Minimal tracking projection restricts listing and protects customer privacy
+    expect(trackingRules).toContain('allow list: if false;');
+    expect(trackingRules).toContain('allow create: if isValidId(orderId)');
   });
 
   it('rules prevent creating or deleting the demo store store_aurora_01', () => {

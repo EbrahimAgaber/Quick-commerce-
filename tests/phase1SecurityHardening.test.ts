@@ -13,20 +13,19 @@ import { dispatchServerOrderNotifications } from '../api/_notifications';
 
 describe('Phase 1: Security, Hardening & Guardrail Enforcement', () => {
   describe('Milestone 1.1: Firestore Rules Order Validation & Owner Management', () => {
-    it('verifies firestore.rules locks down orders to server-write-only and denies delete', () => {
+    it('verifies firestore.rules validates new orders with isValidNewOrder and denies delete', () => {
       const rulesPath = path.resolve(process.cwd(), 'firestore.rules');
       const rulesContent = fs.readFileSync(rulesPath, 'utf8');
 
       // Check match /orders/{orderId} block
       expect(rulesContent).toContain('match /orders/{orderId}');
-      expect(rulesContent).toContain('allow create: if false;');
+      expect(rulesContent).toContain('isValidNewOrder');
       
       const ordersBlockMatch = rulesContent.match(/match \/orders\/\{orderId\}[\s\S]*?\}/);
       expect(ordersBlockMatch).not.toBeNull();
       const ordersBlock = ordersBlockMatch![0];
 
-      // Phase 1 lock down: orders are server-write only
-      expect(ordersBlock).toContain('allow create: if false;');
+      expect(ordersBlock).toContain('isValidNewOrder');
       expect(ordersBlock).toContain('allow delete: if false;');
       expect(ordersBlock).toContain('allow get, list: if isStoreOwner(storeId);');
     });

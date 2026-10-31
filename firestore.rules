@@ -44,6 +44,19 @@ service cloud.firestore {
       ];
     }
 
+    function isValidNewOrder(data, orderId) {
+      return data.keys().hasAll(['id', 'customerName', 'customerPhone', 'city', 'deliveryAddress', 'itemsSummary', 'items', 'subtotal', 'shippingFee', 'grandTotal', 'status', 'paymentMethod']) &&
+             data.id is string && (data.id == orderId || orderId.matches('^[a-zA-Z0-9_\\-]+$')) &&
+             data.customerName is string && data.customerName.size() > 0 && data.customerName.size() <= 120 &&
+             data.customerPhone is string && data.customerPhone.size() >= 8 && data.customerPhone.size() <= 30 &&
+             data.city is string && data.city.size() <= 100 &&
+             data.deliveryAddress is string && data.deliveryAddress.size() <= 300 &&
+             data.grandTotal is number && data.grandTotal >= 0 &&
+             data.status in ['Received', 'In Progress'] &&
+             data.status != 'Paid' &&
+             data.items is list && data.items.size() > 0 && data.items.size() <= 100;
+    }
+
     // Merchants profile collection (Private to the authenticated merchant)
     match /merchants/{merchantId} {
       allow get: if isSignedIn() && isValidId(merchantId) && request.auth.uid == merchantId;
@@ -66,10 +79,21 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
-    // Tracking Projection: server-managed projection. Direct public read/write disabled.
-    // Tracking is served exclusively through serverless endpoint /api/tracking.ts.
+    // Minimal Public Tracking Projection (no customer PII: name, phone, address are omitted)
     match /tracking/{orderId} {
-      allow read, write: if false;
+      allow get: if isValidId(orderId);
+      allow list: if false;
+      allow create: if isValidId(orderId) &&
+                    request.resource.data.keys().hasAll(['orderId', 'storeId', 'status', 'grandTotal', 'timestamp']) &&
+                    request.resource.data.orderId == orderId &&
+                    request.resource.data.status in ['Received', 'In Progress', 'Paid'];
+      allow update: if isValidId(orderId) &&
+                    (isStoreOwner(resource.data.storeId) ||
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                       'status', 'driverDeliveredAt', 'returnEligibleUntil', 'trackingNotes',
+                       'returnStatus', 'returnReason', 'updatedAt'
+                     ]));
+      allow delete: if false;
     }
 
     // Stores collection (Public storefront info, strict owner-only write, no arbitrary list)
@@ -93,13 +117,14 @@ service cloud.firestore {
       }
 
       // Orders Subcollection:
-      // Orders are server-write-only (created and processed by Admin SDK via /api/createOrder and /api/updateOrderStatus).
-      // Clients get create: false and unauthenticated updates are blocked.
-      // Verified store owner can read, list, and update whitelisted operational metadata only.
+      // - Shoppers can create valid customer orders directly from the web app
+      // - Store owners can read, list, and manage all orders
+      // - Drivers can confirm delivery or doorstep return via dispatch link
+      // - Shoppers can submit return requests on delivered orders
       match /orders/{orderId} {
-        allow create: if false;
+        allow create: if isValidId(orderId) && isValidNewOrder(request.resource.data, orderId);
         allow get, list: if isStoreOwner(storeId);
-        allow update: if isStoreOwner(storeId) &&
+        allow update: if (isStoreOwner(storeId) &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                            'status', 'trackingNotes', 'courierName', 'courierPhone',
                            'trackingNumber', 'trackingUrl', 'driverCashCollected',
@@ -107,7 +132,16 @@ service cloud.firestore {
                            'returnEligibleUntil', 'returnRequestedAt', 'returnReason',
                            'returnNotes', 'returnStatus', 'returnItems', 'returnedAt',
                            'refundedAmount', 'refundReason', 'refundedAt', 'updatedAt'
-                         ]);
+                         ])) ||
+                        (request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                           'status', 'driverDeliveredAt', 'driverCashCollected',
+                           'returnEligibleUntil', 'trackingNotes', 'updatedAt'
+                         ]) && request.resource.data.status in ['Out for Delivery', 'Delivered', 'Cancelled']) ||
+                        (resource.data.status == 'Delivered' &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                           'status', 'returnStatus', 'returnRequestedAt', 'returnReason',
+                           'returnNotes', 'returnItems', 'updatedAt'
+                         ]) && request.resource.data.status == 'Return Requested');
         allow delete: if false;
       }
     }

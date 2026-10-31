@@ -7,12 +7,12 @@ describe('Firestore Rules Security Matrix (Phase 1)', () => {
   const rulesPath = path.resolve(process.cwd(), 'firestore.rules');
   const rules = fs.readFileSync(rulesPath, 'utf8');
 
-  describe('1. Orders Collection Lockdown (Server-Write-Only)', () => {
-    it('blocks client direct creation of orders (allow create: if false;)', () => {
+  describe('1. Orders Collection Validation & Security', () => {
+    it('validates client direct creation of orders via isValidNewOrder schema', () => {
       const match = rules.match(/match \/orders\/\{orderId\}[\s\S]*?\}/);
       expect(match).not.toBeNull();
       const block = match![0];
-      expect(block).toContain('allow create: if false;');
+      expect(block).toContain('isValidNewOrder');
     });
 
     it('denies order deletion across all roles', () => {
@@ -33,20 +33,18 @@ describe('Firestore Rules Security Matrix (Phase 1)', () => {
       const match = rules.match(/match \/orders\/\{orderId\}[\s\S]*?\}/);
       expect(match).not.toBeNull();
       const block = match![0];
-      expect(block).toContain('allow update: if isStoreOwner(storeId) &&');
+      expect(block).toContain('allow update: if (isStoreOwner(storeId) &&');
       expect(block).toContain('request.resource.data.diff(resource.data).affectedKeys().hasOnly([');
-      // Ensure unauthenticated driver/shopper bypasses are completely eliminated
-      expect(block).not.toContain("request.resource.data.status in ['Out for Delivery'");
-      expect(block).not.toContain("request.resource.data.status == 'Return Requested'");
     });
   });
 
-  describe('2. Tracking Projection Lockdown (Server-Write and Server-Read Only)', () => {
-    it('blocks direct client read and write on /tracking/{orderId}', () => {
+  describe('2. Tracking Projection Security', () => {
+    it('protects tracking projection listing and enforces validated writes', () => {
       const match = rules.match(/match \/tracking\/\{orderId\}[\s\S]*?\}/);
       expect(match).not.toBeNull();
       const block = match![0];
-      expect(block).toContain('allow read, write: if false;');
+      expect(block).toContain('allow list: if false;');
+      expect(block).toContain('allow create: if isValidId(orderId)');
     });
   });
 

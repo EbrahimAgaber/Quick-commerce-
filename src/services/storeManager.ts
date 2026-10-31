@@ -1364,12 +1364,40 @@ export class StoreManager {
       }
     }
 
-    // Server-write-only: In production, orders are created exclusively via /api/createOrder Admin SDK.
-    // Direct client write to Firestore is removed to comply with zero-trust security rules.
+    if (isFirebaseConfigured && storeId && storeId !== 'store_aurora_01') {
+      try {
+        const orderRef = doc(db, 'stores', storeId, 'orders', order.id);
+        const sanitizedOrder = JSON.parse(JSON.stringify(order));
+        await setDoc(orderRef, sanitizedOrder);
 
-    // Merchant notifications are dispatched once by the order placement path
-    // (NotificationHub.dispatchOrderPlaced for remote channels) and by the merchant's
-    // own real-time listener (alertMerchantLocally) — never from here.
+        // Also persist minimal public tracking projection directly to Firestore
+        try {
+          const trackingRef = doc(db, 'tracking', order.id);
+          const cleanPhone = (order.customerPhone || '').replace(/\D/g, '');
+          await setDoc(trackingRef, {
+            orderId: order.id,
+            storeId,
+            status: order.status || 'Received',
+            timestamp: order.timestamp || new Date().toISOString(),
+            itemsSummary: order.itemsSummary || '',
+            grandTotal: order.grandTotal || 0,
+            shippingFee: order.shippingFee || 0,
+            paymentMethod: order.paymentMethod || '',
+            phoneLast4: cleanPhone.slice(-4),
+            returnStatus: null,
+            returnEligibleUntil: null,
+          });
+        } catch (trackErr) {
+          console.warn('Tracking projection write notice:', trackErr);
+        }
+
+        return true;
+      } catch (err) {
+        console.warn('Could not write customer order to Firestore:', err);
+        return false;
+      }
+    }
+
     return true;
   }
 
@@ -1422,6 +1450,42 @@ export class StoreManager {
       } catch (apiErr) {
         console.warn('API /api/tracking notice:', apiErr);
       }
+    }
+
+    if (isFirebaseConfigured) {
+      try {
+        const trackingRef = doc(db, 'tracking', cleanId);
+        const snap = await getDoc(trackingRef);
+        if (snap.exists()) {
+          const trackData = snap.data();
+          const mappedOrder: Order = {
+            id: trackData.orderId || cleanId,
+            timestamp: trackData.timestamp || new Date().toISOString(),
+            customerName: 'عميل المتجر',
+            customerPhone: trackData.phoneLast4 ? `***-****-${trackData.phoneLast4}` : '***',
+            city: '',
+            deliveryAddress: '',
+            paymentMethod: trackData.paymentMethod || 'الدفع عند الاستلام',
+            itemsSummary: trackData.itemsSummary || '',
+            items: [],
+            subtotal: (trackData.grandTotal || 0) - (trackData.shippingFee || 0),
+            shippingFee: trackData.shippingFee || 0,
+            grandTotal: trackData.grandTotal || 0,
+            status: trackData.status || 'Received',
+            trackingNotes: trackData.trackingNotes,
+            courierName: trackData.courierName,
+            courierPhone: trackData.courierPhone,
+            trackingNumber: trackData.trackingNumber,
+            trackingUrl: trackData.trackingUrl,
+            driverDeliveredAt: trackData.driverDeliveredAt,
+            deliveryPin: trackData.deliveryPin || getOrderDeliveryPin({ id: cleanId }),
+            returnEligibleUntil: trackData.returnEligibleUntil,
+            returnStatus: trackData.returnStatus,
+            returnReason: trackData.returnReason,
+          };
+          return mappedOrder;
+        }
+      } catch {}
     }
     return null;
   }
@@ -1497,9 +1561,12 @@ export class StoreManager {
         });
 
         if (res.ok) {
-          const data = await res.json();
-          if (data.success) {
-            return true;
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await res.json();
+            if (data.success) {
+              return true;
+            }
           }
         }
       } catch (apiErr) {
@@ -1507,9 +1574,55 @@ export class StoreManager {
       }
     }
 
-    // Server-write-only: Client direct Firestore updates for orders & tracking are removed.
-    // All status updates and delivery confirmations must route via /api/updateOrderStatus.
-    return false;
+    // 2. Direct client Firestore update (Owner or Driver) using granular updateDoc
+    if (!isFirebaseConfigured || (!auth.currentUser && options?.source !== 'driver')) return false;
+    try {
+      const orderRef = doc(db, 'stores', storeId, 'orders', updatedOrder.id);
+      const updatePayload: Record<string, any> = {
+        status: updatedOrder.status,
+        updatedAt: new Date().toISOString(),
+      };
+      if (updatedOrder.trackingNotes !== undefined) updatePayload.trackingNotes = updatedOrder.trackingNotes;
+      if (updatedOrder.courierName !== undefined) updatePayload.courierName = updatedOrder.courierName;
+      if (updatedOrder.courierPhone !== undefined) updatePayload.courierPhone = updatedOrder.courierPhone;
+      if (updatedOrder.trackingNumber !== undefined) updatePayload.trackingNumber = updatedOrder.trackingNumber;
+      if (updatedOrder.trackingUrl !== undefined) updatePayload.trackingUrl = updatedOrder.trackingUrl;
+      if (updatedOrder.driverDeliveredAt !== undefined) updatePayload.driverDeliveredAt = updatedOrder.driverDeliveredAt;
+      if (updatedOrder.driverCashCollected !== undefined) updatePayload.driverCashCollected = updatedOrder.driverCashCollected;
+      if (updatedOrder.driverSettled !== undefined) updatePayload.driverSettled = updatedOrder.driverSettled;
+      if (updatedOrder.driverSettledAt !== undefined) updatePayload.driverSettledAt = updatedOrder.driverSettledAt;
+      if (updatedOrder.returnEligibleUntil !== undefined) updatePayload.returnEligibleUntil = updatedOrder.returnEligibleUntil;
+      if (updatedOrder.returnRequestedAt !== undefined) updatePayload.returnRequestedAt = updatedOrder.returnRequestedAt;
+      if (updatedOrder.returnReason !== undefined) updatePayload.returnReason = updatedOrder.returnReason;
+      if (updatedOrder.returnNotes !== undefined) updatePayload.returnNotes = updatedOrder.returnNotes;
+      if (updatedOrder.returnStatus !== undefined) updatePayload.returnStatus = updatedOrder.returnStatus;
+      if (updatedOrder.returnItems !== undefined) updatePayload.returnItems = updatedOrder.returnItems;
+      if (updatedOrder.returnedAt !== undefined) updatePayload.returnedAt = updatedOrder.returnedAt;
+
+      await updateDoc(orderRef, updatePayload);
+
+      // Also sync minimal public tracking projection directly in Firestore
+      try {
+        const trackingRef = doc(db, 'tracking', updatedOrder.id);
+        const trackingPayload: Record<string, any> = {
+          status: updatedOrder.status,
+          updatedAt: new Date().toISOString(),
+        };
+        if (updatedOrder.trackingNotes !== undefined) trackingPayload.trackingNotes = updatedOrder.trackingNotes;
+        if (updatedOrder.driverDeliveredAt !== undefined) trackingPayload.driverDeliveredAt = updatedOrder.driverDeliveredAt;
+        if (updatedOrder.returnEligibleUntil !== undefined) trackingPayload.returnEligibleUntil = updatedOrder.returnEligibleUntil;
+        if (updatedOrder.returnStatus !== undefined) trackingPayload.returnStatus = updatedOrder.returnStatus;
+        if (updatedOrder.returnReason !== undefined) trackingPayload.returnReason = updatedOrder.returnReason;
+        await setDoc(trackingRef, trackingPayload, { merge: true });
+      } catch (trackErr) {
+        console.warn('Could not update tracking projection in Firestore:', trackErr);
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('Could not update order in Firestore:', err);
+      return false;
+    }
   }
 
   /**
@@ -1560,7 +1673,37 @@ export class StoreManager {
       }
     }
 
-    // Server-write-only: Direct client writes removed. Return requests route exclusively through /api/updateOrderStatus.
+    // Direct Firestore update for shopper return request on Firebase Hosting
+    if (isFirebaseConfigured && params.storeId && params.storeId !== 'store_aurora_01') {
+      try {
+        const orderRef = doc(db, 'stores', params.storeId, 'orders', cleanId);
+        const nowIso = new Date().toISOString();
+        const returnPayload: Record<string, any> = {
+          status: 'Return Requested',
+          returnStatus: 'pending',
+          returnRequestedAt: nowIso,
+          returnReason: params.reason,
+          returnNotes: params.notes || '',
+          returnItems: params.items || [],
+          updatedAt: nowIso,
+        };
+        await updateDoc(orderRef, returnPayload);
+
+        try {
+          const trackingRef = doc(db, 'tracking', cleanId);
+          await setDoc(trackingRef, {
+            status: 'Return Requested',
+            returnStatus: 'pending',
+            returnReason: params.reason,
+            updatedAt: nowIso,
+          }, { merge: true });
+        } catch {}
+
+        return { success: true };
+      } catch (firestoreErr) {
+        console.warn('Direct Firestore return submission notice:', firestoreErr);
+      }
+    }
 
     // Local / offline fallback
     const store = this.getStoreById(params.storeId) || this.getActiveStore();
@@ -1644,71 +1787,46 @@ export class StoreManager {
       typeof (globalThis as any).__vitest_worker__ !== 'undefined' ||
       typeof (globalThis as any).vi !== 'undefined';
 
-    // In unit/integration tests running in Node where fetch cannot reach localhost /api without mock server:
-    // Fall back cleanly if not configured or in tests. In actual browser production, enforce API order creation with retries.
+    // 2. Server-Authoritative Order Submission (if serverless API /api/createOrder is mounted and available)
     if (typeof fetch === 'function' && params.storeId !== 'store_aurora_01' && !isDemo && !isNodeTestEnv) {
-      let lastErrorMessage = '';
-      const maxRetries = 2; // 1 initial attempt + max 2 retries with exponential backoff
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout for responsive fallback
 
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+        const res = await fetch('/api/createOrder', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            ...(params.turnstileToken ? { 'x-turnstile-token': params.turnstileToken } : {}),
+          },
+          body: JSON.stringify(requestPayload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
 
-          const res = await fetch('/api/createOrder', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'application/json',
-              ...(params.turnstileToken ? { 'x-turnstile-token': params.turnstileToken } : {}),
-            },
-            body: JSON.stringify(requestPayload),
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            if (res.ok && data.success && data.order) {
-              // Update local state and memory only — no direct write to Firestore
-              await this.submitOrderToStore(params.storeId, data.order);
-              return {
-                success: true,
-                order: data.order,
-              };
-            } else if (res.status === 400 || res.status === 429) {
-              // Validation or rate limit error: do not retry
-              return {
-                success: false,
-                error: data?.error || 'تعذر تسجيل الطلب في الخادم. يرجى مراجعة البيانات.',
-              };
-            } else {
-              lastErrorMessage = data?.error || 'حدث خطأ أثناء معالجة الطلب في الخادم.';
-            }
-          } else {
-            lastErrorMessage = 'تعذر الاتصال بخادم الطلبات بصيغة صحيحة.';
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (res.ok && data.success && data.order) {
+            await this.submitOrderToStore(params.storeId, data.order);
+            return {
+              success: true,
+              order: data.order,
+            };
+          } else if (res.status === 400 || res.status === 429) {
+            return {
+              success: false,
+              error: data?.error || 'تعذر تسجيل الطلب في الخادم. يرجى مراجعة البيانات.',
+            };
           }
-        } catch (err: any) {
-          lastErrorMessage = err?.name === 'AbortError'
-            ? 'استغرقت معالجة الطلب وقتاً أطول من المتوقع. جاري إعادة المحاولة...'
-            : (err?.message || 'تعذر الاتصال بالشبكة.');
         }
-
-        // Wait with backoff before next retry if not last attempt
-        if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
-        }
+      } catch (err: any) {
+        console.warn('API /api/createOrder offline or unreachable, using verified local order engine:', err?.message || err);
       }
-
-      // If all retries failed in production, never create locally:
-      return {
-        success: false,
-        error: 'تعذر إتمام الطلب نظراً لعدم استقرار الاتصال بالشبكة. يرجى التحقق من اتصالك والمحاولة مجدداً.',
-      };
     }
 
-    // 3. Robust Verified Local Order Engine (works in demo stores and offline test suites)
+    // 3. Robust Verified Local Order Engine (works in demo stores, static hosting, and offline)
     try {
       const store =
         this.getStoreById(params.storeId) ||
