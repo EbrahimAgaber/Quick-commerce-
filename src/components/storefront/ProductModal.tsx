@@ -128,7 +128,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     setTimeout(() => {
       setIsSuccess(false);
       onClose();
-    }, 800);
+    }, 700);
   };
 
   const handleAskOnWhatsApp = () => {
@@ -160,307 +160,305 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   ].filter((img) => Boolean(img) && !isLegacyWatchPlaceholder(img));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/70 backdrop-blur-xs">
-      {/* Backdrop click to close */}
+    <div className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4 bg-stone-950/70 backdrop-blur-xs">
+      {/* Backdrop */}
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
-      {/* Modal Dialog Card */}
-      <div className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl overflow-hidden z-10 border border-stone-200 my-auto flex flex-col md:flex-row max-h-[90vh]">
-        {/* Top Action Buttons (Close + Share) */}
-        <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
-          <button
-            onClick={handleShareProduct}
-            className="h-8 px-2.5 rounded-full bg-white/90 text-stone-700 hover:bg-stone-100 flex items-center gap-1 shadow-sm border border-stone-200 text-[11px] font-bold transition-transform active:scale-95 cursor-pointer"
-            title="مشاركة رابط المنتج"
-          >
-            {copiedShareLink ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-emerald-700">تم نسخ الرابط</span>
-              </>
-            ) : (
-              <>
-                <Share2 className="w-3.5 h-3.5" />
-                <span>مشاركة</span>
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/90 text-stone-700 hover:bg-stone-100 flex items-center justify-center shadow-sm border border-stone-200 transition-transform active:scale-90 cursor-pointer"
-            aria-label="إغلاق النافذة"
-          >
-            <X className="w-4 h-4" />
-          </button>
+      {/* Modal / Bottom Sheet Container */}
+      <div className="relative w-full sm:max-w-3xl bg-white rounded-t-[28px] sm:rounded-3xl shadow-2xl overflow-hidden z-10 border-t sm:border border-stone-200 flex flex-col max-h-[92vh] sm:max-h-[88vh] animate-in slide-in-from-top-4 sm:zoom-in-95 duration-200">
+        {/* Mobile Drag Indicator Handle */}
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-white cursor-grab">
+          <div className="w-10 h-1 bg-stone-300 rounded-full" />
         </div>
 
-        {/* Product Media Column */}
-        <div className="md:w-1/2 bg-stone-50 flex flex-col justify-between p-4 sm:p-6 border-b md:border-b-0 md:border-l border-stone-200 overflow-y-auto">
-          {/* Main Selected Image */}
-          <div className="aspect-4/3 w-full rounded-2xl overflow-hidden bg-stone-100 relative shadow-inner border border-stone-200">
-            <ProductImage
-              src={selectedImage}
-              alt={product.name}
-              category={product.category}
-              size="lg"
-              width={800}
-              height={600}
-              accentColor={brand.accentColor}
-              primaryColor={brand.primaryColor}
-              className="w-full h-full"
-              imgClassName="w-full h-full object-cover object-center transition-all duration-300"
-            />
-            {hasDiscount && (
-              <span 
-                className="absolute top-3 right-3 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow-sm z-20"
-                style={{ backgroundColor: brand.accentColor }}
-              >
-                وفر {discountPercent}%
-              </span>
+        {/* Top Header Controls (Close & Share) */}
+        <div className="px-4 py-2 sm:p-4 border-b border-stone-100 flex items-center justify-between bg-stone-50/70">
+          <div className="flex items-center gap-2 text-xs font-bold text-stone-600 truncate">
+            <span style={{ color: brand.accentColor }}>{product.category}</span>
+            {unitLabel && (
+              <>
+                <span className="text-stone-300">·</span>
+                <span className="text-stone-500 font-medium">{unitLabel}</span>
+              </>
             )}
           </div>
 
-          {/* Thumbnail Strip */}
-          {allImages.length > 1 && (
-            <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1">
-              {allImages.map((img, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    setSelectedImage(img);
-                  }}
-                  className={`w-14 h-14 rounded-xl overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
-                    selectedImage === img
-                      ? 'scale-105 shadow-xs'
-                      : 'border-transparent opacity-70 hover:opacity-100'
-                  }`}
-                  style={{ borderColor: selectedImage === img ? brand.accentColor : 'transparent' }}
-                >
-                  <ProductImage
-                    src={img}
-                    alt={`thumb-${idx}`}
-                    size="xs"
-                    width={120}
-                    height={120}
-                    className="w-full h-full"
-                    imgClassName="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleShareProduct}
+              className="min-h-[36px] px-2.5 rounded-lg bg-white text-stone-700 hover:bg-stone-100 flex items-center gap-1 border border-stone-200 text-xs font-bold transition-transform active:scale-95 cursor-pointer"
+              title="مشاركة رابط المنتج"
+            >
+              {copiedShareLink ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-emerald-700">تم النسخ</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">مشاركة</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-9 h-9 min-w-[36px] min-h-[36px] rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-transform active:scale-90 cursor-pointer"
+              aria-label="إغلاق"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Product Info & Controls Column */}
-        <div className="md:w-1/2 p-5 sm:p-6 flex flex-col justify-between overflow-y-auto space-y-4">
-          <div>
-            {/* Meta */}
-            <div className="flex items-center justify-between text-xs text-stone-500 mb-1.5">
-              <span className="font-semibold" style={{ color: brand.accentColor }}>{product.category}</span>
-              {maxStock !== undefined && maxStock > 0 && maxStock <= 10 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[11px]">
-                  <Flame className="w-3 h-3 text-amber-500" />
-                  <span>متبقي {maxStock} في المخزون</span>
-                </span>
-              )}
-            </div>
-
-            {/* Title */}
-            <h2 className="text-lg sm:text-xl font-bold leading-snug" style={{ color: brand.primaryColor }}>
-              {product.name}
-            </h2>
-
-            {/* Price Row */}
-            <div className="mt-3 flex flex-wrap items-baseline gap-2">
-              <span className="text-2xl font-black font-mono" style={{ color: brand.primaryColor }}>
-                {currentPrice.toLocaleString('en-US')}
-              </span>
-              <span className="text-sm font-bold text-stone-600">{settings.currency}</span>
-              {unitLabel && (
-                <span className="text-xs font-bold text-stone-700 bg-stone-100 px-2 py-0.5 rounded-lg border border-stone-200">
-                  / {unitLabel}
-                </span>
-              )}
+        {/* Scrollable Content Body */}
+        <div className="flex-1 overflow-y-auto flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-stone-100">
+          {/* Image & Gallery Column */}
+          <div className="md:w-1/2 p-4 sm:p-6 bg-stone-50/50 flex flex-col items-center justify-center">
+            <div className="aspect-square sm:aspect-4/3 w-full max-w-sm rounded-2xl overflow-hidden bg-white shadow-inner border border-stone-200 relative">
+              <ProductImage
+                src={selectedImage}
+                alt={product.name}
+                category={product.category}
+                size="lg"
+                width={600}
+                height={600}
+                accentColor={brand.accentColor}
+                primaryColor={brand.primaryColor}
+                className="w-full h-full"
+                imgClassName="w-full h-full object-cover object-center"
+              />
               {hasDiscount && (
-                <span className="text-sm text-stone-400 line-through mr-2">
-                  {product.price.toLocaleString('en-US')} {settings.currency}
+                <span 
+                  className="absolute top-2.5 right-2.5 text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs z-10"
+                  style={{ backgroundColor: brand.accentColor }}
+                >
+                  خصم {discountPercent}%
                 </span>
-              )}
-              {getZatcaComplianceType(settings) !== 'non_registered' && (
-                <span className="text-xs text-stone-500 font-medium mr-2">(شامل ضريبة القيمة المضافة 15%)</span>
               )}
             </div>
 
-            {/* Fabric / Specs notes */}
-            {product.fabricComposition && (
-              <div 
-                className="mt-3 p-2.5 rounded-xl border flex items-center gap-2 text-xs"
-                style={{ backgroundColor: `${brand.neutralColor}40`, borderColor: brand.neutralColor }}
-              >
-                <Sparkles className="w-4 h-4 shrink-0" style={{ color: brand.accentColor }} />
-                <span>
-                  <strong style={{ color: brand.primaryColor }}>المواصفات:</strong> {product.fabricComposition}
-                </span>
+            {/* Thumbnail Strip */}
+            {allImages.length > 1 && (
+              <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1 max-w-full">
+                {allImages.map((img, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedImage(img)}
+                    className={`w-12 h-12 rounded-xl overflow-hidden border-2 shrink-0 transition-all cursor-pointer ${
+                      selectedImage === img
+                        ? 'scale-105 shadow-xs'
+                        : 'border-transparent opacity-70 hover:opacity-100'
+                    }`}
+                    style={{ borderColor: selectedImage === img ? brand.accentColor : 'transparent' }}
+                  >
+                    <ProductImage
+                      src={img}
+                      alt={`thumb-${idx}`}
+                      size="xs"
+                      width={100}
+                      height={100}
+                      className="w-full h-full"
+                      imgClassName="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
               </div>
             )}
+          </div>
 
-            {/* Description */}
-            <div className="mt-4 text-xs sm:text-sm text-stone-600 leading-relaxed border-t border-stone-100 pt-3">
-              <p>{product.description}</p>
-            </div>
+          {/* Details & Options Column */}
+          <div className="md:w-1/2 p-4 sm:p-6 flex flex-col justify-between space-y-4">
+            <div className="space-y-3">
+              {/* Product Title */}
+              <h2 className="text-base sm:text-xl font-black leading-snug" style={{ color: brand.primaryColor }}>
+                {product.name}
+              </h2>
 
-            {/* Variants / Packages Selection */}
-            {realVariants.length > 0 && (
-              <div className="mt-5 space-y-2">
-                <span className="text-xs font-bold text-stone-800">اختر الخيار المطلوب:</span>
+              {/* Price Row */}
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-xl sm:text-2xl font-black font-mono tabular-nums" style={{ color: brand.primaryColor }}>
+                  {currentPrice.toLocaleString('en-US')}
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-stone-600">{settings.currency}</span>
+                {unitLabel && (
+                  <span className="text-xs font-semibold text-stone-600 bg-stone-100 px-2 py-0.5 rounded-md">
+                    لكل {unitLabel}
+                  </span>
+                )}
+                {hasDiscount && (
+                  <span className="text-xs sm:text-sm text-stone-400 line-through mr-1">
+                    {product.price.toLocaleString('en-US')}
+                  </span>
+                )}
+                {getZatcaComplianceType(settings) !== 'non_registered' && (
+                  <span className="text-[11px] text-stone-400 font-medium">(شامل الضريبة 15%)</span>
+                )}
+              </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {realVariants.map((v) => {
-                    const isSelected = selectedVariant === v;
+              {/* Description */}
+              {product.description && (
+                <p className="text-xs sm:text-sm text-stone-600 leading-relaxed font-normal">
+                  {product.description}
+                </p>
+              )}
+
+              {/* Variants Selection */}
+              {realVariants.length > 0 && (
+                <div className="space-y-1.5 pt-2">
+                  <span className="text-xs font-bold text-stone-800">الخيارات المتاحة:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {realVariants.map((v) => {
+                      const isSelected = selectedVariant === v;
+                      return (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setSelectedVariant(v)}
+                          className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer active:scale-95 ${
+                            isSelected
+                              ? 'text-white shadow-2xs'
+                              : 'bg-stone-50 text-stone-700 hover:bg-stone-100'
+                          }`}
+                          style={{
+                            backgroundColor: isSelected ? brand.primaryColor : '#F9FAFB',
+                            borderColor: isSelected ? brand.primaryColor : brand.neutralColor,
+                          }}
+                        >
+                          {v}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Quantity Stepper & Presets */}
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center justify-between text-xs font-bold text-stone-800">
+                  <span>الكمية المطلوبة:</span>
+                  {maxStock !== undefined && maxStock <= 10 && (
+                    <span className="text-amber-700 text-[11px] font-semibold flex items-center gap-1">
+                      <Flame className="w-3 h-3 text-amber-500" />
+                      متبقي {maxStock} فقط
+                    </span>
+                  )}
+                </div>
+
+                {/* Tactile Stepper Box */}
+                <div className="flex items-center justify-between p-1 bg-stone-100 rounded-xl border border-stone-200">
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustQuantity(-step)}
+                    disabled={quantity <= minQty}
+                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg bg-white text-stone-800 font-bold hover:bg-stone-50 disabled:opacity-30 flex items-center justify-center shadow-2xs text-lg active:scale-90 transition-transform cursor-pointer"
+                    aria-label="تقليل الكمية"
+                  >
+                    -
+                  </button>
+
+                  <div className="flex items-center justify-center gap-1.5 px-3">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      dir="ltr"
+                      value={quantityInput}
+                      onChange={(e) => handleQuantityInputChange(e.target.value)}
+                      onBlur={() => {
+                        if (!quantity || quantity < minQty) {
+                          setQuantity(minQty);
+                          setQuantityInput(String(minQty));
+                        }
+                      }}
+                      className="w-16 text-center text-base font-mono tabular-nums font-bold text-stone-900 bg-white border border-stone-200 rounded-lg py-1 px-1 focus:outline-none"
+                    />
+                    {unitLabel && (
+                      <span className="text-xs font-bold text-stone-600">{unitLabel}</span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustQuantity(step)}
+                    disabled={maxStock !== undefined && quantity >= maxStock}
+                    className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-lg bg-white text-stone-800 font-bold hover:bg-stone-50 disabled:opacity-30 flex items-center justify-center shadow-2xs text-lg active:scale-90 transition-transform cursor-pointer"
+                    aria-label="زيادة الكمية"
+                  >
+                    +
+                  </button>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  {(isFractional ? [0.5, 1, 1.5, 2] : [1, 2, 3, 5]).map((preset) => {
+                    const isSelected = Math.abs(quantity - preset) < 0.001;
                     return (
                       <button
-                        key={v}
-                        onClick={() => setSelectedVariant(v)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                        key={preset}
+                        type="button"
+                        onClick={() => handleSetQuickQuantity(preset)}
+                        className={`min-h-[32px] px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer active:scale-95 ${
                           isSelected
-                            ? 'text-white shadow-xs ring-2 ring-blue-500/20'
-                            : 'bg-stone-50 text-stone-700 hover:bg-stone-100'
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                            : 'bg-white text-stone-700 hover:bg-stone-50 border-stone-200'
                         }`}
-                        style={{
-                          backgroundColor: isSelected ? brand.primaryColor : '#F9FAFB',
-                          borderColor: isSelected ? brand.primaryColor : brand.neutralColor,
-                        }}
                       >
-                        {v}
+                        {preset === 0.5 ? '½' : preset} {unitLabel || 'حبة'}
                       </button>
                     );
                   })}
                 </div>
               </div>
-            )}
-
-            {/* Quantity Selector with Custom Amount & Quick Chips */}
-            <div className="mt-5 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-stone-800">
-                  الكمية المطلوبة {unitLabel ? `(${unitLabel})` : ''}:
-                </span>
-                <span className="text-[11px] text-stone-500">
-                  (الخطوة: {step} {unitLabel} · الحد الأدنى: {minQty})
-                </span>
-              </div>
-
-              {/* Stepper with direct editable text input */}
-              <div className="flex items-center justify-between p-1.5 bg-stone-100 rounded-2xl border border-stone-200">
-                <button
-                  type="button"
-                  onClick={() => handleAdjustQuantity(-step)}
-                  disabled={quantity <= minQty}
-                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-xl bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center shadow-xs cursor-pointer text-lg"
-                  aria-label="تقليل الكمية"
-                >
-                  -
-                </button>
-
-                <div className="flex items-center justify-center gap-1.5 flex-1 px-2">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    dir="ltr"
-                    value={quantityInput}
-                    onChange={(e) => handleQuantityInputChange(e.target.value)}
-                    onBlur={() => {
-                      if (!quantity || quantity < minQty) {
-                        setQuantity(minQty);
-                        setQuantityInput(String(minQty));
-                      }
-                    }}
-                    className="w-20 text-center text-base sm:text-lg font-mono font-bold text-stone-900 bg-white border border-stone-200 rounded-lg py-1 px-2 focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30"
-                  />
-                  {unitLabel && (
-                    <span className="text-xs font-semibold text-stone-600">
-                      {unitLabel}
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleAdjustQuantity(step)}
-                  disabled={maxStock !== undefined && quantity >= maxStock}
-                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-xl bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center shadow-xs cursor-pointer text-lg"
-                  aria-label="زيادة الكمية"
-                >
-                  +
-                </button>
-              </div>
-
-              {/* Quick Preset Amount Chips */}
-              <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                <span className="text-[10px] text-stone-400 font-bold ml-1">كميات سريعة:</span>
-                {(isFractional ? [0.5, 1, 1.5, 2, 3] : [1, 2, 3, 5, 10]).map((preset) => {
-                  const isSelected = Math.abs(quantity - preset) < 0.001;
-                  return (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => handleSetQuickQuantity(preset)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
-                        isSelected
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                          : 'bg-white text-stone-700 hover:bg-stone-50 border-stone-200'
-                      }`}
-                    >
-                      {preset === 0.5 ? '½' : preset === 1.5 ? '1.5' : preset} {unitLabel || 'حبة'}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
           </div>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="pt-4 border-t border-stone-200 space-y-2">
-            <button
-              onClick={handleAdd}
-              disabled={isOutOfStock}
-              className={`w-full py-3.5 px-4 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 text-white cursor-pointer ${
-                isOutOfStock ? 'bg-stone-300 text-stone-500 cursor-not-allowed' : ''
-              }`}
-              style={{
-                backgroundColor: isSuccess ? '#059669' : !isOutOfStock ? brand.primaryColor : '#D1D5DB',
-              }}
-            >
-              {isSuccess ? (
-                <>
-                  <Check className="w-5 h-5 text-white" />
-                  <span>تمت الإضافة للسلة بنجاح!</span>
-                </>
-              ) : !isOutOfStock ? (
-                <>
-                  <ShoppingBag className="w-5 h-5" style={{ color: brand.highlightColor || '#A5F3B6' }} />
-                  <span>
-                    إضافة للسلة · {calculatedLineTotal.toLocaleString('en-US')} {settings.currency}
-                    {unitLabel ? ` (${quantity} ${unitLabel})` : ''}
-                  </span>
-                </>
-              ) : (
-                <span>نفدت الكمية حالياً</span>
-              )}
-            </button>
-
-            {/* Quick Ask on WhatsApp */}
-            {settings.whatsappNumber && (
-              <button
-                onClick={handleAskOnWhatsApp}
-                className="w-full py-2.5 px-3 rounded-xl text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-colors border border-emerald-200/50 cursor-pointer"
-              >
-                <MessageCircle className="w-4 h-4 text-emerald-600" />
-                <span>استفسار مباشر عن المنتج عبر الواتساب</span>
-              </button>
+        {/* Sticky Thumb-Zone Bottom Purchase Bar */}
+        <div className="sticky bottom-0 bg-white border-t border-stone-200 p-3 sm:p-4 pb-safe space-y-2 shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={isOutOfStock}
+            className={`w-full min-h-[48px] py-3 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 text-white cursor-pointer ${
+              isOutOfStock ? 'bg-stone-300 text-stone-500 cursor-not-allowed' : ''
+            }`}
+            style={{
+              backgroundColor: isSuccess ? '#059669' : !isOutOfStock ? brand.primaryColor : '#D1D5DB',
+            }}
+          >
+            {isSuccess ? (
+              <>
+                <Check className="w-5 h-5 text-white" />
+                <span>تمت الإضافة للسلة بنجاح!</span>
+              </>
+            ) : !isOutOfStock ? (
+              <>
+                <ShoppingBag className="w-4.5 h-4.5" style={{ color: brand.highlightColor || '#A5F3B6' }} />
+                <span>
+                  إضافة للسلة · {calculatedLineTotal.toLocaleString('en-US')} {settings.currency}
+                  {unitLabel ? ` (${quantity} ${unitLabel})` : ''}
+                </span>
+              </>
+            ) : (
+              <span>نفدت الكمية حالياً</span>
             )}
-          </div>
+          </button>
+
+          {/* Quick WhatsApp Inquiry */}
+          {settings.whatsappNumber && (
+            <button
+              type="button"
+              onClick={handleAskOnWhatsApp}
+              className="w-full min-h-[40px] py-2 px-3 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-colors border border-emerald-200/50 cursor-pointer active:scale-98"
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+              <span>استفسار مباشر عن المنتج عبر الواتساب</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

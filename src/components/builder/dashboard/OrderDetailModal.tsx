@@ -226,6 +226,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           <div><strong>العميل:</strong> {order.customerName}</div>
           <div><strong>الجوال:</strong> <span className="font-mono" dir="ltr">{order.customerPhone}</span></div>
           <div><strong>العنوان:</strong> {order.city} — {order.deliveryAddress}</div>
+          <div>
+            <strong>نوع الاستلام:</strong>{' '}
+            <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
+              order.deliveryType === 'pickup' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+            }`}>
+              {order.deliveryType === 'pickup' ? '🏪 استلام من الفرع (مقر المتجر)' : '🚚 توصيل للمنزل'}
+            </span>
+          </div>
           {order.deliveryPin && (
             <div><strong>كود تأكيد التسليم (PIN):</strong> <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">{order.deliveryPin}</span></div>
           )}

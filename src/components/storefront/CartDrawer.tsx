@@ -191,7 +191,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-stone-200 text-stone-600 hover:text-stone-900 flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl bg-stone-200/80 text-stone-700 hover:bg-stone-200 flex items-center justify-center transition-transform active:scale-90 cursor-pointer"
             aria-label="إغلاق السلة"
           >
             <X className="w-4 h-4" />
@@ -327,21 +327,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
                     {/* Quantity & Item Total */}
                     <div className="flex items-center justify-between pt-2">
-                      <div className="flex items-center gap-1.5 bg-stone-100 rounded-lg p-0.5 border border-stone-200">
+                      <div className="flex items-center gap-1.5 bg-stone-100 rounded-xl p-1 border border-stone-200">
                         <button
                           onClick={handleDecrease}
-                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center text-xs cursor-pointer shadow-2xs"
+                          className="w-8 h-8 min-w-[32px] min-h-[32px] rounded-lg bg-white text-stone-700 font-bold hover:bg-stone-50 flex items-center justify-center text-sm cursor-pointer shadow-2xs active:scale-90 transition-transform"
                           aria-label="تقليل الكمية"
                         >
                           -
                         </button>
-                        <span className="px-1 text-center text-xs font-mono font-bold text-stone-900 whitespace-nowrap">
+                        <span className="px-2 text-center text-xs font-mono font-bold text-stone-900 whitespace-nowrap">
                           {item.quantity}{uLabel ? ` ${uLabel}` : ''}
                         </span>
                         <button
                           onClick={handleIncrease}
                           disabled={maxStock !== undefined && item.quantity >= maxStock}
-                          className="w-6 h-6 rounded bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center text-xs cursor-pointer shadow-2xs"
+                          className="w-8 h-8 min-w-[32px] min-h-[32px] rounded-lg bg-white text-stone-700 font-bold hover:bg-stone-50 disabled:opacity-40 flex items-center justify-center text-sm cursor-pointer shadow-2xs active:scale-90 transition-transform"
                           aria-label="زيادة الكمية"
                         >
                           +
@@ -362,7 +362,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
         {/* Footer with breakdown & checkout button */}
         {items.length > 0 && (
-          <div className="p-4 border-t bg-stone-50 space-y-3" style={{ borderColor: brand.neutralColor }}>
+          <div className="p-4 pb-safe border-t bg-stone-50 space-y-3" style={{ borderColor: brand.neutralColor }}>
             {/* Promo / Coupon Code Input */}
             <form onSubmit={handleApplyCoupon} className="flex gap-2">
               <div className="relative flex-1">
@@ -461,7 +461,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             {/* Checkout Action Button */}
             <button
               onClick={onProceedToCheckout}
-              className="w-full py-3.5 px-4 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 cursor-pointer"
+              className="w-full min-h-[48px] py-3.5 px-4 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all active:scale-98 cursor-pointer"
               style={{ backgroundColor: brand.primaryColor }}
             >
               <span>متابعة إتمام الطلب</span>

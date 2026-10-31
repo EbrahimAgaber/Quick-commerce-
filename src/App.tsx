@@ -24,12 +24,14 @@ import { isPlatformSuperOwner } from './utils/security';
 
 // Core Storefront Layout & Components (Eagerly loaded for instant First Contentful Paint)
 import { Navbar, AppViewMode, DevicePreviewMode } from './components/layout/Navbar';
+import { MobileBottomNav } from './components/layout/MobileBottomNav';
 import { AnnouncementBar } from './components/layout/AnnouncementBar';
 import { HeroBanner } from './components/storefront/HeroBanner';
 import { CategoryFilter } from './components/storefront/CategoryFilter';
 import { ProductGrid } from './components/storefront/ProductGrid';
 import { ProductModal } from './components/storefront/ProductModal';
 import { CartDrawer } from './components/storefront/CartDrawer';
+import { CartNotificationToast } from './components/storefront/CartNotificationToast';
 import { OrderSuccessModal } from './components/storefront/OrderSuccessModal';
 import { MerchantAuthGate } from './components/auth/MerchantAuthGate';
 import { Footer } from './components/layout/Footer';
@@ -391,6 +393,14 @@ export default function App() {
   const [isNewStoreWizardOpen, setIsNewStoreWizardOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const [lastAddedItem, setLastAddedItem] = useState<{
+    product: Product;
+    quantity: number;
+    variant?: string;
+  } | null>(null);
+  const [isCartToastOpen, setIsCartToastOpen] = useState(false);
+  const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
+  const [mobileActiveTab, setMobileActiveTab] = useState<'store' | 'search' | 'tracker' | 'cart' | 'dashboard'>('store');
 
   const handleSelectStore = (storeId: string) => {
     const store = StoreManager.getStoreById(storeId);
@@ -630,7 +640,13 @@ export default function App() {
   }, [cart]);
 
   // Cart handlers
-  const handleAddToCart = (product: Product, variant: string, quantity: number, replaceExisting = false) => {
+  const handleAddToCart = (
+    product: Product,
+    variant: string,
+    quantity: number,
+    replaceExisting = false,
+    showToast = true
+  ) => {
     const cleanVariant = (!variant || variant === 'الخيار الافتراضي') ? '' : variant;
     setCart((prev) => {
       const existingIdx = prev.findIndex((item) => {
@@ -655,6 +671,11 @@ export default function App() {
       }
       return [...prev, { product, selectedVariant: cleanVariant, quantity: Math.min(maxAllowed, quantity) }];
     });
+
+    if (showToast) {
+      setLastAddedItem({ product, quantity, variant: cleanVariant });
+      setIsCartToastOpen(true);
+    }
   };
 
   // Smart Quick Add: If product has multiple variants or is sold by weight/fraction, open ProductModal so buyer picks their option
@@ -674,7 +695,7 @@ export default function App() {
 
     const defaultVariant = realVariants.length > 0 ? realVariants[0] : '';
     const initialQty = product.minQuantity && product.minQuantity > 0 ? product.minQuantity : 1;
-    handleAddToCart(product, defaultVariant, initialQty);
+    handleAddToCart(product, defaultVariant, initialQty, false, true);
     setJustAddedId(product.id);
     setTimeout(() => setJustAddedId(null), 1200);
   };
@@ -718,6 +739,81 @@ export default function App() {
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
     setCompletedOrder(order);
+  };
+
+  // Reorder past order items into active shopping cart
+  const handleReorderOrder = (order: Order) => {
+    if (!order) return;
+
+    const itemsToAdd: { product: Product; variant: string; quantity: number }[] = [];
+
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      order.items.forEach((item) => {
+        const found = products.find((p) => p.id === item.productId || p.name === item.name);
+        const product: Product = found || {
+          id: item.productId || `prod_reorder_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          name: item.name,
+          category: 'الطلبات السابقة',
+          price: item.price || 0,
+          variants: item.variant ? [item.variant] : [],
+          imageUrl: item.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80',
+          galleryImages: [],
+          description: '',
+          featured: false,
+          inStock: true,
+          unit: (item.unit as any) || 'piece',
+          unitLabel: item.unitLabel,
+        };
+        itemsToAdd.push({
+          product,
+          variant: item.variant || '',
+          quantity: item.quantity > 0 ? item.quantity : 1,
+        });
+      });
+    } else if (order.itemsSummary) {
+      const parts = order.itemsSummary.split('+').map((s) => s.trim()).filter(Boolean);
+      parts.forEach((part, idx) => {
+        const qtyMatch = part.match(/×\s*(\d+)/) || part.match(/x\s*(\d+)/);
+        const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+        const cleanName = part.replace(/×\s*\d+/, '').replace(/x\s*\d+/, '').trim();
+        const found = products.find((p) => cleanName.includes(p.name) || p.name.includes(cleanName));
+        const product: Product = found || {
+          id: `reorder_summary_${idx}_${Date.now()}`,
+          name: cleanName || 'منتج من طلب سابق',
+          category: 'الطلبات السابقة',
+          price: Math.round(order.subtotal / Math.max(1, parts.length)),
+          variants: [],
+          imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80',
+          galleryImages: [],
+          description: '',
+          featured: false,
+          inStock: true,
+          unit: 'piece',
+        };
+        itemsToAdd.push({
+          product,
+          variant: '',
+          quantity: qty,
+        });
+      });
+    }
+
+    if (itemsToAdd.length === 0) return;
+
+    itemsToAdd.forEach(({ product, variant, quantity }) => {
+      handleAddToCart(product, variant, quantity, false, false);
+    });
+
+    const firstItem = itemsToAdd[0];
+    setLastAddedItem({
+      product: firstItem.product,
+      quantity: firstItem.quantity,
+      variant: firstItem.variant,
+    });
+    setIsTrackerOpen(false);
+    setTrackerInitialId('');
+    setIsCartOpen(true);
+    setIsCartToastOpen(true);
   };
 
   // Admin DB Updaters
@@ -1092,6 +1188,11 @@ export default function App() {
           setViewMode('landing');
         }}
         isShopperPreviewOnly={isShopperPreviewOnly}
+        isMobileSearchExpanded={isMobileSearchExpanded}
+        onToggleMobileSearch={() => {
+          setIsMobileSearchExpanded((prev) => !prev);
+          setMobileActiveTab(isMobileSearchExpanded ? 'store' : 'search');
+        }}
       />
 
       {/* VIEW MODE 1: BUSINESS OWNER DASHBOARD (SIMPLE MERCHANT HUB) */}
@@ -1295,27 +1396,27 @@ export default function App() {
             </main>
           )}
 
-          {/* Sticky Mobile Bottom Cart Bar for High Mobile Conversion */}
+          {/* Sticky Mobile Bottom Cart Bar for High Mobile Conversion (docked cleanly above mobile bottom nav) */}
           {cartCount > 0 && !isCartOpen && !isCheckoutOpen && (
-            <div className="fixed bottom-4 inset-x-4 z-40 sm:hidden animate-in fade-in">
+            <div className="fixed bottom-18 inset-x-3.5 z-40 sm:hidden animate-in fade-in">
               <button
                 onClick={() => setIsCartOpen(true)}
-                className="w-full py-3.5 px-5 rounded-2xl text-white shadow-xl flex items-center justify-between font-bold text-sm active:scale-95 transition-transform cursor-pointer"
+                className="w-full py-3 px-4.5 rounded-2xl text-white shadow-xl flex items-center justify-between font-bold text-xs sm:text-sm active:scale-95 transition-transform cursor-pointer border border-white/10"
                 style={{ backgroundColor: brand.primaryColor }}
               >
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                   <span
-                    className="w-6 h-6 rounded-full text-xs font-black flex items-center justify-center"
+                    className="w-5.5 h-5.5 rounded-full text-[11px] font-black flex items-center justify-center shrink-0"
                     style={{ backgroundColor: brand.accentColor, color: '#ffffff' }}
                   >
                     {cartCount}
                   </span>
                   <span>عرض السلة وإتمام الطلب</span>
                 </div>
-                <div className="flex items-center gap-1.5 font-mono">
+                <div className="flex items-center gap-1 font-mono tabular-nums text-xs font-black">
                   <span>{cartTotal.toLocaleString('en-US')}</span>
                   <span>{settings.currency}</span>
-                  <ShoppingBag className="w-4 h-4 mr-1" style={{ color: brand.highlightColor || '#86EFAC' }} />
+                  <ShoppingBag className="w-4 h-4 mr-0.5" style={{ color: brand.highlightColor || '#86EFAC' }} />
                 </div>
               </button>
             </div>
@@ -1330,6 +1431,43 @@ export default function App() {
             }}
             onOpenCaptainPortal={() => setIsCaptainPortalOpen(true)}
             isStoreOwner={isStoreOwner}
+          />
+
+          {/* Mobile Bottom Thumb Navigation */}
+          <MobileBottomNav
+            settings={settings}
+            activeTab={mobileActiveTab}
+            onSelectTab={(tab) => {
+              setMobileActiveTab(tab);
+              if (tab === 'store') {
+                setViewMode('storefront');
+                const el = document.getElementById('catalog-section');
+                el?.scrollIntoView({ behavior: 'smooth' });
+              } else if (tab === 'search') {
+                setViewMode('storefront');
+                setIsMobileSearchExpanded(true);
+              } else if (tab === 'tracker') {
+                setTrackerInitialId('');
+                setIsTrackerOpen(true);
+              } else if (tab === 'cart') {
+                setIsCartOpen(true);
+              } else if (tab === 'dashboard') {
+                setViewMode('dashboard');
+              }
+            }}
+            cartCount={cartCount}
+            cartTotal={cartTotal}
+            onOpenCart={() => setIsCartOpen(true)}
+            onOpenTracker={() => {
+              setTrackerInitialId('');
+              setIsTrackerOpen(true);
+            }}
+            onToggleSearch={() => {
+              setIsMobileSearchExpanded((prev) => !prev);
+            }}
+            onOpenDashboard={() => setViewMode('dashboard')}
+            isStoreOwner={isStoreOwner}
+            isDashboardActive={false}
           />
         </>
       )}
@@ -1384,6 +1522,7 @@ export default function App() {
             orders={orders}
             settings={settings}
             initialOrderId={trackerInitialId}
+            onReorder={handleReorderOrder}
           />
         )}
 
@@ -1470,6 +1609,27 @@ export default function App() {
           onTrackOrder={handleOpenTrackerWithId}
         />
       )}
+
+      {/* 13. Instant Shopper Add to Cart Toast */}
+      <CartNotificationToast
+        isOpen={isCartToastOpen}
+        product={lastAddedItem?.product || null}
+        quantity={lastAddedItem?.quantity || 1}
+        variant={lastAddedItem?.variant}
+        cartCount={cartCount}
+        cartTotal={cartTotal}
+        settings={settings}
+        onClose={() => setIsCartToastOpen(false)}
+        onOpenCheckout={() => {
+          setIsCartToastOpen(false);
+          setIsCartOpen(false);
+          setIsCheckoutOpen(true);
+        }}
+        onOpenCart={() => {
+          setIsCartToastOpen(false);
+          setIsCartOpen(true);
+        }}
+      />
 
       {/* 10. Floating Multi-Channel Order Notification Toast - Merchant Only */}
       {currentUser && !isShopperPreviewOnly && (

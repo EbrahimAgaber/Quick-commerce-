@@ -23,10 +23,12 @@ if (!(globalThis as any).window) {
 // Test Hygiene: Hermetic fetch stub preventing ANY network egress to storelink.sa or localhost
 (globalThis as any).fetch = vi.fn(async (input: any, init?: any) => {
   const url = typeof input === 'string' ? input : input?.url || '';
+  const headers = new Headers({ 'content-type': 'application/json' });
   if (url.includes('/api/tracking')) {
     return {
       ok: true,
       status: 200,
+      headers,
       json: async () => ({
         success: true,
         tracking: {
@@ -47,6 +49,7 @@ if (!(globalThis as any).window) {
     return {
       ok: true,
       status: 200,
+      headers,
       json: async () => ({ success: true, order: { id: 'MOCK-ORDER-1' } }),
       text: async () => JSON.stringify({ success: true }),
     };
@@ -54,6 +57,7 @@ if (!(globalThis as any).window) {
   return {
     ok: true,
     status: 200,
+    headers,
     json: async () => ({ success: true }),
     text: async () => '{}',
   };

@@ -56,10 +56,14 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/75 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4 bg-stone-950/75 backdrop-blur-xs">
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
-      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10 border border-stone-200 p-6 sm:p-8 text-center space-y-5 animate-in zoom-in-95 duration-200">
+      <div className="relative w-full sm:max-w-md bg-white rounded-t-[28px] sm:rounded-3xl shadow-2xl overflow-y-auto max-h-[92vh] sm:max-h-[90vh] z-10 border-t sm:border border-stone-200 p-5 sm:p-8 text-center space-y-4 pb-safe animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200">
+        {/* Mobile Drag Handle */}
+        <div className="sm:hidden -mt-1 pb-1 flex justify-center cursor-grab">
+          <div className="w-10 h-1 bg-stone-300 rounded-full" />
+        </div>
         {/* Top Close Button */}
         <button
           onClick={onClose}

@@ -17,7 +17,8 @@ import {
   Loader2,
   FileText,
   RotateCcw,
-  ShieldCheck
+  ShieldCheck,
+  Store
 } from 'lucide-react';
 import { createWhatsAppUrl, getOrderDeliveryPin } from '../../utils/whatsappInvoice';
 import { InvoiceModal } from './InvoiceModal';
@@ -30,6 +31,7 @@ interface OrderTrackerModalProps {
   orders: Order[];
   settings: StoreSettings;
   initialOrderId?: string;
+  onReorder?: (order: Order) => void;
 }
 
 const STEPS: { status: OrderStatus; label: string; desc: string; icon: any }[] = [
@@ -66,6 +68,7 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
   orders,
   settings,
   initialOrderId = '',
+  onReorder,
 }) => {
   const [searchId, setSearchId] = useState(initialOrderId);
   const [searchedOrder, setSearchedOrder] = useState<Order | null>(null);
@@ -150,10 +153,14 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/70 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4 bg-stone-950/70 backdrop-blur-xs">
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
-      <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden z-10 border border-stone-200 my-auto flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-2xl bg-white rounded-t-[28px] sm:rounded-3xl shadow-2xl overflow-hidden z-10 border-t sm:border border-stone-200 flex flex-col max-h-[92vh] sm:max-h-[90vh] pb-safe animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200">
+        {/* Mobile Drag Indicator Handle */}
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-stone-50 cursor-grab">
+          <div className="w-10 h-1 bg-stone-300 rounded-full" />
+        </div>
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-stone-200 bg-stone-50 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -397,11 +404,17 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 space-y-1">
                   <span className="font-bold text-stone-800 flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-stone-500" />
-                    مدينة التوصيل:
+                    {searchedOrder.deliveryType === 'pickup' ? (
+                      <Store className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <MapPin className="w-3.5 h-3.5 text-stone-500" />
+                    )}
+                    {searchedOrder.deliveryType === 'pickup' ? 'طريقة الاستلام:' : 'مدينة التوصيل:'}
                   </span>
                   <p className="text-stone-700 font-semibold">
-                    {searchedOrder.city}
+                    {searchedOrder.deliveryType === 'pickup'
+                      ? 'استلام من الفرع / المتجر (بدون شحن)'
+                      : searchedOrder.city}
                   </p>
                 </div>
 
@@ -418,12 +431,65 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
               </div>
 
               {/* Items in order */}
-              <div className="border border-stone-200 rounded-2xl p-4 space-y-2">
-                <h5 className="text-xs font-bold text-stone-800">المنتجات المطلوبة:</h5>
-                <p className="text-xs text-stone-600 leading-relaxed font-mono">
-                  {searchedOrder.itemsSummary}
-                </p>
+              <div className="border border-stone-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-stone-500" />
+                    <span>المنتجات المطلوبة:</span>
+                  </h5>
+                  <span className="text-[11px] font-bold text-stone-500">
+                    {searchedOrder.items?.length || 1} منتج
+                  </span>
+                </div>
+
+                {searchedOrder.items && searchedOrder.items.length > 0 ? (
+                  <div className="divide-y divide-stone-100 space-y-2">
+                    {searchedOrder.items.map((item, idx) => (
+                      <div key={idx} className="pt-2 flex items-center justify-between text-xs gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {item.imageUrl && (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="w-10 h-10 object-cover rounded-lg border border-stone-100 shrink-0"
+                            />
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-bold text-stone-800 truncate">{item.name}</p>
+                            {item.variant && (
+                              <p className="text-[11px] text-stone-500">{item.variant}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-left shrink-0">
+                          <p className="font-bold text-stone-900 font-mono">
+                            {item.price} {settings.currency} × {item.quantity}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-stone-600 leading-relaxed font-mono">
+                    {searchedOrder.itemsSummary}
+                  </p>
+                )}
               </div>
+
+              {/* Reorder Button: automatically adds items back into cart */}
+              {onReorder && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onReorder(searchedOrder);
+                    onClose();
+                  }}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm active:scale-98 cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4 text-white" />
+                  <span>إعادة طلب هذه المنتجات (إضافة للسلة)</span>
+                </button>
+              )}
 
               {/* Return / Exchange Action Card for Delivered Orders */}
               {searchedOrder.status === 'Delivered' && (

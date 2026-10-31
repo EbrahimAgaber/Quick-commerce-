@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { StoreSettings, MerchantUser, StoreInstance } from '../../types/store';
 import { 
   ShoppingBag, 
@@ -16,7 +16,8 @@ import {
   Store,
   Share2,
   Check,
-  Truck
+  Truck,
+  X
 } from 'lucide-react';
 
 export type AppViewMode = 'landing' | 'dashboard' | 'storefront';
@@ -47,6 +48,8 @@ interface NavbarProps {
   onOpenAuth?: () => void;
   onLogout?: () => void;
   isShopperPreviewOnly?: boolean;
+  isMobileSearchExpanded?: boolean;
+  onToggleMobileSearch?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -74,10 +77,16 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onLogout,
   isShopperPreviewOnly = false,
+  isMobileSearchExpanded = false,
+  onToggleMobileSearch,
 }) => {
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [localSearchExpanded, setLocalSearchExpanded] = useState(false);
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+
+  const isSearchVisible = isMobileSearchExpanded || localSearchExpanded || Boolean(searchQuery);
 
   const brand = settings.brandTheme || {
     primaryColor: '#0F172A',
@@ -96,6 +105,20 @@ export const Navbar: React.FC<NavbarProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const toggleSearch = () => {
+    if (onToggleMobileSearch) {
+      onToggleMobileSearch();
+    } else {
+      setLocalSearchExpanded((prev) => !prev);
+    }
+  };
+
+  useEffect(() => {
+    if (isSearchVisible && mobileSearchInputRef.current) {
+      mobileSearchInputRef.current.focus();
+    }
+  }, [isSearchVisible]);
+
   // Strictly show Merchant Toolbar ONLY when the logged-in user owns this store (or is inside dashboard view) and is not in shopper preview mode
   const showMerchantToolbar = !isShopperPreviewOnly && Boolean(currentUser && (isStoreOwner || viewMode === 'dashboard'));
 
@@ -104,32 +127,32 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Top Merchant Control Bar - Strictly isolated to the authenticated store owner */}
       {showMerchantToolbar && currentUser && (
         <div 
-          className="text-stone-200 px-4 py-1.5 text-xs flex flex-wrap items-center justify-between gap-2 border-b"
+          className="text-stone-200 px-3 sm:px-4 py-1.5 text-xs flex items-center justify-between gap-2 border-b overflow-x-auto scrollbar-none"
           style={{ backgroundColor: brand.primaryColor, borderColor: 'rgba(255,255,255,0.1)' }}
         >
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-1.5">
               <span 
-                className="inline-block w-2 h-2 rounded-full animate-pulse"
+                className="inline-block w-2 h-2 rounded-full animate-pulse shrink-0"
                 style={{ backgroundColor: brand.highlightColor || '#86EFAC' }}
               />
-              <span className="font-bold text-white text-xs">لوحة التاجر</span>
+              <span className="font-bold text-white text-[11px] sm:text-xs whitespace-nowrap">لوحة التاجر</span>
             </div>
 
             {/* Store Switcher Dropdown - Shows ONLY this merchant's own stores */}
             <div className="relative">
               <button
                 onClick={() => setIsStoreMenuOpen(!isStoreMenuOpen)}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors font-medium text-xs cursor-pointer"
+                className="flex items-center gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors font-medium text-[11px] sm:text-xs cursor-pointer whitespace-nowrap"
               >
-                <Store className="w-3.5 h-3.5" style={{ color: brand.highlightColor || '#86EFAC' }} />
-                <span className="max-w-[120px] sm:max-w-[180px] truncate">{settings.storeName}</span>
+                <Store className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: brand.highlightColor || '#86EFAC' }} />
+                <span className="max-w-[100px] sm:max-w-[160px] truncate">{settings.storeName}</span>
                 <ChevronDown className="w-3 h-3 text-stone-300" />
               </button>
 
               {isStoreMenuOpen && (
                 <div 
-                  className="absolute right-0 top-full mt-1.5 w-64 bg-white text-stone-900 rounded-2xl shadow-xl border border-stone-200 p-2 z-50 animate-in fade-in zoom-in-95"
+                  className="absolute right-0 top-full mt-1.5 w-60 sm:w-64 bg-white text-stone-900 rounded-2xl shadow-xl border border-stone-200 p-2 z-50 animate-in fade-in zoom-in-95"
                   onClick={() => setIsStoreMenuOpen(false)}
                 >
                   <div className="text-[11px] font-bold text-stone-400 px-2 py-1">متاجرك الخاصة:</div>
@@ -170,51 +193,53 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
-            {/* Quick Share Live Store URL - Visible on Mobile & Desktop */}
+            {/* Quick Share Live Store URL */}
             <button
               onClick={handleCopyShareLink}
-              className="flex items-center gap-1 px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-xs font-medium cursor-pointer"
+              className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-[11px] sm:text-xs font-medium cursor-pointer whitespace-nowrap"
               title="نسخ رابط المتجر للعملاء"
             >
               {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Share2 className="w-3 h-3" />}
-              <span className="hidden sm:inline">{copiedLink ? 'تم نسخ رابط المتجر!' : 'نسخ رابط المتجر للعملاء'}</span>
-              <span className="sm:hidden">{copiedLink ? 'تم النسخ!' : 'رابط المتجر'}</span>
+              <span className="hidden sm:inline">{copiedLink ? 'تم النسخ!' : 'نسخ رابط المتجر'}</span>
+              <span className="sm:hidden">{copiedLink ? 'تم' : 'مشاركة'}</span>
             </button>
           </div>
 
-          {/* Simplified View Switcher: Dashboard vs Visitor Storefront ONLY */}
-          <div className="flex items-center gap-1 bg-black/25 p-0.5 rounded-lg border border-white/10">
-            <button
-              onClick={() => onViewModeChange('dashboard')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'dashboard'
-                  ? 'bg-white text-stone-900 shadow-xs'
-                  : 'text-stone-300 hover:text-white'
-              }`}
-            >
-              <LayoutDashboard className="w-3.5 h-3.5 text-[#2563EB]" />
-              <span>لوحة التحكم</span>
-            </button>
+          {/* View Switcher: Dashboard vs Storefront */}
+          <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 bg-black/25 p-0.5 rounded-lg border border-white/10">
+              <button
+                onClick={() => onViewModeChange('dashboard')}
+                className={`flex items-center gap-1 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded text-[11px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  viewMode === 'dashboard'
+                    ? 'bg-white text-stone-900 shadow-xs'
+                    : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <LayoutDashboard className="w-3 h-3 text-[#2563EB]" />
+                <span className="hidden sm:inline">لوحة التحكم</span>
+                <span className="sm:hidden">الإدارة</span>
+              </button>
 
-            <button
-              onClick={() => onViewModeChange('storefront')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                viewMode === 'storefront'
-                  ? 'bg-white text-stone-900 shadow-xs'
-                  : 'text-stone-300 hover:text-white'
-              }`}
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-amber-500" />
-              <span>واجهة الزبون</span>
-            </button>
-          </div>
+              <button
+                onClick={() => onViewModeChange('storefront')}
+                className={`flex items-center gap-1 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded text-[11px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  viewMode === 'storefront'
+                    ? 'bg-white text-stone-900 shadow-xs'
+                    : 'text-stone-300 hover:text-white'
+                }`}
+              >
+                <ShoppingBag className="w-3 h-3 text-amber-500" />
+                <span className="hidden sm:inline">واجهة الزبون</span>
+                <span className="sm:hidden">المتجر</span>
+              </button>
+            </div>
 
-          {/* Owner Profile & Device Preview */}
-          <div className="flex items-center gap-2">
+            {/* Owner Profile Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-1.5 px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-xs font-medium cursor-pointer"
+                className="flex items-center gap-1 p-1 sm:px-2 sm:py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors text-xs font-medium cursor-pointer"
               >
                 {currentUser.avatarUrl ? (
                   <img src={currentUser.avatarUrl} alt="" className="w-4 h-4 rounded-full object-cover" />
@@ -223,23 +248,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {currentUser.name.charAt(0) || 'U'}
                   </div>
                 )}
-                <span className="hidden sm:inline max-w-[100px] truncate">{currentUser.name}</span>
                 <ChevronDown className="w-3 h-3 text-stone-300" />
               </button>
 
               {isUserMenuOpen && (
                 <div 
-                  className="absolute left-0 top-full mt-1.5 w-60 bg-white text-stone-900 rounded-2xl shadow-xl border border-stone-200 p-2 z-50 animate-in fade-in zoom-in-95"
+                  className="absolute left-0 top-full mt-1.5 w-56 sm:w-60 bg-white text-stone-900 rounded-2xl shadow-xl border border-stone-200 p-2 z-50 animate-in fade-in zoom-in-95"
                   onClick={() => setIsUserMenuOpen(false)}
                 >
                   <div className="px-3 py-2 border-b border-stone-100 flex items-center gap-2.5">
-                    {currentUser.avatarUrl ? (
-                      <img src={currentUser.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-stone-200 shrink-0" />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-[#86EFAC] text-[#0F172A] flex items-center justify-center text-xs font-black shrink-0">
-                        {currentUser.name.charAt(0) || 'U'}
-                      </div>
-                    )}
                     <div className="overflow-hidden">
                       <div className="font-bold text-xs text-stone-900 truncate">{currentUser.name}</div>
                       <div className="text-[11px] text-stone-500 font-mono truncate">{currentUser.email}</div>
@@ -295,65 +312,51 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
-      {/* Main Customer Storefront Header - Only shown in Storefront View */}
+      {/* Main Customer Storefront Header - Compact, Touch-First & Clean */}
       {viewMode !== 'dashboard' && (
         <>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex items-center justify-between gap-4">
-            {/* Brand Logo & Name */}
-            <div className="flex items-center gap-3">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3">
+            {/* Zone 1: Brand Wordmark & Avatar */}
+            <div className="flex items-center gap-2.5 min-w-0">
               <div 
-                className="relative w-11 h-11 rounded-2xl p-[1.5px] shadow-sm flex items-center justify-center shrink-0 overflow-hidden group transition-transform hover:scale-105"
+                className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl p-[1.5px] shadow-xs flex items-center justify-center shrink-0 overflow-hidden"
                 style={{ 
                   background: `linear-gradient(135deg, ${brand.primaryColor}, ${brand.accentColor})` 
                 }}
               >
                 <div 
-                  className="w-full h-full rounded-[14px] flex items-center justify-center overflow-hidden p-1"
+                  className="w-full h-full rounded-[10px] sm:rounded-[14px] flex items-center justify-center overflow-hidden p-0.5"
                   style={{ backgroundColor: settings.logoUrl ? '#FFFFFF' : brand.primaryColor }}
                 >
                   {settings.logoUrl ? (
                     <img 
                       src={settings.logoUrl} 
                       alt={settings.storeName || 'Logo'} 
-                      className="w-full h-full object-contain filter drop-shadow-xs transition-transform" 
+                      className="w-full h-full object-contain filter drop-shadow-xs" 
                     />
                   ) : (
-                    <span className="font-extrabold text-base tracking-wider text-white">
+                    <span className="font-extrabold text-sm sm:text-base tracking-wider text-white">
                       {settings.logoLetter || (settings.storeName ? settings.storeName.charAt(0) : 'S')}
                     </span>
                   )}
                 </div>
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 
-                    className="text-base sm:text-lg font-extrabold tracking-tight leading-snug truncate" 
-                    style={{ color: brand.primaryColor }}
-                  >
-                    {settings.storeName}
-                  </h1>
-                  {settings.storeSubtitle && (
-                    <span 
-                      className="text-[11px] px-2 py-0.5 rounded-full font-semibold border hidden sm:inline-block" 
-                      style={{ 
-                        backgroundColor: `${brand.accentColor}12`, 
-                        borderColor: `${brand.accentColor}30`,
-                        color: brand.accentColor 
-                      }}
-                    >
-                      {settings.storeSubtitle}
-                    </span>
-                  )}
-                </div>
+                <h1 
+                  className="text-sm sm:text-lg font-black tracking-tight leading-tight truncate" 
+                  style={{ color: brand.primaryColor }}
+                >
+                  {settings.storeName}
+                </h1>
                 {settings.tagline && (
-                  <p className="text-xs text-stone-500 truncate max-w-[200px] sm:max-w-xs mt-0.5 font-medium">
+                  <p className="text-[11px] sm:text-xs text-stone-500 truncate max-w-[140px] sm:max-w-xs font-medium">
                     {settings.tagline}
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Search input in desktop */}
+            {/* Zone 2: Desktop Search Bar */}
             <div className="hidden md:flex items-center flex-1 max-w-md mx-6">
               <div className="relative w-full">
                 <input
@@ -376,66 +379,76 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Storefront Action Controls */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              {/* Brand Customizer Trigger - Strictly shown ONLY to the verified store owner when not in shopper preview */}
+            {/* Zone 3: Storefront Actions (Touch-Optimized Hitboxes >= 44px) */}
+            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+              {/* Mobile Search Toggle Button */}
+              <button
+                type="button"
+                onClick={toggleSearch}
+                className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors active:scale-95 cursor-pointer"
+                aria-label="البحث عن منتج"
+              >
+                <Search className="w-5 h-5" style={{ color: isSearchVisible ? brand.accentColor : undefined }} />
+              </button>
+
+              {/* Brand Customizer Trigger (Desktop owner only) */}
               {showMerchantToolbar && isStoreOwner && (
                 <button
                   onClick={onOpenBrandStudio}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer min-h-[44px]"
                   style={{ backgroundColor: brand.accentColor }}
                   title="تخصيص الهوية البصرية، الألوان، والخطوط"
                 >
                   <Palette className="w-4 h-4" />
-                  <span className="hidden sm:inline">تخصيص الهوية</span>
+                  <span>تخصيص الهوية</span>
                 </button>
               )}
 
-              {/* Delivery Captain Portal Button - Visible ONLY to Store Owners / Admins, never to public shoppers */}
+              {/* Delivery Captain Portal Button */}
               {isStoreOwner && onOpenCaptainPortal && (
                 <button
                   type="button"
                   onClick={onOpenCaptainPortal}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors cursor-pointer"
-                  title="بوابة كباتن التوصيل وتسجيل المناديب (لوحة الإدارة)"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors cursor-pointer min-h-[44px]"
+                  title="بوابة كباتن التوصيل وتسجيل المناديب"
                 >
                   <Truck className="w-4 h-4 text-emerald-600" />
-                  <span className="hidden sm:inline">الكباتن</span>
+                  <span>الكباتن</span>
                 </button>
               )}
 
               {/* Track Order Button */}
               <button
                 onClick={onOpenTracker}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors cursor-pointer"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center sm:px-3 sm:py-2 text-xs sm:text-sm font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors cursor-pointer active:scale-95"
+                title="تتبع شحنتك وطلبك"
               >
-                <PackageCheck className="w-4 h-4" style={{ color: brand.accentColor }} />
-                <span className="hidden sm:inline">تتبع طلبك</span>
+                <PackageCheck className="w-4.5 h-4.5 sm:w-4 sm:h-4" style={{ color: brand.accentColor }} />
+                <span className="hidden sm:inline mr-1.5">تتبع طلبك</span>
               </button>
 
               {/* Store Policies */}
               <button
                 onClick={onOpenPolicies}
-                className="flex items-center gap-1 px-2.5 py-2 text-xs sm:text-sm font-medium text-stone-600 hover:text-stone-900 rounded-xl transition-colors cursor-pointer"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-stone-600 hover:text-stone-900 rounded-xl transition-colors cursor-pointer active:scale-95"
                 title="سياسات المتجر والضمان"
+                aria-label="سياسات المتجر"
               >
-                <Info className="w-4 h-4" />
+                <Info className="w-4.5 h-4.5 sm:w-4 sm:h-4" />
               </button>
 
               {/* Cart Drawer Trigger */}
               <button
                 onClick={onOpenCart}
-                className="relative flex items-center gap-2 px-3.5 py-2 text-white rounded-xl shadow-sm transition-all active:scale-95 cursor-pointer"
+                className="relative flex items-center justify-center gap-1.5 px-3 sm:px-3.5 h-10 sm:h-11 min-h-[44px] text-white rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
                 style={{ backgroundColor: brand.primaryColor }}
                 aria-label="سلة المشتريات"
               >
-                <ShoppingBag className="w-4 h-4" style={{ color: brand.highlightColor || '#86EFAC' }} />
-                <div className="flex flex-col text-right leading-none">
-                  <span className="text-[11px] text-stone-300 font-medium hidden sm:inline">السلة</span>
-                  <span className="text-xs font-bold text-white">
-                    {cartTotal > 0 ? `${cartTotal.toLocaleString('en-US')} ${settings.currency}` : `0 ${settings.currency}`}
-                  </span>
-                </div>
+                <ShoppingBag className="w-4.5 h-4.5" style={{ color: brand.highlightColor || '#86EFAC' }} />
+                <span className="text-xs font-mono font-bold text-white whitespace-nowrap">
+                  {cartTotal > 0 ? `${cartTotal.toLocaleString('en-US')}` : '0'}
+                  <span className="text-[10px] mr-0.5 font-sans">{settings.currency}</span>
+                </span>
                 {cartCount > 0 && (
                   <span 
                     className="absolute -top-1.5 -right-1.5 font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-md border-2 border-white"
@@ -448,27 +461,39 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Mobile search bar */}
-          <div className="md:hidden px-4 pb-3">
-            <div className="relative w-full">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="ابحث عن المنتجات أو الأقسام..."
-                className="w-full pr-10 pl-4 py-2 bg-stone-100 text-stone-900 text-sm rounded-xl border border-stone-200 focus:outline-none placeholder:text-stone-400"
-              />
-              <Search className="absolute right-3 top-2.5 w-4 h-4 text-stone-400" />
-              {searchQuery && (
-                <button
-                  onClick={() => onSearchChange('')}
-                  className="absolute left-3 top-2.5 text-xs text-stone-400 hover:text-stone-600 cursor-pointer"
-                >
-                  مسح
-                </button>
-              )}
+          {/* Collapsible Mobile Search Field */}
+          {isSearchVisible && (
+            <div className="md:hidden px-3.5 pb-2.5 animate-in slide-in-from-top-4 duration-200">
+              <div className="relative w-full">
+                <input
+                  ref={mobileSearchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="ابحث عن منتج، تصنيف، أو مواصفات..."
+                  className="w-full pr-10 pl-9 py-2.5 bg-stone-100 text-stone-900 text-sm rounded-xl border border-stone-200 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20"
+                />
+                <Search className="absolute right-3 top-3 w-4 h-4 text-stone-400" />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => onSearchChange('')}
+                    className="absolute left-2.5 top-2.5 p-1 text-stone-400 hover:text-stone-700 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={toggleSearch}
+                    className="absolute left-2.5 top-2.5 p-1 text-stone-400 hover:text-stone-700 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </header>

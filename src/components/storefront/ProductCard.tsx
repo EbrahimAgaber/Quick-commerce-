@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Product, StoreSettings, getProductUnitLabel } from '../../types/store';
-import { Plus, Eye, Check, Flame, Package } from 'lucide-react';
+import { Plus, Check, Flame, Package, Eye } from 'lucide-react';
 import { getZatcaComplianceType } from '../../utils/zatca';
 import { getOptimizedImageUrl } from '../../utils/imageOptimizer';
 
@@ -59,46 +59,46 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
   const quickAddTooltip = isOutOfStock
     ? 'غير متوفر'
     : hasVariants || isFractional
-    ? 'اختيار الكمية أو الخيار'
+    ? 'اختيار الخيارات أو الكمية'
     : 'إضافة سريعة للسلة';
 
   return (
     <motion.div
-      whileHover={{ y: -4 }}
-      whileTap={{ scale: 0.99 }}
+      whileHover={{ y: -3 }}
+      whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       onClick={() => onSelectProduct(product)}
-      className="group relative bg-white rounded-2xl overflow-hidden transition-shadow duration-300 flex flex-col cursor-pointer border hover:shadow-md select-none"
+      className="group relative bg-white rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-300 flex flex-col cursor-pointer border hover:shadow-md select-none"
       style={{ 
         borderColor: brand.neutralColor,
-        boxShadow: '0 4px 14px rgba(11,37,63,0.05)'
+        boxShadow: '0 2px 10px rgba(15,23,42,0.04)'
       }}
     >
       {/* Product Image Frame */}
-      <div className="relative aspect-4/3 w-full overflow-hidden bg-stone-100">
+      <div className="relative aspect-square sm:aspect-4/3 w-full overflow-hidden bg-stone-100">
         {!imgError && product.imageUrl ? (
           <img
             src={getOptimizedImageUrl(product.imageUrl, 400, 80)}
             alt={product.name}
             width={400}
-            height={300}
+            height={400}
             loading="lazy"
             decoding="async"
             onError={() => setImgError(true)}
             className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-stone-100 text-stone-400 gap-1.5">
-            <Package className="w-8 h-8 opacity-60" />
-            <span className="text-[11px] font-medium">{product.name}</span>
+          <div className="w-full h-full flex flex-col items-center justify-center bg-stone-100 text-stone-400 gap-1 p-2 text-center">
+            <Package className="w-7 h-7 sm:w-8 sm:h-8 opacity-60" />
+            <span className="text-[10px] sm:text-xs font-medium truncate max-w-full">{product.name}</span>
           </div>
         )}
 
         {/* Top Badges */}
-        <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 z-10">
+        <div className="absolute top-2 right-2 flex flex-col gap-1 z-10 pointer-events-none">
           {hasDiscount && (
             <span 
-              className="text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs"
+              className="text-white text-[10px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-md shadow-xs"
               style={{ backgroundColor: brand.accentColor }}
             >
               خصم {discountPercent}%
@@ -106,113 +106,96 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
           )}
           {product.featured && (
             <span 
-              className="text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs text-stone-900 border"
+              className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-xs text-stone-900 border"
               style={{ backgroundColor: brand.highlightColor, borderColor: 'rgba(0,0,0,0.05)' }}
             >
               مميز ★
             </span>
           )}
           {isLowStock && (
-            <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs flex items-center gap-1">
-              <Flame className="w-3 h-3" />
-              <span>متبقي {product.stockQuantity} فقط</span>
+            <span className="bg-amber-500 text-white text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5">
+              <Flame className="w-2.5 h-2.5" />
+              <span>متبقي {product.stockQuantity}</span>
             </span>
           )}
         </div>
 
         {/* Stock status overlay */}
         {isOutOfStock && (
-          <div className="absolute inset-0 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center">
-            <span className="bg-white text-stone-900 text-xs font-bold px-3 py-1.5 rounded-lg border border-stone-200">
+          <div className="absolute inset-0 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center p-2">
+            <span className="bg-white text-stone-900 text-[11px] sm:text-xs font-bold px-2.5 py-1 rounded-lg border border-stone-200 shadow-sm">
               نفدت الكمية
             </span>
           </div>
         )}
 
-        {/* Quick View hint on hover */}
-        <div className="absolute bottom-2.5 left-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:flex items-center justify-center gap-1.5 bg-stone-900/85 backdrop-blur-xs text-white text-xs py-2 rounded-xl">
+        {/* Quick View hint on desktop hover */}
+        <div className="absolute bottom-2 inset-x-2 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex items-center justify-center gap-1.5 bg-stone-900/90 backdrop-blur-xs text-white text-xs py-1.5 rounded-lg">
           <Eye className="w-3.5 h-3.5" style={{ color: brand.highlightColor }} />
-          <span>عرض التفاصيل والخيارات</span>
+          <span>عرض التفاصيل</span>
         </div>
       </div>
 
       {/* Product Meta & Details */}
-      <div className="p-4 flex flex-col flex-1 justify-between gap-3">
+      <div className="p-2.5 sm:p-3.5 flex flex-col flex-1 justify-between gap-2">
         <div>
-          {/* Category as unboxed text */}
-          <div className="text-[11px] font-semibold mb-1 flex items-center gap-1" style={{ color: brand.accentColor }}>
-            <span>{product.category}</span>
-            {product.fabricComposition && (
-              <>
-                <span className="text-stone-300">·</span>
-                <span className="text-stone-500 font-normal truncate max-w-[120px]">{product.fabricComposition}</span>
-              </>
-            )}
+          {/* Category as quiet unboxed text */}
+          <div className="text-[10px] sm:text-[11px] font-bold mb-0.5 truncate" style={{ color: brand.accentColor }}>
+            {product.category}
           </div>
 
           {/* Product Name */}
           <h3 
-            className="text-sm font-bold line-clamp-2 leading-snug group-hover:opacity-85 transition-opacity"
+            className="text-xs sm:text-sm font-bold line-clamp-2 leading-tight sm:leading-snug group-hover:opacity-85 transition-opacity min-h-[2rem] sm:min-h-[2.5rem]"
             style={{ color: brand.primaryColor }}
           >
             {product.name}
           </h3>
-
-          {/* Variants summary text */}
-          {(() => {
-            const realVariants = (product.variants || []).filter((v) => v && v !== 'الخيار الافتراضي');
-            if (realVariants.length === 0) return null;
-            return (
-              <div className="mt-1.5 text-[11px] text-stone-500 flex items-center gap-1 overflow-hidden">
-                <span className="shrink-0 text-stone-400">الخيارات:</span>
-                <span className="truncate">{realVariants.join(' · ')}</span>
-              </div>
-            );
-          })()}
         </div>
 
         {/* Price & Action row */}
-        <div className="pt-2 border-t flex items-center justify-between gap-2" style={{ borderColor: brand.neutralColor }}>
-          <div className="flex flex-col">
-            <div className="flex items-baseline gap-1 flex-wrap">
-              <span className="text-base sm:text-lg font-black font-mono" style={{ color: brand.primaryColor }}>
+        <div className="pt-1.5 border-t flex items-center justify-between gap-1.5" style={{ borderColor: brand.neutralColor }}>
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-baseline gap-1">
+              <span className="text-sm sm:text-base font-black font-mono tabular-nums leading-none" style={{ color: brand.primaryColor }}>
                 {currentPrice.toLocaleString('en-US')}
               </span>
-              <span className="text-xs font-semibold text-stone-500">{settings.currency}</span>
-              {product.unit && product.unit !== 'piece' && (
-                <span className="text-[11px] font-bold text-stone-600 bg-stone-100 px-1.5 py-0.5 rounded-md">
-                  / {getProductUnitLabel(product.unit, product.unitLabel)}
-                </span>
-              )}
+              <span className="text-[10px] sm:text-xs font-semibold text-stone-500">{settings.currency}</span>
             </div>
+
             {hasDiscount && (
-              <span className="text-[11px] text-stone-400 line-through">
-                {product.price.toLocaleString('en-US')} {settings.currency}
+              <span className="text-[10px] text-stone-400 line-through leading-none mt-0.5">
+                {product.price.toLocaleString('en-US')}
               </span>
             )}
-            {getZatcaComplianceType(settings) !== 'non_registered' && (
-              <span className="text-[10px] text-stone-400">شامل الضريبة 15%</span>
+
+            {product.unit && product.unit !== 'piece' && (
+              <span className="text-[9px] sm:text-[10px] text-stone-500 truncate mt-0.5">
+                لكل {getProductUnitLabel(product.unit, product.unitLabel)}
+              </span>
             )}
           </div>
 
-          {/* Quick add button (48px standard touch target) */}
+          {/* Quick Add Button (Optimized touch hitbox) */}
           <button
+            type="button"
             onClick={(e) => onQuickAdd(product, e)}
             disabled={isOutOfStock}
-            className={`w-12 h-12 min-w-[48px] min-h-[48px] rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-lg sm:rounded-xl flex items-center justify-center transition-all cursor-pointer shrink-0 ${
               isAddedJustNow
                 ? 'bg-emerald-600 text-white'
                 : !isOutOfStock
-                ? 'text-white hover:opacity-90 active:scale-95 shadow-xs'
+                ? 'text-white hover:opacity-90 active:scale-90 shadow-2xs'
                 : 'bg-stone-200 text-stone-400 cursor-not-allowed'
             }`}
             style={{ backgroundColor: isAddedJustNow ? '#059669' : !isOutOfStock ? brand.accentColor : '#E5E7EB' }}
             title={quickAddTooltip}
+            aria-label={quickAddTooltip}
           >
             {isAddedJustNow ? (
-              <Check className="w-5 h-5 animate-in zoom-in" />
+              <Check className="w-4 h-4 animate-in zoom-in" />
             ) : (
-              <Plus className="w-5 h-5 text-white" />
+              <Plus className="w-4.5 h-4.5 text-white" />
             )}
           </button>
         </div>

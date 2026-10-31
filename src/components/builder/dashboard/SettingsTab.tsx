@@ -1516,40 +1516,70 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </h3>
 
             <div className="space-y-3 text-xs">
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-stone-800">
-                <input
-                  type="checkbox"
-                  checked={editableSettings.enableStorePickup ?? false}
-                  onChange={(e) =>
-                    setEditableSettings({
-                      ...editableSettings,
-                      enableStorePickup: e.target.checked,
-                    })
-                  }
-                  className="rounded text-blue-600 w-4 h-4"
-                />
-                <span>تفعيل خيار الاستلام المباشر من الفرع / المتجر (بدون رسوم شحن)</span>
-              </label>
+              {/* Store Pickup Fulfillment Toggle Card */}
+              <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-200/70 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-800">
+                      🏪
+                    </span>
+                    <div>
+                      <span className="font-bold text-stone-900 block text-xs">
+                        خيار الاستلام من الفرع / المتجر (Store Pickup)
+                      </span>
+                      <span className="text-[11px] text-stone-500 block">
+                        السماح للمتسوقين باختيار استلام الطلب من موقعك بدون رسوم توصيل
+                      </span>
+                    </div>
+                  </div>
 
-              {editableSettings.enableStorePickup && (
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">
-                    عنوان وموقع الاستلام المباشر
-                  </label>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold self-start sm:self-auto ${
+                    editableSettings.enableStorePickup
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-stone-200 text-stone-600'
+                  }`}>
+                    {editableSettings.enableStorePickup ? 'مفعل للمتسوقين 🟢' : 'توصيل للمنزل فقط 🚚'}
+                  </span>
+                </div>
+
+                <label className="flex items-center gap-2.5 cursor-pointer font-bold text-stone-800 text-xs">
                   <input
-                    type="text"
-                    value={editableSettings.storePickupAddress || ''}
+                    type="checkbox"
+                    checked={editableSettings.enableStorePickup ?? false}
                     onChange={(e) =>
                       setEditableSettings({
                         ...editableSettings,
-                        storePickupAddress: e.target.value,
+                        enableStorePickup: e.target.checked,
                       })
                     }
-                    placeholder="مثال: الرياض - طريق الملك فهد - مجمع التحلية التجاري، المعرض 4"
-                    className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl"
+                    className="rounded text-emerald-600 w-4 h-4 cursor-pointer"
                   />
-                </div>
-              )}
+                  <span>تفعيل خيار الاستلام من الفرع (يظهر للمتسوق في صفحة الشراء للاختيار بين التوصيل والاستلام)</span>
+                </label>
+
+                {editableSettings.enableStorePickup && (
+                  <div className="pt-1 space-y-1.5 animate-in fade-in duration-150">
+                    <label className="block font-bold text-stone-700 text-xs">
+                      عنوان وموقع الاستلام المباشر للعميل
+                    </label>
+                    <input
+                      type="text"
+                      value={editableSettings.storePickupAddress || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          storePickupAddress: e.target.value,
+                        })
+                      }
+                      placeholder="مثال: الرياض - طريق الملك فهد - مجمع التحلية التجاري، المعرض 4"
+                      className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                    <p className="text-[10px] text-stone-400">
+                      يظهر هذا العنوان للعميل عند اختياره الاستلام من المتجر، كما يتم تضمينه في فاتورة الطلب.
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {/* ZATCA & Tax Compliance Tier Selection */}
               <div className="pt-2">

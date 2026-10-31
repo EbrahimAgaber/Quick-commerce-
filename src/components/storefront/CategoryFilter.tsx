@@ -26,62 +26,73 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
   };
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none my-6">
-      <button
-        onClick={() => onSelectCategory('all')}
-        className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 flex items-center gap-1.5 shadow-xs ${
-          activeCategory === 'all'
-            ? 'text-white'
-            : 'bg-white text-stone-700 hover:bg-stone-50 border'
-        }`}
-        style={{
-          backgroundColor: activeCategory === 'all' ? brand.primaryColor : '#FFFFFF',
-          borderColor: brand.neutralColor,
-        }}
+    <div className="relative my-3 sm:my-5">
+      <div 
+        className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1 px-0.5 -mx-1"
+        style={{ scrollSnapType: 'x proximity' }}
       >
-        <span>جميع المنتجات والخدمات</span>
-        <span
-          className="text-[11px] px-1.5 py-0.2 rounded-full font-mono"
+        {/* All Products Tab */}
+        <button
+          type="button"
+          onClick={() => onSelectCategory('all')}
           style={{
-            backgroundColor: activeCategory === 'all' ? 'rgba(255,255,255,0.2)' : brand.neutralColor,
-            color: activeCategory === 'all' ? '#FFFFFF' : brand.textColor,
+            backgroundColor: activeCategory === 'all' ? brand.primaryColor : '#FFFFFF',
+            borderColor: brand.neutralColor,
+            scrollSnapAlign: 'start',
           }}
+          className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 flex items-center gap-2 border shadow-2xs active:scale-95 cursor-pointer ${
+            activeCategory === 'all'
+              ? 'text-white'
+              : 'text-stone-700 hover:bg-stone-50'
+          }`}
         >
-          {categoryCounts['all'] || 0}
-        </span>
-      </button>
-
-      {categories.map((cat) => {
-        const isActive = activeCategory === cat;
-        return (
-          <button
-            key={cat}
-            onClick={() => onSelectCategory(cat)}
-            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 flex items-center gap-1.5 shadow-xs ${
-              isActive
-                ? 'text-white'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border'
-            }`}
+          <span>جميع الأقسام</span>
+          <span
+            className="text-[11px] font-mono tabular-nums px-1.5 py-0.5 rounded-md"
             style={{
-              backgroundColor: isActive ? brand.primaryColor : '#FFFFFF',
-              borderColor: brand.neutralColor,
+              backgroundColor: activeCategory === 'all' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.06)',
+              color: activeCategory === 'all' ? '#FFFFFF' : brand.textColor,
             }}
           >
-            <span>{cat}</span>
-            {categoryCounts[cat] !== undefined && (
-              <span
-                className="text-[11px] px-1.5 py-0.2 rounded-full font-mono"
-                style={{
-                  backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : brand.neutralColor,
-                  color: isActive ? '#FFFFFF' : brand.textColor,
-                }}
-              >
-                {categoryCounts[cat]}
-              </span>
-            )}
-          </button>
-        );
-      })}
+            {categoryCounts['all'] || 0}
+          </span>
+        </button>
+
+        {/* Dynamic Categories */}
+        {categories.map((cat) => {
+          const isActive = activeCategory === cat;
+          return (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => onSelectCategory(cat)}
+              style={{
+                backgroundColor: isActive ? brand.primaryColor : '#FFFFFF',
+                borderColor: brand.neutralColor,
+                scrollSnapAlign: 'start',
+              }}
+              className={`min-h-[44px] px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shrink-0 flex items-center gap-2 border shadow-2xs active:scale-95 cursor-pointer ${
+                isActive
+                  ? 'text-white'
+                  : 'text-stone-700 hover:bg-stone-50'
+              }`}
+            >
+              <span className="whitespace-nowrap">{cat}</span>
+              {categoryCounts[cat] !== undefined && (
+                <span
+                  className="text-[11px] font-mono tabular-nums px-1.5 py-0.5 rounded-md"
+                  style={{
+                    backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.06)',
+                    color: isActive ? '#FFFFFF' : brand.textColor,
+                  }}
+                >
+                  {categoryCounts[cat]}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 };

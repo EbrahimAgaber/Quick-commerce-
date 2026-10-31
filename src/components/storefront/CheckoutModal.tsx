@@ -24,8 +24,21 @@ import {
   ShieldCheck,
   Navigation,
   Upload,
-  FileCheck2
+  FileCheck2,
+  Sparkles
 } from 'lucide-react';
+
+const SAVED_PROFILE_KEY = 'storelink_saved_shopper_profile';
+
+interface SavedShopperProfile {
+  customerName?: string;
+  customerPhone?: string;
+  city?: string;
+  customCity?: string;
+  deliveryAddress?: string;
+  landmarkNotes?: string;
+  savedAt?: number;
+}
 import { buildWhatsAppInvoiceMessage, createWhatsAppUrl } from '../../utils/whatsappInvoice';
 import { MoyasarPaymentModal } from './MoyasarPaymentModal';
 import { LocationPickerModal } from './LocationPickerModal';
@@ -129,15 +142,56 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   // Step state: 1 (Info & Delivery), 2 (Payment), 3 (Review & Confirm)
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
 
+  // Saved Shopper Profile Autofill (1-tap fast checkout for returning shoppers)
+  const savedProfile = React.useMemo<SavedShopperProfile | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(SAVED_PROFILE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }, []);
+
   // Form fields
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState(() => savedProfile?.customerName || '');
+  const [customerPhone, setCustomerPhone] = useState(() => savedProfile?.customerPhone || '');
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [deliveryType, setDeliveryType] = useState<'delivery' | 'pickup'>('delivery');
-  const [city, setCity] = useState(DEFAULT_CITIES[0]);
-  const [customCity, setCustomCity] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [landmarkNotes, setLandmarkNotes] = useState(orderNotes || '');
+  const [city, setCity] = useState(() => {
+    if (savedProfile?.city && DEFAULT_CITIES.includes(savedProfile.city)) {
+      return savedProfile.city;
+    }
+    if (savedProfile?.customCity) {
+      return 'مدينة أخرى';
+    }
+    return DEFAULT_CITIES[0];
+  });
+  const [customCity, setCustomCity] = useState(() => savedProfile?.customCity || '');
+  const [deliveryAddress, setDeliveryAddress] = useState(() => savedProfile?.deliveryAddress || '');
+  const [landmarkNotes, setLandmarkNotes] = useState(() => orderNotes || savedProfile?.landmarkNotes || '');
+  const [hasLoadedSavedProfile, setHasLoadedSavedProfile] = useState<boolean>(() => {
+    return Boolean(savedProfile?.customerName && savedProfile?.customerPhone);
+  });
+
+  // Ensure deliveryType strictly resets to 'delivery' if merchant disables store pickup
+  useEffect(() => {
+    if (!settings.enableStorePickup && deliveryType === 'pickup') {
+      setDeliveryType('delivery');
+    }
+  }, [settings.enableStorePickup, deliveryType]);
+
+  const handleClearSavedProfile = () => {
+    try {
+      localStorage.removeItem(SAVED_PROFILE_KEY);
+    } catch {}
+    setCustomerName('');
+    setCustomerPhone('');
+    setDeliveryAddress('');
+    setLandmarkNotes(orderNotes || '');
+    setHasLoadedSavedProfile(false);
+  };
   const [paymentMethod, setPaymentMethod] = useState(settings.paymentMethods[0] || 'الدفع عند الاستلام (COD)');
   const [copiedIban, setCopiedIban] = useState(false);
   const [bankTransferReceiptDataUrl, setBankTransferReceiptDataUrl] = useState('');
@@ -568,6 +622,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         }
       }
 
+      // Persist customer profile to localStorage for future frictionless 1-tap checkout
+      try {
+        const profileData: SavedShopperProfile = {
+          customerName: customerName.trim(),
+          customerPhone: finalPhone,
+          city: finalCity,
+          customCity: city === 'مدينة أخرى' ? customCity.trim() : undefined,
+          deliveryAddress: finalAddress,
+          landmarkNotes: landmarkNotes.trim(),
+          savedAt: Date.now(),
+        };
+        localStorage.setItem(SAVED_PROFILE_KEY, JSON.stringify(profileData));
+      } catch {}
+
       // If online payment (Mada, Apple Pay, Visa/MC, STC Pay) is selected:
       if (mappedPaymentMethod === 'card' || mappedPaymentMethod === 'apple_pay' || mappedPaymentMethod === 'stc_pay') {
         trackPurchase(serverRes.order, settings.currency);
@@ -605,24 +673,29 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-stone-950/70 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center p-0 sm:p-4 bg-stone-950/70 backdrop-blur-xs">
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden z-10 border border-stone-200 my-auto flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-lg bg-white rounded-t-[28px] sm:rounded-3xl shadow-2xl overflow-hidden z-10 border-t sm:border border-stone-200 flex flex-col max-h-[94vh] sm:max-h-[90vh] pb-safe animate-in slide-in-from-top-4 sm:zoom-in-95 duration-200">
+        {/* Mobile Drag Indicator Handle */}
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-stone-50 cursor-grab">
+          <div className="w-10 h-1 bg-stone-300 rounded-full" />
+        </div>
+
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-stone-200 bg-stone-50 flex items-center justify-between">
+        <div className="p-3.5 sm:p-5 border-b border-stone-200 bg-stone-50 flex items-center justify-between">
           <div>
-            <h3 className="text-base sm:text-lg font-black" style={{ color: brand.primaryColor }}>
+            <h3 className="text-sm sm:text-lg font-black" style={{ color: brand.primaryColor }}>
               إتمام الطلب والدفع
             </h3>
-            <p className="text-xs text-stone-500">
-              تسوق آمن ومحمي 100% — متوافق مع مواصفات التجارة الإلكترونية
+            <p className="text-[11px] sm:text-xs text-stone-500">
+              تسوق آمن ومحمي 100% · معتمد ZATCA
             </p>
           </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-stone-200 text-stone-600 hover:text-stone-900 flex items-center justify-center transition-colors cursor-pointer"
+            className="w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl bg-stone-200/80 text-stone-600 hover:text-stone-900 flex items-center justify-center transition-transform active:scale-90 cursor-pointer"
             aria-label="إغلاق"
           >
             <X className="w-4 h-4" />
@@ -688,6 +761,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* STEP 1: Info & Delivery */}
           {currentStep === 1 && (
             <div className="space-y-4 animate-in fade-in duration-200">
+              {/* Saved Shopper Profile Quick Recognition Notice */}
+              {hasLoadedSavedProfile && (
+                <div className="p-3 rounded-2xl bg-blue-50/90 border border-blue-200/80 flex items-center justify-between text-xs text-blue-950 animate-in fade-in">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span className="font-semibold truncate">
+                      تم استرجاع بياناتك المحفوظة لتسريع عملية الطلب ✨
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearSavedProfile}
+                    className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline px-1.5 py-0.5 rounded cursor-pointer shrink-0"
+                    title="مسح وتعبئة بيانات جديدة"
+                  >
+                    مسح
+                  </button>
+                </div>
+              )}
+
               {/* Customer Name */}
               <div>
                 <label className="block text-xs font-bold text-stone-800 mb-1">

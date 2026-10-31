@@ -1636,7 +1636,13 @@ export class StoreManager {
     const requestPayload = { ...params, idempotencyKey };
 
     const isDemo = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_DEMO_MODE === 'true';
-    const isNodeTestEnv = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test';
+    const isNodeTestEnv =
+      (typeof process !== 'undefined' &&
+        (process.env?.NODE_ENV === 'test' ||
+          process.env?.VITEST === 'true' ||
+          Boolean(process.env?.VITEST))) ||
+      typeof (globalThis as any).__vitest_worker__ !== 'undefined' ||
+      typeof (globalThis as any).vi !== 'undefined';
 
     // In unit/integration tests running in Node where fetch cannot reach localhost /api without mock server:
     // Fall back cleanly if not configured or in tests. In actual browser production, enforce API order creation with retries.

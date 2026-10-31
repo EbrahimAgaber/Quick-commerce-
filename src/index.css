@@ -39,6 +39,29 @@
   background: rgba(160, 150, 140, 0.6);
 }
 
+/* Mobile Ergonomics & Safe Area Utilities */
+@utility pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+@utility pt-safe {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
 
 /* Top-Tier Micro-Interactions & Animation Utilities (Tailwind v4 native) */
 @keyframes enter {

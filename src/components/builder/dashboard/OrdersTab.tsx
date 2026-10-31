@@ -414,8 +414,13 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       {ord.grandTotal.toLocaleString('en-US')} {settings.currency}
                     </span>
                   </div>
-                  <div className="text-stone-500">
-                    📍 {ord.city} — {ord.deliveryAddress}
+                  <div className="flex items-center gap-1.5 flex-wrap text-stone-500">
+                    <span>📍 {ord.city} — {ord.deliveryAddress}</span>
+                    {ord.deliveryType === 'pickup' && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                        استلام من الفرع 🏪
+                      </span>
+                    )}
                   </div>
                   <div className="text-stone-600 bg-stone-50 p-2 rounded-xl font-mono text-[11px] line-clamp-2">
                     {ord.itemsSummary}
@@ -519,7 +524,15 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                       </div>
                     </td>
                     <td className="p-3 max-w-xs text-stone-700">
-                      <strong>{ord.city}</strong> - <span className="text-stone-500">{ord.deliveryAddress}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <strong>{ord.city}</strong>
+                        {ord.deliveryType === 'pickup' && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                            استلام فرع 🏪
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-stone-500 text-[11px] truncate">{ord.deliveryAddress}</div>
                     </td>
                     <td className="p-3 max-w-xs truncate font-mono text-stone-600">
                       {ord.itemsSummary}
