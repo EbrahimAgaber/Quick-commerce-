@@ -1,6 +1,6 @@
 import React from 'react';
 import { StoreSettings } from '../../types/store';
-import { MessageCircle, ExternalLink, Sparkles, Mail, Phone, ShieldCheck, Building2, FileCheck2 } from 'lucide-react';
+import { MessageCircle, ExternalLink, Sparkles, Mail, Phone, ShieldCheck, Building2, FileCheck2, Truck } from 'lucide-react';
 import { isValidSafeUrl } from '../../utils/security';
 import { toWhatsAppNumber } from '../../utils/digits';
 import { getZatcaComplianceType } from '../../utils/zatca';
@@ -41,10 +41,53 @@ export const Footer: React.FC<FooterProps> = ({
 
   return (
     <footer 
-      className="mt-20 text-white transition-colors"
+      className="mt-16 text-white transition-colors"
       style={{ backgroundColor: brand.primaryColor }}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      {/* 3 Core Trust Highlights Strip (Moved to Footer) */}
+      <div className="border-b border-white/10 bg-black/15">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x sm:divide-x-reverse divide-white/10 gap-4 sm:gap-0">
+            <div className="flex items-center justify-center sm:justify-start gap-3 py-1 sm:px-4">
+              <div className="w-10 h-10 rounded-xl bg-white/10 text-blue-300 flex items-center justify-center shrink-0 border border-white/10">
+                <Truck className="w-5 h-5" />
+              </div>
+              <div className="text-right">
+                <h4 className="text-xs sm:text-sm font-bold text-white leading-tight">
+                  شحن سريع ومباشر
+                </h4>
+                <p className="text-[11px] text-stone-300 mt-0.5">توصيل آمن لجميع المدن خلال 1-3 أيام عمل</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center sm:justify-start gap-3 py-1 sm:px-4">
+              <div className="w-10 h-10 rounded-xl bg-white/10 text-emerald-300 flex items-center justify-center shrink-0 border border-white/10">
+                <MessageCircle className="w-5 h-5" />
+              </div>
+              <div className="text-right">
+                <h4 className="text-xs sm:text-sm font-bold text-white leading-tight">
+                  طلب فوري عبر الواتساب
+                </h4>
+                <p className="text-[11px] text-stone-300 mt-0.5">إرسال الفاتورة وتفاصيل الطلب بنقرة واحدة</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center sm:justify-start gap-3 py-1 sm:px-4">
+              <div className="w-10 h-10 rounded-xl bg-white/10 text-amber-300 flex items-center justify-center shrink-0 border border-white/10">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div className="text-right">
+                <h4 className="text-xs sm:text-sm font-bold text-white leading-tight">
+                  ضمان ذهبي 100%
+                </h4>
+                <p className="text-[11px] text-stone-300 mt-0.5">استبدال واسترجاع مرن وحماية تامة للطلب</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand Col */}
           <div className="space-y-3 md:col-span-2">

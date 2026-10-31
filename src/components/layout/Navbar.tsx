@@ -302,32 +302,54 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Brand Logo & Name */}
             <div className="flex items-center gap-3">
               <div 
-                className="w-10 h-10 rounded-2xl text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0 border border-black/10 overflow-hidden"
-                style={{ backgroundColor: settings.logoUrl ? '#FFFFFF' : brand.primaryColor }}
+                className="relative w-11 h-11 rounded-2xl p-[1.5px] shadow-sm flex items-center justify-center shrink-0 overflow-hidden group transition-transform hover:scale-105"
+                style={{ 
+                  background: `linear-gradient(135deg, ${brand.primaryColor}, ${brand.accentColor})` 
+                }}
               >
-                {settings.logoUrl ? (
-                  <img src={settings.logoUrl} alt="Logo" className="w-full h-full object-contain p-0.5 rounded-2xl" />
-                ) : (
-                  <span>{settings.logoLetter || 'A'}</span>
-                )}
+                <div 
+                  className="w-full h-full rounded-[14px] flex items-center justify-center overflow-hidden p-1"
+                  style={{ backgroundColor: settings.logoUrl ? '#FFFFFF' : brand.primaryColor }}
+                >
+                  {settings.logoUrl ? (
+                    <img 
+                      src={settings.logoUrl} 
+                      alt={settings.storeName || 'Logo'} 
+                      className="w-full h-full object-contain filter drop-shadow-xs transition-transform" 
+                    />
+                  ) : (
+                    <span className="font-extrabold text-base tracking-wider text-white">
+                      {settings.logoLetter || (settings.storeName ? settings.storeName.charAt(0) : 'S')}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="text-lg sm:text-xl font-bold tracking-tight leading-snug" style={{ color: brand.primaryColor }}>
+                  <h1 
+                    className="text-base sm:text-lg font-extrabold tracking-tight leading-snug truncate" 
+                    style={{ color: brand.primaryColor }}
+                  >
                     {settings.storeName}
                   </h1>
                   {settings.storeSubtitle && (
                     <span 
-                      className="text-xs px-2.5 py-0.5 rounded-full font-medium hidden sm:inline" 
-                      style={{ backgroundColor: brand.neutralColor, color: brand.textColor }}
+                      className="text-[11px] px-2 py-0.5 rounded-full font-semibold border hidden sm:inline-block" 
+                      style={{ 
+                        backgroundColor: `${brand.accentColor}12`, 
+                        borderColor: `${brand.accentColor}30`,
+                        color: brand.accentColor 
+                      }}
                     >
                       {settings.storeSubtitle}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-stone-500 line-clamp-1 max-w-[200px] sm:max-w-xs">
-                  {settings.tagline}
-                </p>
+                {settings.tagline && (
+                  <p className="text-xs text-stone-500 truncate max-w-[200px] sm:max-w-xs mt-0.5 font-medium">
+                    {settings.tagline}
+                  </p>
+                )}
               </div>
             </div>
 
