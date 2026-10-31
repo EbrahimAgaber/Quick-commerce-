@@ -20,6 +20,45 @@ if (!(globalThis as any).window) {
   };
 }
 
+// Test Hygiene: Hermetic fetch stub preventing ANY network egress to storelink.sa or localhost
+(globalThis as any).fetch = vi.fn(async (input: any, init?: any) => {
+  const url = typeof input === 'string' ? input : input?.url || '';
+  if (url.includes('/api/tracking')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        tracking: {
+          orderId: 'ORD-TEST-MOCK',
+          status: 'Received',
+          timestamp: new Date().toISOString(),
+          itemsSummary: 'طلب تجريبي',
+          grandTotal: 150,
+          shippingFee: 0,
+          paymentMethod: 'الدفع عند الاستلام',
+          trackingNotes: 'تم استلام الطلب',
+        },
+      }),
+      text: async () => JSON.stringify({ success: true }),
+    };
+  }
+  if (url.includes('storelink.sa') || url.startsWith('/') || url.includes('/api/')) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, order: { id: 'MOCK-ORDER-1' } }),
+      text: async () => JSON.stringify({ success: true }),
+    };
+  }
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ success: true }),
+    text: async () => '{}',
+  };
+});
+
 vi.mock('../src/services/firebase', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/services/firebase')>();
   return {

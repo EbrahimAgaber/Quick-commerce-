@@ -1,5 +1,5 @@
 import { getAdminFirestore } from './_firebaseAdmin';
-import { handleCors, checkRateLimit, getClientIp } from './_security';
+import { handleCors, evaluateRateLimit, setRateLimitHeaders, getClientIp } from './_security';
 
 export default async function handler(req: any, res: any) {
   if (!handleCors(req, res)) {
@@ -11,7 +11,9 @@ export default async function handler(req: any, res: any) {
   }
 
   const clientIp = getClientIp(req);
-  if (!checkRateLimit(`promo_ip_${clientIp}`, 30, 10 * 60 * 1000)) {
+  const rateLimit = await evaluateRateLimit(`promo_ip_${clientIp}`, 30, 10 * 60 * 1000);
+  setRateLimitHeaders(res, rateLimit);
+  if (!rateLimit.allowed) {
     return res.status(429).json({ error: 'Too many requests. Please wait.', success: false });
   }
 

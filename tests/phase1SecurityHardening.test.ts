@@ -106,6 +106,14 @@ describe('Phase 1: Security, Hardening & Guardrail Enforcement', () => {
       expect(headers['X-RateLimit-Reset']).toBe('1700000000');
     });
 
+    it('enforces Cloudflare Turnstile token requirement when configured', async () => {
+      process.env.TURNSTILE_SECRET_KEY = 'test-secret-key';
+      const missingTokenRes = await verifyTurnstileToken('');
+      expect(missingTokenRes.success).toBe(false);
+      expect(missingTokenRes.error).toContain('مطلوب');
+      delete process.env.TURNSTILE_SECRET_KEY;
+    });
+
     it('verifies Cloudflare Turnstile token validation behavior', async () => {
       // In non-production without TURNSTILE_SECRET_KEY, it allows graceful bypass
       const result = await verifyTurnstileToken('mock-token');

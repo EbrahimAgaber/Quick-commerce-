@@ -11,6 +11,7 @@ interface ProductGridProps {
   justAddedId: string | null;
   onResetFilters: () => void;
   isFiltered: boolean;
+  isLoading?: boolean;
 }
 
 export const ProductGrid: React.FC<ProductGridProps> = ({
@@ -21,6 +22,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   justAddedId,
   onResetFilters,
   isFiltered,
+  isLoading = false,
 }) => {
   const [sortBy, setSortBy] = useState<'default' | 'newest' | 'discount' | 'price-asc' | 'price-desc'>('default');
 
@@ -92,7 +94,25 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       </div>
 
       {/* Grid of cards */}
-      {sortedProducts.length > 0 ? (
+      {isLoading ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 animate-pulse">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl overflow-hidden border border-stone-200 shadow-xs flex flex-col">
+              <div className="aspect-4/3 w-full bg-stone-200/80" />
+              <div className="p-3 sm:p-4 space-y-2 flex-1 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <div className="h-4 bg-stone-200 rounded-md w-3/4" />
+                  <div className="h-3 bg-stone-100 rounded-md w-1/2" />
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <div className="h-5 bg-stone-200 rounded-md w-16" />
+                  <div className="w-8 h-8 rounded-xl bg-stone-200" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : sortedProducts.length > 0 ? (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
           {sortedProducts.map((prod) => (
             <ProductCard

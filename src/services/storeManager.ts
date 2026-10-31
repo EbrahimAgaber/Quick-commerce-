@@ -1606,6 +1606,7 @@ export class StoreManager {
     bankTransferReceiptUrl?: string;
     bankTransferReceiptFileName?: string;
     bankTransferSenderName?: string;
+    turnstileToken?: string;
     idempotencyKey?: string;
   }): Promise<{ success: boolean; order?: Order; error?: string }> {
     // 1. Basic validation of required fields
@@ -1653,6 +1654,7 @@ export class StoreManager {
             headers: {
               'Content-Type': 'application/json',
               Accept: 'application/json',
+              ...(params.turnstileToken ? { 'x-turnstile-token': params.turnstileToken } : {}),
             },
             body: JSON.stringify(requestPayload),
             signal: controller.signal,

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import * as crypto from 'crypto';
+import { getAdminFirestore } from './_firebaseAdmin';
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -84,7 +85,55 @@ export async function evaluateRateLimit(
     }
   }
 
-  // 2. High-precision In-Memory Sliding Window
+  // 2. Distributed Firestore Atomic Fallback (when Upstash is not configured, provides cross-instance serverless rate limits)
+  const hasFirebaseCreds = Boolean((process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) || process.env.FIRESTORE_EMULATOR_HOST);
+  if (hasFirebaseCreds) {
+    try {
+      const db = getAdminFirestore();
+      if (db && typeof db.collection === 'function') {
+      const docSafeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100);
+      const rateDocRef = db.collection('_system_rate_limits').doc(docSafeKey);
+      const windowStart = now - windowMs;
+      const result = await db.runTransaction(async (t) => {
+        const snap = await t.get(rateDocRef);
+        let timestamps: number[] = [];
+        if (snap.exists) {
+          const data = snap.data();
+          if (Array.isArray(data?.timestamps)) {
+            timestamps = data.timestamps.filter((ts: number) => typeof ts === 'number' && ts > windowStart);
+          }
+        }
+        if (timestamps.length >= maxRequests) {
+          const oldest = timestamps[0] || windowStart;
+          return {
+            allowed: false,
+            limit: maxRequests,
+            remaining: 0,
+            resetAt: oldest + windowMs,
+          };
+        }
+        timestamps.push(now);
+        t.set(rateDocRef, {
+          key,
+          timestamps,
+          updatedAt: now,
+          expiresAt: now + windowMs,
+        }, { merge: true });
+        return {
+          allowed: true,
+          limit: maxRequests,
+          remaining: maxRequests - timestamps.length,
+          resetAt: now + windowMs,
+        };
+      });
+      return result;
+      }
+    } catch (fsErr) {
+      // If Firestore is not initialized or in local dev offline mode, continue to in-memory sliding window
+    }
+  }
+
+  // 3. High-precision In-Memory Sliding Window (Local Dev / Fallback)
   pruneStaleWindows();
 
   let bucket = memorySlidingWindows.get(key);

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { CartItem, PromoCode, StoreSettings, getProductUnitLabel, getProductUnitMeta } from '../../types/store';
 import { X, Trash2, ShoppingBag, ArrowLeft, Sparkles, Truck, Tag, Check, Loader2 } from 'lucide-react';
 import { ProductImage } from '../common/ProductImage';
@@ -32,7 +33,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onApplyPromo,
   storeId,
 }) => {
-  if (!isOpen) return null;
 
   const [couponInput, setCouponInput] = useState(appliedPromo?.code || '');
   const [couponError, setCouponError] = useState<string | null>(null);
@@ -154,12 +154,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-stone-950/70 backdrop-blur-xs flex justify-end">
-      {/* Backdrop */}
-      <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden flex justify-end" dir="rtl">
+          {/* Backdrop with exit animation */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-stone-950/70 backdrop-blur-xs cursor-pointer"
+            onClick={onClose}
+            aria-hidden="true"
+          />
 
-      {/* Drawer Surface */}
-      <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between z-10 animate-in slide-in-from-left duration-300">
+          {/* Drawer Surface with spring slide-in and slide-out */}
+          <motion.div
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col justify-between z-10"
+          >
         {/* Header */}
         <div className="p-4 border-b flex items-center justify-between bg-stone-50" style={{ borderColor: brand.neutralColor }}>
           <div className="flex items-center gap-2">
@@ -453,7 +469,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             </button>
           </div>
         )}
-      </div>
-    </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 };

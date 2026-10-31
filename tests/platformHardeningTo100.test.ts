@@ -7,6 +7,8 @@ import moyasarWebhookHandler from '../api/moyasarWebhook';
 vi.mock('../api/_security', () => ({
   handleCors: vi.fn(() => true),
   checkRateLimit: vi.fn(() => true),
+  evaluateRateLimit: vi.fn(async () => ({ allowed: true, limit: 100, remaining: 99, resetAt: Date.now() + 60000 })),
+  setRateLimitHeaders: vi.fn(),
   getClientIp: vi.fn(() => '127.0.0.1'),
 }));
 

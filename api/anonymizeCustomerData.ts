@@ -1,5 +1,5 @@
 import { getAdminFirestore, getAdminAuth } from './_firebaseAdmin';
-import { handleCors, checkRateLimit, getClientIp } from './_security';
+import { handleCors, evaluateRateLimit, setRateLimitHeaders, getClientIp } from './_security';
 import { normalizeSaudiPhoneNumber } from '../src/utils/digits';
 
 /**
@@ -19,7 +19,9 @@ export default async function handler(req: any, res: any) {
   }
 
   const clientIp = getClientIp(req);
-  if (!checkRateLimit(`pdpl_ip_${clientIp}`, 15, 10 * 60 * 1000)) {
+  const rateLimit = await evaluateRateLimit(`pdpl_ip_${clientIp}`, 15, 10 * 60 * 1000);
+  setRateLimitHeaders(res, rateLimit);
+  if (!rateLimit.allowed) {
     return res.status(429).json({ error: 'طلبات مسح بيانات متكررة. يرجى الانتظار.', success: false });
   }
 

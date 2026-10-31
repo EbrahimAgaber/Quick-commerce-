@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
+import { MotionConfig } from 'motion/react';
 import { 
   StoreSettings, 
   Product, 
@@ -992,6 +993,7 @@ export default function App() {
   }
 
   return (
+    <MotionConfig reducedMotion="user">
     <div 
       className="min-h-screen flex flex-col transition-colors duration-300"
       style={{
@@ -1478,5 +1480,6 @@ export default function App() {
         />
       )}
     </div>
+    </MotionConfig>
   );
 }

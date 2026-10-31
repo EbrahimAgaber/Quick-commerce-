@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { getAdminAuth } from './_firebaseAdmin';
-import { handleCors, checkRateLimit, getClientIp, AI_TEMPLATES } from './_security';
+import { handleCors, evaluateRateLimit, setRateLimitHeaders, getClientIp, AI_TEMPLATES } from './_security';
 
 const MAX_PROMPT_LENGTH = 1500;
 const MERCHANT_RATE_LIMIT_MAX = 15;
@@ -44,14 +44,20 @@ export default async function handler(req: any, res: any) {
 
   const merchantUid = decodedToken.uid;
 
-  // 2. Enforce per-merchant rate limit
-  const rateLimitAllowed = checkRateLimit(
-    `ai_${merchantUid}`,
-    MERCHANT_RATE_LIMIT_MAX,
-    MERCHANT_RATE_LIMIT_WINDOW_MS
-  );
+  // 2. Enforce distributed per-merchant and per-IP rate limits (Upstash Redis sliding window)
+  const clientIp = getClientIp(req);
+  const merchantLimit = await evaluateRateLimit(`ai_merchant_${merchantUid}`, MERCHANT_RATE_LIMIT_MAX, MERCHANT_RATE_LIMIT_WINDOW_MS);
+  setRateLimitHeaders(res, merchantLimit);
 
-  if (!rateLimitAllowed) {
+  if (!merchantLimit.allowed) {
+    return res.status(429).json({
+      error: 'Rate limit exceeded. Please wait a few minutes before generating more content.',
+      success: false,
+    });
+  }
+
+  const ipLimit = await evaluateRateLimit(`ai_ip_${clientIp}`, 30, MERCHANT_RATE_LIMIT_WINDOW_MS);
+  if (!ipLimit.allowed) {
     return res.status(429).json({
       error: 'Rate limit exceeded. Please wait a few minutes before generating more content.',
       success: false,

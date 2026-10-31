@@ -29,6 +29,7 @@ import {
 import { buildWhatsAppInvoiceMessage, createWhatsAppUrl } from '../../utils/whatsappInvoice';
 import { MoyasarPaymentModal } from './MoyasarPaymentModal';
 import { LocationPickerModal } from './LocationPickerModal';
+import { TurnstileWidget } from '../common/TurnstileWidget';
 import { isSameSaudiCity } from '../../utils/cityUtils';
 
 interface CheckoutModalProps {
@@ -147,6 +148,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isLocating, setIsLocating] = useState(false);
   const [showLocationPickerModal, setShowLocationPickerModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState('');
   const [pendingMoyasarOrder, setPendingMoyasarOrder] = useState<Order | null>(null);
   const [showMoyasarModal, setShowMoyasarModal] = useState(false);
@@ -538,6 +540,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         },
         paymentMethod: mappedPaymentMethod,
         promoCode: appliedPromo?.code,
+        turnstileToken,
         bankTransferReceiptUrl: mappedPaymentMethod === 'bank_transfer' ? bankTransferReceiptDataUrl : undefined,
         bankTransferReceiptFileName: mappedPaymentMethod === 'bank_transfer' ? bankTransferReceiptName : undefined,
         bankTransferSenderName: mappedPaymentMethod === 'bank_transfer' ? bankTransferSenderName.trim() : undefined,
@@ -1299,6 +1302,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </span>
                 </label>
               </div>
+
+              {/* Bot Protection Challenge Widget */}
+              <TurnstileWidget onVerify={(token) => setTurnstileToken(token)} />
 
               {/* Submit CTA */}
               <div className="flex gap-2 pt-2">

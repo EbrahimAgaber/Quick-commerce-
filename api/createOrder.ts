@@ -82,9 +82,24 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ error: 'تم رفض الطلب.', success: false });
   }
 
-  // 3. Cloudflare Turnstile Bot Token Verification (if provided or required)
+  // 3. Cloudflare Turnstile Bot Token Verification
+  // When TURNSTILE_SECRET_KEY is configured, tokens are mandatory and validated. No bypass.
+  const isTurnstileConfigured = Boolean(process.env.TURNSTILE_SECRET_KEY);
   const turnstileToken = body.turnstileToken || req.headers?.['x-turnstile-token'];
-  if (turnstileToken) {
+
+  if (isTurnstileConfigured) {
+    if (!turnstileToken) {
+      return res.status(400).json({
+        error: 'رمز التحقق من الروبوت (Turnstile) مطلوب لإتمام الطلب.',
+        code: 'TURNSTILE_TOKEN_REQUIRED',
+        success: false,
+      });
+    }
+    const turnstileCheck = await verifyTurnstileToken(turnstileToken, clientIp);
+    if (!turnstileCheck.success) {
+      return res.status(400).json({ error: turnstileCheck.error || 'فشل التحقق الأمني من الروبوت.', success: false });
+    }
+  } else if (turnstileToken && turnstileToken !== 'dev-bypass-token') {
     const turnstileCheck = await verifyTurnstileToken(turnstileToken, clientIp);
     if (!turnstileCheck.success) {
       return res.status(400).json({ error: turnstileCheck.error || 'فشل التحقق الأمني.', success: false });

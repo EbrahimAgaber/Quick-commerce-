@@ -1,4 +1,4 @@
-import { handleCors, checkRateLimit, getClientIp } from '../_security';
+import { handleCors, evaluateRateLimit, setRateLimitHeaders, getClientIp } from '../_security';
 import { getSaudiCityCoordinates } from '../../src/utils/cityUtils';
 
 export interface ReverseGeocodeResult {
@@ -18,7 +18,9 @@ export default async function handler(req: any, res: any) {
   }
 
   const clientIp = getClientIp(req);
-  if (!checkRateLimit(`rev_geo_${clientIp}`, 60, 60 * 1000)) {
+  const rateLimit = await evaluateRateLimit(`rev_geo_${clientIp}`, 60, 60 * 1000);
+  setRateLimitHeaders(res, rateLimit);
+  if (!rateLimit.allowed) {
     return res.status(429).json({
       success: false,
       error: 'لقد تجاوزت معدل الاستعلام عن العناوين، يرجى الانتظار قليلاً.',

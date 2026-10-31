@@ -1,4 +1,4 @@
-import { handleCors, checkRateLimit, getClientIp } from '../_security';
+import { handleCors, evaluateRateLimit, setRateLimitHeaders, getClientIp } from '../_security';
 
 interface SplAddressResponse {
   success: boolean;
@@ -57,7 +57,9 @@ export default async function handler(req: any, res: any) {
 
   const clientIp = getClientIp(req);
   // Rate limit: 30 lookup requests per minute per IP
-  if (!checkRateLimit(`spl_lookup_${clientIp}`, 30, 60 * 1000)) {
+  const rateLimit = await evaluateRateLimit(`spl_lookup_${clientIp}`, 30, 60 * 1000);
+  setRateLimitHeaders(res, rateLimit);
+  if (!rateLimit.allowed) {
     return res.status(429).json({
       success: false,
       error: 'لقد تجاوزت الحد المسموح من استعلامات العنوان الوطني. يرجى الانتظار قليلاً.',
