@@ -97,6 +97,8 @@ export function isPlatformHostname(hostname: string): boolean {
   return (
     h === 'localhost' ||
     h === '127.0.0.1' ||
+    h === '0.0.0.0' ||
+    /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h) ||
     h.endsWith('.web.app') ||
     h.endsWith('.firebaseapp.com') ||
     h.endsWith('.ngrok.io') ||

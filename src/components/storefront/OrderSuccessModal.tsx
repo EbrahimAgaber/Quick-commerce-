@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Order, StoreSettings } from '../../types/store';
-import { CheckCircle2, MessageCircle, Copy, Check, PackageCheck, Sparkles, X, FileText, KeyRound, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, MessageCircle, Copy, Check, PackageCheck, Sparkles, X, FileText, KeyRound, ShieldCheck, ExternalLink, CreditCard } from 'lucide-react';
 import { buildWhatsAppInvoiceMessage, createWhatsAppUrl, getOrderDeliveryPin } from '../../utils/whatsappInvoice';
 import { InvoiceModal } from './InvoiceModal';
 
@@ -138,6 +138,22 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
 
         {/* Actions */}
         <div className="space-y-2.5 pt-2">
+          {/* Direct Online Payment Link CTA if online payment method selected */}
+          {(() => {
+          const m = (order.paymentMethod || '').toLowerCase();
+          return m.includes('card') || m.includes('بطاق') || m.includes('مدى') || m.includes('apple') || m.includes('visa');
+        })() && settings.customPaymentLink?.trim() && (
+            <a
+              href={settings.customPaymentLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-md transition-all active:scale-98"
+            >
+              <CreditCard className="w-4 h-4 text-emerald-200" />
+              <span>انقر هنا للدفع الإلكتروني الآن (Newleap / البطاقة)</span>
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
           {/* Re-open WhatsApp */}
           {settings.whatsappNumber && (
             <button

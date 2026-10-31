@@ -91,6 +91,8 @@ export interface StoreSettings {
   driverFee?: number;
   storeLocationUrl?: string;
   enableOnlinePayments?: boolean;
+  customPaymentLink?: string;
+  paymentLinkProvider?: 'newleap' | 'moyasar' | 'tap' | 'paylink' | 'custom' | string;
   moyasarPublishableKey?: string;
   moyasarSecretKey?: string;
   moyasarTestMode?: boolean;

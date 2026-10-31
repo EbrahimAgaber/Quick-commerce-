@@ -117,7 +117,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 }) => {
   const [copiedDnsKey, setCopiedDnsKey] = useState<string | null>(null);
   const [previewModeTab, setPreviewModeTab] = useState<'google' | 'whatsapp'>('google');
-  const [showMoyasarGuide, setShowMoyasarGuide] = useState(false);
   const [newPromoCode, setNewPromoCode] = useState('');
   const [newPromoType, setNewPromoType] = useState<'percentage' | 'fixed'>('percentage');
   const [newPromoValue, setNewPromoValue] = useState<number>(10);
@@ -1006,30 +1005,32 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
 
-          {/* Moyasar Payment Gateway Settings */}
-          <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-4">
-            <div className="border-b border-stone-100 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          {/* Online Payment Link Settings (Newleap, Paylink, etc.) */}
+          <div className="bg-white p-6 rounded-3xl border border-stone-200 space-y-5 shadow-sm">
+            <div className="border-b border-stone-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <h3 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
-                  <CreditCard className="w-4 h-4 text-emerald-600" />
-                  <span>بوابة الدفع الإلكتروني مويسر (Moyasar Gateway)</span>
+                <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                  <span className="p-1.5 rounded-xl bg-emerald-50 text-emerald-600">
+                    <CreditCard className="w-4 h-4" />
+                  </span>
+                  <span>رابط الدفع الإلكتروني المباشر (Newleap / روابط الدفع المباشرة)</span>
                 </h3>
                 <p className="text-xs text-stone-500 mt-0.5">
-                  قبول بطاقات مدى (mada)، Apple Pay، Visa، و Mastercard مع توثيق الحماية المصرفية الثلاثية (3D Secure)
+                  قم بلصق رابط الدفع الخاص بمتجرك من نيوليب (Newleap) أو أي مزود آخر لتحويل العميل إليه فوراً عند اختيار الدفع الإلكتروني
                 </p>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>معتمد من البنك المركزي السعودي (SAMA)</span>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold self-start sm:self-auto">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>دفع مباشر وآمن</span>
               </div>
             </div>
 
             <div className="space-y-4 text-xs">
               {/* Enable Online Payments Toggle */}
-              <label className="flex items-center justify-between p-3 rounded-2xl bg-stone-50 border border-stone-200 cursor-pointer">
+              <label className="flex items-center justify-between p-3.5 rounded-2xl bg-stone-50 border border-stone-200 hover:bg-stone-100/60 transition-colors cursor-pointer">
                 <div>
-                  <span className="font-bold text-stone-900 block">تفعيل الدفع الإلكتروني بالبطاقات و Apple Pay</span>
-                  <span className="text-stone-500 text-[11px]">إتاحة خيار الدفع الإلكتروني لعملائك في صفحة إنهاء الطلب</span>
+                  <span className="font-bold text-stone-900 block text-sm">تفعيل خيار الدفع الإلكتروني للعملاء</span>
+                  <span className="text-stone-500 text-[11px]">إتاحة خيار الدفع بالبطاقات و Apple Pay وتوجيه العميل لرابط الدفع الخاص بك</span>
                 </div>
                 <input
                   type="checkbox"
@@ -1067,128 +1068,63 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 />
               </label>
 
-              {/* 1-Click Instant Sandbox Quick Action */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <span className="font-bold text-blue-950 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-blue-600" />
-                    <span>تفعيل الدفع التجريبي الفوري بنقرة واحدة (بدون الحاجة لمفتاح خاص)</span>
-                  </span>
-                  <p className="text-blue-800 text-[11px] leading-relaxed">
-                    إذا لم تكن تملك حساب ميسر بعد أو ترغب في تجربة الشراء ببطاقات مدى و Apple Pay الوهمية، اضغط الزر للتفعيل الفوري.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditableSettings({
-                      ...editableSettings,
-                      enableOnlinePayments: true,
-                      moyasarTestMode: true,
-                      moyasarPublishableKey: 'pk_test_vcFUAGwCU4x8MrjiqqnUS4Vjy3AnFsXZoEi2qTyg',
-                    });
-                    alert('تم تفعيل وضع الدفع التجريبي الفوري بنجاح! يمكنك الآن تجربة الشراء ببطاقات مدى و Apple Pay الوهمية.');
-                  }}
-                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer shadow-xs transition-colors"
-                >
-                  تفعيل التجربة بنقرة واحدة ⚡
-                </button>
-              </div>
-
-              {/* Step-by-Step Onboarding Guide Toggle */}
-              <div className="border border-stone-200 rounded-2xl p-3.5 bg-stone-50 space-y-2">
-                <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowMoyasarGuide(!showMoyasarGuide)}>
-                  <span className="font-bold text-stone-800 flex items-center gap-1.5">
-                    <span>💡 كيف أحصل على مفتاح النشر من ميسر لتحصيل أموالي الحقيقية؟</span>
-                  </span>
-                  <span className="text-xs text-blue-600 font-bold hover:underline">
-                    {showMoyasarGuide ? 'إخفاء الدليل ▲' : 'عرض الخطوات بالصور ▼'}
-                  </span>
+              {/* Merchant Payment Link Input */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50/70 to-teal-50/70 border border-emerald-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-emerald-950 text-xs flex items-center gap-1.5">
+                    <ExternalLink className="w-4 h-4 text-emerald-700" />
+                    <span>رابط الدفع الإلكتروني الخاص بمتجرك (Payment Link)</span>
+                  </label>
+                  {editableSettings.customPaymentLink?.trim() && (
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      <span>رابط نشط وجاهز</span>
+                    </span>
+                  )}
                 </div>
 
-                {showMoyasarGuide && (
-                  <div className="pt-2 border-t border-stone-200 text-stone-700 space-y-2 text-[11px] leading-relaxed">
-                    <div className="flex items-start gap-2">
-                      <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0">1</span>
-                      <span>
-                        قم بتسجيل الدخول إلى حسابك في ميسر عبر الرابط الرسمي:{' '}
-                        <a
-                          href="https://dashboard.moyasar.com"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 font-bold underline inline-flex items-center gap-0.5"
-                        >
-                          <span>لوحة تحكم ميسر (dashboard.moyasar.com)</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0">2</span>
-                      <span>من القائمة الجانبية، اضغط على <strong>الإعدادات (Settings)</strong> ثم اختر <strong>مفاتيح API (API Keys)</strong>.</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0">3</span>
-                      <span>
-                        انسخ <strong>مفتاح النشر العام (Publishable Key)</strong> الذي يبدأ بـ <code className="bg-stone-200 px-1 py-0.5 rounded font-mono text-stone-900" dir="ltr">pk_live_...</code> والصقه في الحقل أدناه (تجنب لصق المفتاح السري sk_).
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Publishable API Key */}
-              <div className="grid grid-cols-1 gap-2">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-bold text-stone-700">
-                      مفتاح النشر العام (Moyasar Publishable API Key)
-                    </label>
-                    {editableSettings.moyasarPublishableKey?.startsWith('pk_live_') && (
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
-                        <Check className="w-3 h-3" />
-                        <span>مفتاح إنتاج حي معتمد (Live Account)</span>
-                      </span>
-                    )}
-                    {editableSettings.moyasarPublishableKey?.startsWith('pk_test_') && (
-                      <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold">
-                        مفتاح تجريبي معتمد (Sandbox Test)
-                      </span>
-                    )}
-                  </div>
-
+                <div className="relative">
                   <input
-                    type="text"
-                    placeholder="pk_live_... أو pk_test_..."
-                    value={editableSettings.moyasarPublishableKey || ''}
+                    type="url"
+                    placeholder="https://pay.newleap.sa/... أو رابط دفع متجرك"
+                    value={editableSettings.customPaymentLink || ''}
                     onChange={(e) => {
-                      const val = e.target.value.trim().replace(/['"؛;]/g, '');
+                      const val = e.target.value.trim();
                       setEditableSettings({
                         ...editableSettings,
-                        moyasarPublishableKey: val,
-                        moyasarTestMode: val.startsWith('pk_test_') ? true : val.startsWith('pk_live_') ? false : editableSettings.moyasarTestMode,
+                        customPaymentLink: val,
                       });
                     }}
-                    className={`w-full px-3 py-2.5 bg-stone-50 border rounded-xl font-mono text-xs focus:outline-none ${
-                      editableSettings.moyasarPublishableKey?.startsWith('sk_')
-                        ? 'border-red-400 bg-red-50 text-red-900'
-                        : 'border-stone-200 text-stone-900'
-                    }`}
+                    className="w-full px-3.5 py-3 bg-white border border-emerald-300 rounded-xl font-mono text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     dir="ltr"
                   />
+                </div>
 
-                  {/* Security Alert if Secret Key pasted */}
-                  {editableSettings.moyasarPublishableKey?.startsWith('sk_') && (
-                    <div className="p-2.5 mt-1.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-[11px] flex items-center gap-1.5">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>
-                        <strong>تنبيه أمني:</strong> لقد قمت بلصق المفتاح السري (Secret Key)! يرجى نسخ مفتاح النشر العام (Publishable Key) الذي يبدأ بـ <code>pk_</code> لحماية حسابك البنكي.
-                      </span>
-                    </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-emerald-900">
+                  <p className="flex items-center gap-1">
+                    <span>💡 الصق رابط الدفع المستخرج من منصة <strong>نيوليب (Newleap)</strong> أو بوابتك المفضلة، وسيقوم النظام بتوجيه العميل إليه فور إتمام الطلب مباشرة.</span>
+                  </p>
+                  {editableSettings.customPaymentLink?.trim() && (
+                    <a
+                      href={editableSettings.customPaymentLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-emerald-700 font-bold hover:underline bg-white px-2.5 py-1 rounded-lg border border-emerald-200"
+                    >
+                      <span>اختبار الرابط</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   )}
+                </div>
+              </div>
 
-                  <p className="text-[11px] text-stone-400 mt-1">
-                    لا تشارك مفتاحك السري (sk_live) أبداً. مفتاح النشر العام (pk_live) هو المصرح به لمعالجة عمليات الدفع الآمنة من متصفح العميل.
+              {/* Supported Providers Info Notice */}
+              <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 flex items-start gap-2.5 text-stone-600">
+                <Sparkles className="w-4 h-4 text-stone-500 shrink-0 mt-0.5" />
+                <div className="text-[11px] leading-relaxed space-y-1">
+                  <span className="font-bold text-stone-800 block">حرية اختيار شركة الدفع:</span>
+                  <p>
+                    يدعم المتجر الآن نظام روابط الدفع المباشرة من شركات التقنية المالية السعودية (FinTech) مثل <strong>Newleap</strong>، <strong>Paylink</strong>، <strong>Tap</strong> وغيرها، دون قيود أو تعقيدات في الربط التقني.
                   </p>
                 </div>
               </div>
