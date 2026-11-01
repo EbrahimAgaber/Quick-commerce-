@@ -392,7 +392,7 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
         </div>
 
         {/* Footer Security Badges */}
-        <div className="p-4 bg-stone-50 border-t border-stone-200 flex items-center justify-between text-[11px] text-stone-500">
+        <div className="p-4 bg-stone-50 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-stone-500">
           <div className="flex items-center gap-1.5 font-bold text-stone-700">
             <Lock className="w-3.5 h-3.5 text-emerald-600" />
             <span>اتصال مشفر 256-bit SSL</span>
@@ -400,8 +400,11 @@ export const MoyasarPaymentModal: React.FC<MoyasarPaymentModalProps> = ({
 
           <div className="flex items-center gap-1.5 font-bold text-emerald-700">
             <ShieldCheck className="w-4 h-4" />
-            <span>متوافق مع PCI-DSS و SAMA</span>
+            <span>بوابة معتمدة من SAMA عبر Moyasar</span>
           </div>
+        </div>
+        <div className="px-4 py-2 bg-stone-100/70 border-t border-stone-200 text-center text-[10px] text-stone-500">
+          معالجة المدفوعات وتشفير البطاقات تتم عبر خوادم بوابة ميسر المعتمدة. المنصة لا تحفظ أو تعالج أي بيانات بنكية ولا تتحمل مسؤولية تسوية المدفوعات أو نزاعاتها.
         </div>
       </div>
     </div>

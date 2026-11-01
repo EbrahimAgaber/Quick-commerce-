@@ -636,25 +636,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         localStorage.setItem(SAVED_PROFILE_KEY, JSON.stringify(profileData));
       } catch {}
 
-      // If online payment (Mada, Apple Pay, Visa/MC, STC Pay) is selected:
       if (mappedPaymentMethod === 'card' || mappedPaymentMethod === 'apple_pay' || mappedPaymentMethod === 'stc_pay') {
-        trackPurchase(serverRes.order, settings.currency);
-        onOrderSuccess(serverRes.order);
-
-        // Redirect customer to merchant's online payment link (Newleap, Paylink, etc.)
-        const paymentUrl = settings.customPaymentLink?.trim();
-        if (paymentUrl) {
-          try {
-            // Open payment link in a new tab / window immediately
-            const opened = window.open(paymentUrl, '_blank', 'noopener,noreferrer');
-            if (!opened || opened.closed || typeof opened.closed === 'undefined') {
-              // If popups blocked, redirect parent window
-              window.location.href = paymentUrl;
-            }
-          } catch {
-            window.location.href = paymentUrl;
-          }
-        }
+        setPendingMoyasarOrder(serverRes.order);
+        setShowMoyasarModal(true);
         return;
       }
 
@@ -1236,29 +1220,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               )}
 
-              {/* Online Payment Link Trust Info */}
               {(paymentMethod.includes('بطاق') || paymentMethod.includes('فيزا') || paymentMethod.includes('مدى') || paymentMethod.includes('Apple') || paymentMethod.toLowerCase().includes('card')) && (
-                <div className="mt-3 p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 space-y-2.5 text-xs">
+                <div className="mt-3 p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200 space-y-2.5 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                    <span className="font-bold text-stone-900 flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      <span>دفع إلكتروني فوري وآمن (مدى / Apple Pay / فيزا)</span>
+                      <span>دفع إلكتروني آمن عبر بوابة ميسر (Moyasar)</span>
                     </span>
-                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <Check className="w-3 h-3" />
-                      <span>رابط دفع مباشر</span>
+                      <span>معتمد من SAMA</span>
                     </span>
                   </div>
 
-                  <p className="text-emerald-900 leading-relaxed text-[11px]">
-                    عند إتمام الطلب، سيتم تحويلك مباشرة إلى صفحة الدفع المباشرة لسداد المبلغ عبر <strong>مدى، Apple Pay، أو البطاقات الائتمانية</strong> فورياً وبأعلى معايير الحماية والتشفير المصرفي.
+                  <p className="text-stone-600 leading-relaxed text-[11px]">
+                    يتم الدفع بأمان وسرعة عبر بوابة <strong>ميسر (Moyasar)</strong> المعتمدة من البنك المركزي السعودي مع تشفير 256-bit وحماية ثلاثية الأبعاد (3D Secure). المنصة لا تحفظ أي بيانات بطاقات على خوادمها نهائياً.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-bold">
-                    <span className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-white text-emerald-800 shadow-2xs">مدى mada</span>
-                    <span className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-white text-stone-900 shadow-2xs">Apple Pay</span>
-                    <span className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-white text-blue-900 shadow-2xs">Visa</span>
-                    <span className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-white text-amber-900 shadow-2xs">Mastercard</span>
+                    <span className="px-2.5 py-1 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs">مدى mada</span>
+                    <span className="px-2.5 py-1 rounded-lg border border-stone-200 bg-white text-stone-800 shadow-2xs">Apple Pay</span>
+                    <span className="px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-800 shadow-2xs">Visa</span>
+                    <span className="px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 shadow-2xs">Mastercard</span>
                   </div>
                 </div>
               )}
@@ -1421,7 +1404,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       <Loader2 className="w-4 h-4 animate-spin" />
                       <span>
                         {(paymentMethod.includes('بطاق') || paymentMethod.includes('فيزا') || paymentMethod.includes('مدى') || paymentMethod.includes('Apple') || paymentMethod.toLowerCase().includes('card'))
-                          ? 'جاري توثيق الطلب والتحويل لرابط الدفع...'
+                          ? 'جاري تجهيز بوابة الدفع وتوثيق الطلب...'
                           : 'جاري إرسال وتوثيق الطلب...'}
                       </span>
                     </>
