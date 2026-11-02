@@ -165,6 +165,30 @@ export const PaylinkPaymentModal: React.FC<PaylinkPaymentModalProps> = ({
     }
   };
 
+  const handleSimulateSandboxPayment = async () => {
+    setIsVerifying(true);
+    setErrorMsg(null);
+    try {
+      const simTransactionNo = `SIM_PAYLINK_${Date.now()}`;
+      setTransactionNo(simTransactionNo);
+      setSuccess(true);
+      setTimeout(() => {
+        onPaymentSuccess({
+          ...order,
+          status: 'Paid',
+          paymentStatus: 'paid',
+          paymentMethod: 'Paylink Sandbox (مدى / Apple Pay)',
+          paymentId: simTransactionNo,
+          paidAt: new Date().toISOString(),
+          paylinkTransactionNo: simTransactionNo,
+        });
+      }, 1000);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'حدث خطأ أثناء محاكاة الدفع التجريبي.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
   const handleVerifyPayment = async () => {
     if (!transactionNo) {
       setErrorMsg('لم يتم العثور على رقم معاملة للتحقق.');
@@ -341,6 +365,22 @@ export const PaylinkPaymentModal: React.FC<PaylinkPaymentModalProps> = ({
                   </>
                 )}
               </button>
+
+              {isTestMode && (
+                <div className="pt-2 border-t border-dashed border-stone-200">
+                  <button
+                    type="button"
+                    onClick={handleSimulateSandboxPayment}
+                    className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>إتمام الطلب في وضع التجربة فوراً (Sandbox 1-Tap)</span>
+                  </button>
+                  <p className="text-center text-[10px] text-stone-400 mt-1.5">
+                    مخصص لتجربة دورة الطلب في بيئة الاختبار دون سحب أموال حقيقية.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
