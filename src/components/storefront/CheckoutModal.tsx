@@ -1234,11 +1234,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-stone-900 flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      <span>
-                        {settings.paymentLinkProvider === 'moyasar'
-                          ? 'دفع إلكتروني آمن عبر بوابة ميسر (Moyasar)'
-                          : 'دفع إلكتروني فوري عبر بوابة بايلينك (Paylink)'}
-                      </span>
+                      <span>دفع إلكتروني فوري عبر بوابة بايلينك (Paylink)</span>
                     </span>
                     <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <Check className="w-3 h-3" />
@@ -1247,9 +1243,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
 
                   <p className="text-stone-600 leading-relaxed text-[11px]">
-                    {settings.paymentLinkProvider === 'moyasar'
-                      ? 'يتم الدفع بأمان وسرعة عبر بوابة ميسر (Moyasar) المعتمدة من البنك المركزي السعودي مع حماية ثلاثية الأبعاد (3D Secure).'
-                      : 'يتم الدفع بأمان وسرعة عبر بوابة بايلينك (Paylink) المعتمدة من البنك المركزي السعودي لدعم بطاقات مدى و Apple Pay و Visa و Mastercard.'}
+                    يتم الدفع بأمان وسرعة عبر بوابة بايلينك (Paylink) المعتمدة من البنك المركزي السعودي لدعم بطاقات مدى و Apple Pay و Visa و Mastercard.
                   </p>
 
                   <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-bold">

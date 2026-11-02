@@ -609,7 +609,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
   };
 
   const handleRefundOrder = async (order: Order) => {
-    if (!window.confirm(`هل أنت متأكد من رغبتك في استرجاع مبلغ ${order.grandTotal} ${editableSettings.currency} للطلب #${order.id} عبر ميسر؟`)) {
+    if (!window.confirm(`هل أنت متأكد من رغبتك في استرجاع مبلغ ${order.grandTotal} ${editableSettings.currency} للطلب #${order.id} عبر بوابة الدفع الإلكتروني؟`)) {
       return;
     }
     setIsRefunding(true);
@@ -650,7 +650,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
           returnedAt: new Date().toISOString(),
         });
       }
-      alert('تم استرجاع المبلغ بنجاح عبر ميسر وتحديث حالة الطلب إلى مسترد.');
+      alert('تم استرجاع المبلغ بنجاح عبر بوابة الدفع الإلكتروني وتحديث حالة الطلب إلى مسترد.');
     } catch (err: any) {
       alert(`فشل الاسترجاع: ${err?.message || 'خطأ في الاتصال بالسيرفر'}`);
     } finally {

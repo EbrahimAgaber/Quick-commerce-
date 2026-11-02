@@ -632,10 +632,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 disabled={isRefunding}
                 onClick={() => onRefundOrder(order)}
                 className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors border border-rose-200"
-                title="استرجاع المبلغ للعميل عبر بوابة ميسر"
+                title="استرجاع المبلغ للعميل إلكترونياً"
               >
                 {isRefunding ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-                <span>استرجاع (ميسر)</span>
+                <span>استرجاع المبلغ</span>
               </button>
             )}
           </div>

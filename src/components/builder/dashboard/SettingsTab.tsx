@@ -1066,90 +1066,35 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 />
               </label>
 
-              {/* Provider Selection */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Paylink Gateway Configuration */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <span className="font-bold text-blue-950 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-blue-600" />
+                    <span>تفعيل بايلينك التجريبي بنقرة واحدة ⚡</span>
+                  </span>
+                  <p className="text-blue-800 text-[11px] leading-relaxed">
+                    استخدم بيانات بيئة الفحص التجريبية الرسمية لبايلينك لتجربة مدى و Apple Pay الوهمية فوراً بدون رسوم شهرية.
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => {
                     setEditableSettings({
                       ...editableSettings,
+                      enableOnlinePayments: true,
                       paymentLinkProvider: 'paylink',
+                      paylinkTestMode: true,
+                      paylinkApiId: 'APP_ID_1123453311',
+                      paylinkSecretKey: '0662abb5-13c7-38ab-cd12-236e58f43766',
                     });
+                    alert('تم تفعيل بيئة الفحص التجريبية لبايلينك بنجاح! يمكنك الآن تجربة الدفع ببطاقات بايلينك الاختبارية.');
                   }}
-                  className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer ${
-                    editableSettings.paymentLinkProvider !== 'moyasar'
-                      ? 'border-blue-600 bg-blue-50/50 shadow-xs ring-2 ring-blue-500/20'
-                      : 'border-stone-200 hover:border-stone-300 bg-white'
-                  }`}
+                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer shadow-xs transition-colors"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-xs text-stone-900">بوابة بايلينك (Paylink)</span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                      بدون رسوم شهرية ⚡
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-stone-500 leading-relaxed">
-                    عمولة منخفضة، دعم كامل لمدى وأبل باي وبطاقات الائتمان، بدون تكاليف تأسيس أو رسوم اشتراك شهرية.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditableSettings({
-                      ...editableSettings,
-                      paymentLinkProvider: 'moyasar',
-                    });
-                  }}
-                  className={`p-3.5 rounded-2xl border text-right transition-all cursor-pointer ${
-                    editableSettings.paymentLinkProvider === 'moyasar'
-                      ? 'border-blue-600 bg-blue-50/50 shadow-xs ring-2 ring-blue-500/20'
-                      : 'border-stone-200 hover:border-stone-300 bg-white'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-xs text-stone-900">بوابة ميسر (Moyasar)</span>
-                    <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 text-[10px] font-medium">
-                      بوابة بديلة
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-stone-500 leading-relaxed">
-                    بوابة الدفع الكلاسيكية عبر نموذج الإدخال المضمن.
-                  </p>
+                  تفعيل تجربة بايلينك ⚡
                 </button>
               </div>
-
-              {/* Paylink Gateway Configuration */}
-              {editableSettings.paymentLinkProvider !== 'moyasar' ? (
-                <>
-                  <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <span className="font-bold text-blue-950 flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-blue-600" />
-                        <span>تفعيل بايلينك التجريبي بنقرة واحدة ⚡</span>
-                      </span>
-                      <p className="text-blue-800 text-[11px] leading-relaxed">
-                        استخدم بيانات بيئة الفحص التجريبية الرسمية لبايلينك لتجربة مدى و Apple Pay الوهمية فوراً.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditableSettings({
-                          ...editableSettings,
-                          enableOnlinePayments: true,
-                          paymentLinkProvider: 'paylink',
-                          paylinkTestMode: true,
-                          paylinkApiId: 'APP_ID_1123453311',
-                          paylinkSecretKey: '0662abb5-13c7-38ab-cd12-236e58f43766',
-                        });
-                        alert('تم تفعيل بيئة الفحص التجريبية لبايلينك بنجاح! يمكنك الآن تجربة الدفع ببطاقات بايلينك الاختبارية.');
-                      }}
-                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer shadow-xs transition-colors"
-                    >
-                      تفعيل تجربة بايلينك ⚡
-                    </button>
-                  </div>
 
                   <div className="border border-stone-200 rounded-2xl p-3.5 bg-stone-50 space-y-2">
                     <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowPaylinkGuide(!showPaylinkGuide)}>
@@ -1230,139 +1175,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                       />
                     </div>
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <span className="font-bold text-blue-950 flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-blue-600" />
-                        <span>تفعيل الدفع التجريبي الفوري بنقرة واحدة (بدون الحاجة لمفتاح خاص)</span>
-                      </span>
-                      <p className="text-blue-800 text-[11px] leading-relaxed">
-                        إذا لم تكن تملك حساب ميسر بعد أو ترغب في تجربة الشراء ببطاقات مدى و Apple Pay الوهمية، اضغط الزر للتفعيل الفوري.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditableSettings({
-                          ...editableSettings,
-                          enableOnlinePayments: true,
-                          moyasarTestMode: true,
-                          moyasarPublishableKey: 'pk_test_vcFUAGwCU4x8MrjiqqnUS4Vjy3AnFsXZoEi2qTyg',
-                        });
-                        alert('تم تفعيل وضع الدفع التجريبي الفوري بنجاح! يمكنك الآن تجربة الشراء ببطاقات مدى و Apple Pay الوهمية.');
-                      }}
-                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shrink-0 cursor-pointer shadow-xs transition-colors"
-                    >
-                      تفعيل التجربة بنقرة واحدة ⚡
-                    </button>
-                  </div>
-
-                  <div className="border border-stone-200 rounded-2xl p-3.5 bg-stone-50 space-y-2">
-                    <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowMoyasarGuide(!showMoyasarGuide)}>
-                      <span className="font-bold text-stone-800 flex items-center gap-1.5">
-                        <span>💡 كيف أحصل على مفتاح النشر من ميسر لتحصيل أموالي الحقيقية؟</span>
-                      </span>
-                      <span className="text-xs text-blue-600 font-bold hover:underline">
-                        {showMoyasarGuide ? 'إخفاء الدليل ▲' : 'عرض الخطوات ▼'}
-                      </span>
-                    </div>
-
-                    {showMoyasarGuide && (
-                      <div className="pt-2 border-t border-stone-200 text-stone-700 space-y-2 text-[11px] leading-relaxed">
-                        <div className="flex items-start gap-2">
-                          <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0">1</span>
-                          <span>
-                            قم بتسجيل الدخول إلى حسابك في ميسر عبر الرابط الرسمي:{' '}
-                            <a
-                              href="https://dashboard.moyasar.com"
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-blue-600 font-bold underline inline-flex items-center gap-0.5"
-                            >
-                              <span>لوحة تحكم ميسر (dashboard.moyasar.com)</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0">2</span>
-                          <span>من القائمة الجانبية، اضغط على <strong>الإعدادات (Settings)</strong> ثم اختر <strong>مفاتيح API (API Keys)</strong>.</span>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0">3</span>
-                          <span>
-                            انسخ <strong>مفتاح النشر العام (Publishable Key)</strong> الذي يبدأ بـ <code className="bg-stone-200 px-1 py-0.5 rounded font-mono text-stone-900" dir="ltr">pk_live_...</code> والصقه في الحقل أدناه (تجنب لصق المفتاح السري sk_).
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block font-bold text-stone-700">
-                          مفتاح النشر العام (Moyasar Publishable API Key)
-                        </label>
-                        {editableSettings.moyasarPublishableKey?.startsWith('pk_live_') && (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
-                            <Check className="w-3 h-3" />
-                            <span>مفتاح إنتاج حي معتمد (Live Account)</span>
-                          </span>
-                        )}
-                        {editableSettings.moyasarPublishableKey?.startsWith('pk_test_') && (
-                          <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold">
-                            مفتاح تجريبي معتمد (Sandbox Test)
-                          </span>
-                        )}
-                      </div>
-
-                      <input
-                        type="text"
-                        placeholder="pk_live_... أو pk_test_..."
-                        value={editableSettings.moyasarPublishableKey || ''}
-                        onChange={(e) => {
-                          const val = e.target.value.trim().replace(/['"؛;]/g, '');
-                          setEditableSettings({
-                            ...editableSettings,
-                            moyasarPublishableKey: val,
-                            moyasarTestMode: val.startsWith('pk_test_') ? true : val.startsWith('pk_live_') ? false : editableSettings.moyasarTestMode,
-                          });
-                        }}
-                        className={`w-full px-3 py-2.5 bg-stone-50 border rounded-xl font-mono text-xs focus:outline-none ${
-                          editableSettings.moyasarPublishableKey?.startsWith('sk_')
-                            ? 'border-red-400 bg-red-50 text-red-900'
-                            : 'border-stone-200 text-stone-900'
-                        }`}
-                        dir="ltr"
-                      />
-
-                      {editableSettings.moyasarPublishableKey?.startsWith('sk_') && (
-                        <div className="p-2.5 mt-1.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-[11px] flex items-center gap-1.5">
-                          <AlertCircle className="w-4 h-4 shrink-0" />
-                          <span>
-                            <strong>تنبيه أمني:</strong> لقد قمت بلصق المفتاح السري (Secret Key)! يرجى نسخ مفتاح النشر العام (Publishable Key) الذي يبدأ بـ <code>pk_</code> لحماية حسابك البنكي.
-                          </span>
-                        </div>
-                      )}
-
-                      <p className="text-[11px] text-stone-400 mt-1">
-                        لا تشارك مفتاحك السري (sk_live) أبداً. مفتاح النشر العام (pk_live) هو المصرح به لمعالجة عمليات الدفع الآمنة من متصفح العميل عبر واجهة ميسر الرسمية.
-                      </p>
-                    </div>
-                  </div>
-                </>
-              )}
 
               <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-start gap-2.5 text-amber-900">
                 <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div className="text-[11px] leading-relaxed space-y-1">
                   <span className="font-bold block">إخلاء مسؤولية المنصة وحماية الحساب البنكي:</span>
                   <p>
-                    تتم عمليات الدفع مباشرة بين العميل وحساب التاجر لدى بوابات الدفع الرسمية (Paylink أو Moyasar) المعتمدة والمرخصة من البنك المركزي السعودي (SAMA). لا تتحمل المنصة أي مسؤولية مالية أو تشغيلية أو قانونية تجاه العمليات والنزاعات البنكية والمبالغ المستردة، ولا يتم تخزين أو معالجة أي بيانات بطاقات ائتمانية على خوادم المتجر.
+                    تتم عمليات الدفع مباشرة بين العميل وحساب التاجر لدى بوابة الدفع الرسمية (Paylink) المعتمدة والمرخصة من البنك المركزي السعودي (SAMA). لا تتحمل المنصة أي مسؤولية مالية أو تشغيلية أو قانونية تجاه العمليات والنزاعات البنكية والمبالغ المستردة، ولا يتم تخزين أو معالجة أي بيانات بطاقات ائتمانية على خوادم المتجر.
                   </p>
                 </div>
               </div>
