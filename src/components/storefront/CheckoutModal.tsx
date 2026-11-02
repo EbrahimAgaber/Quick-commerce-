@@ -41,6 +41,7 @@ interface SavedShopperProfile {
 }
 import { buildWhatsAppInvoiceMessage, createWhatsAppUrl } from '../../utils/whatsappInvoice';
 import { MoyasarPaymentModal } from './MoyasarPaymentModal';
+import { PaylinkPaymentModal } from './PaylinkPaymentModal';
 import { LocationPickerModal } from './LocationPickerModal';
 import { TurnstileWidget } from '../common/TurnstileWidget';
 import { isSameSaudiCity } from '../../utils/cityUtils';
@@ -206,6 +207,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [pendingMoyasarOrder, setPendingMoyasarOrder] = useState<Order | null>(null);
   const [showMoyasarModal, setShowMoyasarModal] = useState(false);
+  const [pendingPaylinkOrder, setPendingPaylinkOrder] = useState<Order | null>(null);
+  const [showPaylinkModal, setShowPaylinkModal] = useState(false);
 
   // Saudi National Address (SPL) State
   const [splShortCode, setSplShortCode] = useState('');
@@ -637,8 +640,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       } catch {}
 
       if (mappedPaymentMethod === 'card' || mappedPaymentMethod === 'apple_pay' || mappedPaymentMethod === 'stc_pay') {
-        setPendingMoyasarOrder(serverRes.order);
-        setShowMoyasarModal(true);
+        const provider = settings.paymentLinkProvider || 'paylink';
+        if (provider === 'moyasar') {
+          setPendingMoyasarOrder(serverRes.order);
+          setShowMoyasarModal(true);
+        } else {
+          setPendingPaylinkOrder(serverRes.order);
+          setShowPaylinkModal(true);
+        }
         return;
       }
 
@@ -1433,6 +1442,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Paylink Online Payment Gateway Modal */}
+      {showPaylinkModal && pendingPaylinkOrder && (
+        <PaylinkPaymentModal
+          isOpen={showPaylinkModal}
+          onClose={() => setShowPaylinkModal(false)}
+          order={pendingPaylinkOrder}
+          settings={settings}
+          storeSlug={storeId}
+          onPaymentSuccess={(paidOrder) => {
+            setShowPaylinkModal(false);
+            trackPurchase(paidOrder, settings.currency);
+            onOrderSuccess(paidOrder);
+          }}
+          onPaymentFailed={(errMsg) => {
+            setErrorMsg(errMsg);
+          }}
+        />
+      )}
 
       {/* Moyasar Online Payment Gateway Modal */}
       {showMoyasarModal && pendingMoyasarOrder && (

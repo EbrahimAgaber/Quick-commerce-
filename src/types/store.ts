@@ -92,7 +92,10 @@ export interface StoreSettings {
   storeLocationUrl?: string;
   enableOnlinePayments?: boolean;
   customPaymentLink?: string;
-  paymentLinkProvider?: 'newleap' | 'moyasar' | 'tap' | 'paylink' | 'custom' | string;
+  paymentLinkProvider?: 'paylink' | 'moyasar' | 'newleap' | 'tap' | 'custom' | string;
+  paylinkApiId?: string;
+  paylinkSecretKey?: string;
+  paylinkTestMode?: boolean;
   moyasarPublishableKey?: string;
   moyasarSecretKey?: string;
   moyasarTestMode?: boolean;

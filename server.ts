@@ -17,6 +17,9 @@ import createOrderHandler from './api/createOrder';
 import updateOrderStatusHandler from './api/updateOrderStatus';
 import trackingHandler from './api/tracking';
 import validatePromoHandler from './api/validatePromo';
+import createPaylinkInvoiceHandler from './api/createPaylinkInvoice';
+import verifyPaylinkPaymentHandler from './api/verifyPaylinkPayment';
+import paylinkWebhookHandler from './api/paylinkWebhook';
 import { hasFirebaseAdminCredentials } from './api/_firebaseAdmin';
 import { generateOrderId, generateDeliveryPin } from './src/utils/whatsappInvoice';
 import { getZatcaComplianceType, calculateVatBreakdown } from './src/utils/zatca';
@@ -1190,6 +1193,102 @@ export async function handleLocalStoreApiRequest(
       sendJson(res, 400, { success: false, error: err?.message || 'فشلت معالجة الطلب في الخادم المحلي.' });
       return true;
     }
+  }
+
+  // 18. POST /api/createPaylinkInvoice
+  if (pathname === '/api/createPaylinkInvoice' && req.method === 'POST') {
+    let rawBody = '';
+    try {
+      rawBody = await readRequestBody(req);
+    } catch {}
+    const parsed = JSON.parse(rawBody || '{}');
+
+    if (hasFirebaseAdminCredentials() && parsed.storeId !== 'store_aurora_01') {
+      const runner = adaptVercelHandler(createPaylinkInvoiceHandler);
+      await runner(parsed);
+      return true;
+    }
+
+    // Local / Demo response for Paylink Invoice creation
+    const stores = readStoresFromDisk();
+    const store = stores.find((s) => s.id === parsed.storeId || s.slug?.toLowerCase() === parsed.storeId?.toLowerCase());
+    const order = (store?.orders || []).find((o) => o.id === parsed.orderId);
+
+    const transactionNo = `sim_paylink_${Date.now()}`;
+    const testCheckoutUrl = `https://restpilot.paylink.sa/payment/${transactionNo}`;
+
+    if (order) {
+      (order as any).paylinkTransactionNo = transactionNo;
+      (order as any).paylinkUrl = testCheckoutUrl;
+      if (store) await saveStoreOnDisk(store);
+    }
+
+    sendJson(res, 200, {
+      success: true,
+      transactionNo,
+      url: testCheckoutUrl,
+      qrUrl: '',
+    });
+    return true;
+  }
+
+  // 19. POST /api/verifyPaylinkPayment
+  if (pathname === '/api/verifyPaylinkPayment' && req.method === 'POST') {
+    let rawBody = '';
+    try {
+      rawBody = await readRequestBody(req);
+    } catch {}
+    const parsed = JSON.parse(rawBody || '{}');
+
+    if (hasFirebaseAdminCredentials() && parsed.storeId !== 'store_aurora_01') {
+      const runner = adaptVercelHandler(verifyPaylinkPaymentHandler);
+      await runner(parsed);
+      return true;
+    }
+
+    // Local demo verification: simulate Paylink payment confirmation
+    const stores = readStoresFromDisk();
+    const store = stores.find((s) => s.id === parsed.storeId || s.slug?.toLowerCase() === parsed.storeId?.toLowerCase());
+    const order = (store?.orders || []).find((o) => o.id === parsed.orderId);
+
+    if (order) {
+      order.status = 'Paid';
+      order.paymentStatus = 'paid';
+      order.paymentMethod = 'Paylink (Mada / Apple Pay)';
+      (order as any).paidAt = new Date().toISOString();
+      if (store) await saveStoreOnDisk(store);
+
+      sendJson(res, 200, {
+        success: true,
+        status: 'Paid',
+        orderId: parsed.orderId,
+        grandTotal: order.grandTotal,
+        paymentId: parsed.transactionNo,
+        updatedOrder: order,
+      });
+      return true;
+    }
+
+    sendJson(res, 404, { success: false, error: 'الطلب غير موجود للتأكيد.' });
+    return true;
+  }
+
+  // 20. POST /api/paylinkWebhook
+  if (pathname === '/api/paylinkWebhook' && req.method === 'POST') {
+    let rawBody = '';
+    try {
+      rawBody = await readRequestBody(req);
+    } catch {}
+    const parsed = JSON.parse(rawBody || '{}');
+
+    if (hasFirebaseAdminCredentials()) {
+      const runner = adaptVercelHandler(paylinkWebhookHandler);
+      await runner(parsed);
+      return true;
+    }
+
+    sendJson(res, 200, { status: 'success' });
+    return true;
   }
 
   return false;
