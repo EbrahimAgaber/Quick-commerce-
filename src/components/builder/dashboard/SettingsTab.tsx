@@ -1011,8 +1011,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             <div className="border-b border-stone-100 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
-                  <CreditCard className="w-4 h-4 text-emerald-600" />
-                  <span>بوابة الدفع الإلكتروني ميسر (Moyasar Gateway API)</span>
+                  <CreditCard className="w-4 h-4 text-blue-600" />
+                  <span>بوابة الدفع الإلكتروني المعتمدة (Online Payment Gateway)</span>
                 </h3>
                 <p className="text-xs text-stone-500 mt-0.5">
                   قبول بطاقات مدى (mada)، Apple Pay، Visa، و Mastercard مع توثيق الحماية المصرفية الثلاثية (3D Secure)

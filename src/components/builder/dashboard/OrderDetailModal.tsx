@@ -86,8 +86,11 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   if (!isOpen || !order) return null;
 
   const isElectronicPayment =
-    ['card', 'apple_pay', 'stc_pay', 'moyasar'].includes((order.paymentMethod || '').toLowerCase()) ||
-    order.paymentMethod === 'Moyasar';
+    ['card', 'apple_pay', 'stc_pay', 'moyasar', 'paylink'].includes((order.paymentMethod || '').toLowerCase()) ||
+    (order.paymentMethod || '').toLowerCase().includes('paylink') ||
+    (order.paymentMethod || '').toLowerCase().includes('moyasar') ||
+    Boolean(order.paylinkTransactionNo) ||
+    Boolean(order.paymentId);
 
   const handleGenerateAwb = async () => {
     if (!order) return;

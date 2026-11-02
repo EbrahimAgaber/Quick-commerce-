@@ -264,6 +264,8 @@ export interface Order {
   invoiceUuid?: string;
   invoiceHash?: string;
   paymentId?: string;
+  paylinkTransactionNo?: string;
+  paylinkUrl?: string;
   paidAt?: string;
   paymentStatus?: 'pending_payment' | 'pending_receipt_review' | 'paid' | 'failed' | 'refunded';
   bankTransferReceiptUrl?: string;

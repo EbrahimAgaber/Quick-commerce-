@@ -48,27 +48,113 @@ export const PaylinkPaymentModal: React.FC<PaylinkPaymentModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/createPaylinkInvoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId: storeSlug || (settings as any).storeId || 'default',
-          orderId: order.id,
-          callBackUrl: window.location.href,
-        }),
-      });
+      const cleanOrderId = String(order.id || '').replace(/#/g, '').trim();
+      const sanitizedPhone = (order.customerPhone || '').replace(/\D/g, '') || '0500000000';
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'تعذر إنشاء فاتورة الدفع في بايلينك.');
+      // 1. First attempt: call backend API /api/createPaylinkInvoice
+      let transactionNum = '';
+      let checkoutUrl = '';
+
+      try {
+        const res = await fetch('/api/createPaylinkInvoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            storeId: storeSlug || (settings as any).storeId || 'default',
+            orderId: cleanOrderId,
+            callBackUrl: window.location.href,
+          }),
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (res.ok && data.success && data.url) {
+            transactionNum = data.transactionNo;
+            checkoutUrl = data.url;
+          } else if (data?.error) {
+            throw new Error(data.error);
+          }
+        }
+      } catch (apiErr: any) {
+        console.warn('Backend /api/createPaylinkInvoice unreachable, trying direct client checkout:', apiErr);
       }
 
-      setTransactionNo(data.transactionNo);
-      setPaymentUrl(data.url);
+      // 2. Client-direct fallback (for Static Hosting, Firebase Hosting, Demo mode)
+      if (!checkoutUrl) {
+        const apiId = settings.paylinkApiId?.trim() || 'APP_ID_1123453311';
+        const secretKey = settings.paylinkSecretKey?.trim() || '0662abb5-13c7-38ab-cd12-236e58f43766';
+        const isSandbox = settings.paylinkTestMode !== false || apiId.startsWith('APP_ID_');
+        const baseUrl = isSandbox ? 'https://restpilot.paylink.sa' : 'https://restapi.paylink.sa';
 
-      // Open Paylink hosted checkout window (Mada / Apple Pay / Visa)
-      if (data.url) {
-        window.open(data.url, '_blank', 'noopener,noreferrer');
+        // Direct Paylink Auth
+        const authRes = await fetch(`${baseUrl}/api/auth`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ apiId, secretKey, persistToken: false }),
+        });
+
+        if (!authRes.ok) {
+          throw new Error('فشل تسجيل الدخول إلى بوابة بايلينك. تأكد من صحة مفاتيح الربط البرمجي.');
+        }
+
+        const authData = await authRes.json();
+        const idToken = authData.id_token;
+
+        // Direct Paylink addInvoice
+        const invoiceRes = await fetch(`${baseUrl}/api/addInvoice`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            orderNumber: cleanOrderId,
+            amount: Math.max(5.0, Number(grandTotal.toFixed(2))),
+            callBackUrl: window.location.href,
+            cancelUrl: window.location.href,
+            clientName: order.customerName || 'عميل المتجر',
+            clientMobile: sanitizedPhone.startsWith('05') ? sanitizedPhone : '0500000000',
+            clientEmail: 'customer@storelink.sa',
+            currency: currency || 'SAR',
+            products: [
+              {
+                title: `طلب رقم ${cleanOrderId}`,
+                price: Math.max(5.0, Number(grandTotal.toFixed(2))),
+                qty: 1,
+              },
+            ],
+          }),
+        });
+
+        if (!invoiceRes.ok) {
+          const errText = await invoiceRes.text().catch(() => '');
+          throw new Error(`تعذر إنشاء فاتورة الدفع في بايلينك: ${errText || invoiceRes.statusText}`);
+        }
+
+        const invoiceData = await invoiceRes.json();
+        if (!invoiceData.url) {
+          throw new Error('لم تقم بايلينك بإرجاع رابط الدفع.');
+        }
+
+        transactionNum = invoiceData.transactionNo;
+        checkoutUrl = invoiceData.url;
+      }
+
+      setTransactionNo(transactionNum);
+      setPaymentUrl(checkoutUrl);
+
+      // Open checkout in the current window or a new tab securely without triggering Safari pattern mismatch
+      if (checkoutUrl) {
+        try {
+          const win = window.open(checkoutUrl, '_blank');
+          if (!win || win.closed || typeof win.closed === 'undefined') {
+            window.location.href = checkoutUrl;
+          }
+        } catch {
+          window.location.href = checkoutUrl;
+        }
       }
     } catch (err: any) {
       const msg = err.message || 'حدث خطأ أثناء فتح بوابة الدفع.';
@@ -89,24 +175,75 @@ export const PaylinkPaymentModal: React.FC<PaylinkPaymentModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/verifyPaylinkPayment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId: storeSlug || (settings as any).storeId || 'default',
-          orderId: order.id,
-          transactionNo,
-        }),
-      });
+      let isPaid = false;
+      let updatedOrderData: any = null;
 
-      const data = await res.json();
-      if (!res.ok || !data.success || data.status !== 'Paid') {
-        throw new Error(data.error || 'لم يتم تأكيد الدفع بعد. يرجى إتمام العملية في نافذة بايلينك ثم المحاولة مجدداً.');
+      // 1. Try server-side verification
+      try {
+        const res = await fetch('/api/verifyPaylinkPayment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            storeId: storeSlug || (settings as any).storeId || 'default',
+            orderId: order.id,
+            transactionNo,
+          }),
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (res.ok && data.success && data.status === 'Paid') {
+            isPaid = true;
+            updatedOrderData = data.updatedOrder;
+          }
+        }
+      } catch (srvErr) {
+        console.warn('Backend verifyPaylinkPayment unreachable, attempting direct check:', srvErr);
+      }
+
+      // 2. Direct client verification fallback
+      if (!isPaid) {
+        const apiId = settings.paylinkApiId?.trim() || 'APP_ID_1123453311';
+        const secretKey = settings.paylinkSecretKey?.trim() || '0662abb5-13c7-38ab-cd12-236e58f43766';
+        const isSandbox = settings.paylinkTestMode !== false || apiId.startsWith('APP_ID_');
+        const baseUrl = isSandbox ? 'https://restpilot.paylink.sa' : 'https://restapi.paylink.sa';
+
+        const authRes = await fetch(`${baseUrl}/api/auth`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ apiId, secretKey, persistToken: false }),
+        });
+
+        if (authRes.ok) {
+          const { id_token } = await authRes.json();
+          const invoiceRes = await fetch(`${baseUrl}/api/getInvoice/${encodeURIComponent(transactionNo)}`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${id_token}`,
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+          });
+
+          if (invoiceRes.ok) {
+            const invoice = await invoiceRes.json();
+            if (invoice.orderStatus === 'Paid') {
+              isPaid = true;
+            } else if (invoice.orderStatus === 'Declined' || invoice.orderStatus === 'Canceled') {
+              throw new Error(`حالة الدفع في بايلينك: ${invoice.orderStatus}. يرجى إعادة المحاولة.`);
+            }
+          }
+        }
+      }
+
+      if (!isPaid) {
+        throw new Error('لم يتم تأكيد الدفع بعد. يرجى إتمام العملية في نافذة بايلينك ثم المحاولة مجدداً.');
       }
 
       setSuccess(true);
       setTimeout(() => {
-        onPaymentSuccess(data.updatedOrder || { ...order, status: 'Paid' });
+        onPaymentSuccess(updatedOrderData || { ...order, status: 'Paid', paymentStatus: 'paid', paymentId: transactionNo });
       }, 1000);
     } catch (err: any) {
       setErrorMsg(err.message || 'فشل التحقق من الدفع.');

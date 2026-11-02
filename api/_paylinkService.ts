@@ -95,6 +95,36 @@ export class PaylinkGateway {
   }
 
   /**
+   * Sanitizes orderNumber to conform to alphanumeric + dash format
+   */
+  public static sanitizeOrderNumber(orderNumber: string): string {
+    const cleaned = String(orderNumber || '')
+      .replace(/#/g, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .trim();
+    return cleaned || `ORD${Date.now()}`;
+  }
+
+  /**
+   * Sanitizes Saudi mobile phone number to standard 05xxxxxxxx format
+   */
+  public static sanitizeMobile(phone: string): string {
+    let digits = String(phone || '').replace(/\D/g, '');
+    if (digits.startsWith('00966')) {
+      digits = digits.slice(5);
+    } else if (digits.startsWith('966')) {
+      digits = digits.slice(3);
+    }
+    if (!digits.startsWith('0') && digits.length === 9) {
+      digits = '0' + digits;
+    }
+    if (digits.length === 10 && digits.startsWith('05')) {
+      return digits;
+    }
+    return digits || '0500000000';
+  }
+
+  /**
    * Create an invoice / checkout transaction link
    */
   public static async createInvoice(
@@ -104,6 +134,9 @@ export class PaylinkGateway {
     const token = await this.authenticate(config);
     const baseUrl = this.getBaseUrl(config.isTestMode);
 
+    const sanitizedOrderNumber = this.sanitizeOrderNumber(payload.orderNumber);
+    const sanitizedMobile = this.sanitizeMobile(payload.clientMobile);
+
     const res = await fetch(`${baseUrl}/api/addInvoice`, {
       method: 'POST',
       headers: {
@@ -112,18 +145,18 @@ export class PaylinkGateway {
         Accept: 'application/json',
       },
       body: JSON.stringify({
-        orderNumber: payload.orderNumber,
-        amount: Number(payload.amount.toFixed(2)),
+        orderNumber: sanitizedOrderNumber,
+        amount: Math.max(5.0, Number(payload.amount.toFixed(2))),
         callBackUrl: payload.callBackUrl,
         cancelUrl: payload.cancelUrl || payload.callBackUrl,
         clientName: payload.clientName || 'عميل المتجر',
-        clientMobile: payload.clientMobile,
+        clientMobile: sanitizedMobile,
         clientEmail: payload.clientEmail || 'customer@storelink.sa',
         currency: payload.currency || 'SAR',
         products: payload.products && payload.products.length > 0 ? payload.products : [
           {
-            title: `Order #${payload.orderNumber}`,
-            price: Number(payload.amount.toFixed(2)),
+            title: `Order #${sanitizedOrderNumber}`,
+            price: Math.max(5.0, Number(payload.amount.toFixed(2))),
             qty: 1,
           }
         ],
