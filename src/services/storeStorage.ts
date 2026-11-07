@@ -406,20 +406,29 @@ export function safeSetLocalStorage(key: string, value: string): void {
         if (rawOrders) {
           try {
             const parsed = JSON.parse(rawOrders);
-            if (Array.isArray(parsed) && parsed.length > 30) {
-              localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(parsed.slice(0, 30)));
+            if (Array.isArray(parsed) && parsed.length > 20) {
+              localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(parsed.slice(0, 20)));
             }
           } catch {}
         }
       }
-      // 2. If still failing due to bulky base64 strings in products, strip only the >8KB base64 strings for localStorage
+      // 2. If failing due to bulky base64 strings in products, strip only the >8KB base64 strings for localStorage
       if (key === STORAGE_KEYS.PRODUCTS) {
         try {
           const parsedProds = JSON.parse(value);
           if (Array.isArray(parsedProds)) {
             const compact = parsedProds.map(stripBulkyBase64FromProduct);
-            localStorage.setItem(key, JSON.stringify(compact));
-            return;
+            try {
+              localStorage.setItem(key, JSON.stringify(compact));
+              return;
+            } catch {
+              // If still exceeding quota (e.g. 4000+ items), store lightweight slice in localStorage
+              // while IndexedDB and server database hold the full 4000+ catalog
+              if (compact.length > 50) {
+                localStorage.setItem(key, JSON.stringify(compact.slice(0, 50)));
+                return;
+              }
+            }
           }
         } catch {}
       }

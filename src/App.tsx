@@ -483,8 +483,9 @@ export default function App() {
               if (freshStore) {
                 const localProds = localMatch.products || [];
                 const freshProds = freshStore.products || [];
-                let resolvedProds = freshProds;
-                if (freshProds.length === 0 && localProds.length > 0) {
+                // CRITICAL SAFEGUARD: Do not replace a large local/disk catalog with a smaller slice
+                let resolvedProds = freshProds.length >= localProds.length && freshProds.length > 0 ? freshProds : localProds;
+                if (freshProds.length < localProds.length && localProds.length > 0) {
                   resolvedProds = localProds;
                   if (auth.currentUser && (localMatch.ownerId === auth.currentUser.uid || localMatch.ownerId === 'guest')) {
                     StoreManager.syncStoreToFirestore({ ...localMatch, products: localProds }).catch(console.warn);

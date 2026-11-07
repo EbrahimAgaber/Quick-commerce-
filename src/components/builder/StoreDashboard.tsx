@@ -739,7 +739,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
     onUpdateProducts(updated);
   };
 
-  const handleImportCsvProducts = (importedProducts: Product[], mode: 'append' | 'replace') => {
+  const handleImportCsvProducts = async (importedProducts: Product[], mode: 'append' | 'replace') => {
     let finalProducts: Product[];
     if (mode === 'replace') {
       finalProducts = importedProducts;
@@ -750,9 +750,22 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({
       });
       finalProducts = Array.from(existingMap.values());
     }
+    setSyncMessage(`⏳ جارٍ حفظ ومزامنة ${importedProducts.length} منتج على القرص والسحابة...`);
     onUpdateProducts(finalProducts);
-    setSyncMessage(`🎉 تم استيراد وتحديث ${importedProducts.length} منتج بنجاح!`);
-    setTimeout(() => setSyncMessage(null), 3500);
+
+    // Explicitly sync to local server API immediately so page refresh cannot wipe large catalogs
+    try {
+      const active = (storeId ? StoreManager.getStoreById(storeId) : null) || StoreManager.getActiveStore();
+      if (active) {
+        await StoreManager.syncStoresToLocalServer({
+          ...active,
+          products: finalProducts,
+        });
+      }
+    } catch {}
+
+    setSyncMessage(`🎉 تم استيراد وتثبيت ${importedProducts.length} منتج بنجاح!`);
+    setTimeout(() => setSyncMessage(null), 4000);
   };
 
   const handleExportProductsCSV = () => {

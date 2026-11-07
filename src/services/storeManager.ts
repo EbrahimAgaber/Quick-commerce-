@@ -13,6 +13,7 @@ import { generateOrderId, getOrderDeliveryPin, generateDeliveryPin } from '../ut
 import { NotificationHub } from './notificationService';
 import { getZatcaComplianceType, calculateVatBreakdown } from '../utils/zatca';
 import { isLegacyWatchPlaceholder, resolveStaticGoogleDriveAsset } from '../utils/imageOptimizer';
+import { LargeCatalogStorage } from './catalogIndexedDB';
 import { 
   doc, 
   getDoc, 
@@ -361,17 +362,36 @@ export class StoreManager {
       try {
         const currentUserId = auth.currentUser?.uid;
         const activeId = localStorage.getItem(ACTIVE_STORE_KEY);
+        // Create lightweight versions for localStorage by keeping only first 50 items if store has massive catalog
         const lightweightStores = stores
           .filter((s, idx) => s.ownerId === currentUserId || s.id === activeId || idx < 6)
-          .map(stripBulkyBase64FromStoreForQuota);
+          .map((s) => {
+            const stripped = stripBulkyBase64FromStoreForQuota(s);
+            if (Array.isArray(stripped.products) && stripped.products.length > 50) {
+              return {
+                ...stripped,
+                products: stripped.products.slice(0, 50),
+              };
+            }
+            return stripped;
+          });
         const serializedLightweight = JSON.stringify(
           lightweightStores.length > 0 ? lightweightStores : [INITIAL_AURORA_STORE]
         );
         localStorage.setItem(STORES_STORAGE_KEY, serializedLightweight);
         lastRawStoresStorageSnapshot = serializedLightweight;
       } catch (retryErr) {
-        console.warn('Could not persist stores to localStorage after Base64 stripping (in-memory & local server storage remain intact):', retryErr);
+        console.warn('Could not persist stores to localStorage after Base64 stripping (in-memory, IndexedDB & local server storage remain intact):', retryErr);
       }
+    }
+
+    // Always asynchronously back up the full product catalog of stores to IndexedDB
+    if (typeof window !== 'undefined' && Array.isArray(stores)) {
+      stores.forEach((s) => {
+        if (s && s.id && Array.isArray(s.products) && s.products.length > 0) {
+          LargeCatalogStorage.saveStoreProducts(s.id, s.products).catch(() => {});
+        }
+      });
     }
 
     if (!options?.skipLocalServerSync && typeof window !== 'undefined' && typeof fetch === 'function') {
@@ -467,13 +487,13 @@ export class StoreManager {
           const localStores = this.getAllStores();
           const mergedMap = new Map<string, StoreInstance>();
 
-          // Merge server stores with local stores, keeping whichever has more products if one is empty
+          // Merge server stores with local stores, keeping whichever has more products
           for (const srvStore of serverStores) {
             const locMatch = localStores.find((l) => l.id === srvStore.id || l.slug === srvStore.slug);
-            const resolvedProducts =
-              (srvStore.products || []).length > 0
-                ? srvStore.products
-                : locMatch?.products || [];
+            const locProds = locMatch?.products || [];
+            const srvProds = srvStore.products || [];
+            // Preserve the catalog that has more products (prevents accidental truncation)
+            const resolvedProducts = locProds.length >= srvProds.length && locProds.length > 0 ? locProds : srvProds;
             const resolvedOrders = deduplicateOrders([
               ...(srvStore.orders || []),
               ...(locMatch?.orders || []),
@@ -917,9 +937,16 @@ export class StoreManager {
           const existingStore = this.getStoreById(storeIdToFetch) || this.getStoreBySlug(cleanQuery);
           const cachedOrders: Order[] = existingStore?.orders || [];
 
-          // CRITICAL SAFEGUARD: Never overwrite non-empty local products with an empty Firestore product list
-          if (productsList.length === 0 && existingStore && Array.isArray(existingStore.products) && existingStore.products.length > 0) {
+          // CRITICAL SAFEGUARD: Never truncate or overwrite products with a smaller list if local store or IndexedDB has the full catalog
+          if (existingStore && Array.isArray(existingStore.products) && existingStore.products.length > productsList.length) {
             productsList = existingStore.products;
+          } else if (typeof window !== 'undefined' && storeIdToFetch) {
+            try {
+              const idbProds = await LargeCatalogStorage.getStoreProducts(storeIdToFetch);
+              if (Array.isArray(idbProds) && idbProds.length > productsList.length) {
+                productsList = idbProds;
+              }
+            } catch {}
           }
 
           // If the authenticated merchant owns this store, fetch latest live orders from Firestore orders subcollection
@@ -1010,10 +1037,15 @@ export class StoreManager {
       // Clean products deeply to eliminate any undefined fields that cause Firestore setDoc() to throw
       const cleanProducts = (products || []).map((p) => JSON.parse(JSON.stringify(p)));
 
+      // If catalog is large (e.g. > 500 items), store doc must not exceed Firestore's 1MB limit.
+      // We store up to 250 in the main doc and rely on the /products subcollection & server /data/stores.json
+      const mainDocProducts = cleanProducts.length > 250 ? cleanProducts.slice(0, 250) : cleanProducts;
+
       const publicPayload = JSON.parse(
         JSON.stringify({
           ...publicStoreData,
-          products: cleanProducts,
+          products: mainDocProducts,
+          totalProductsCount: cleanProducts.length,
           settings: publicSettings,
           storeName: store.settings.storeName || 'متجر إلكتروني',
           updatedAt: new Date().toISOString(),
@@ -1054,11 +1086,17 @@ export class StoreManager {
         await Promise.all(deletePromises);
 
         if (Array.isArray(cleanProducts) && cleanProducts.length > 0) {
-          const syncProductPromises = cleanProducts.map((prod) => {
-            const prodRef = doc(db, 'stores', store.id, 'products', prod.id);
-            return setDoc(prodRef, prod, { merge: true });
-          });
-          await Promise.all(syncProductPromises);
+          // Sync in chunks of 50 to avoid Firestore parallel connection exhaustion
+          const chunkSize = 50;
+          for (let i = 0; i < cleanProducts.length; i += chunkSize) {
+            const chunk = cleanProducts.slice(i, i + chunkSize);
+            await Promise.all(
+              chunk.map((prod) => {
+                const prodRef = doc(db, 'stores', store.id, 'products', prod.id);
+                return setDoc(prodRef, prod, { merge: true });
+              })
+            );
+          }
         }
       } catch (prodErr) {
         console.warn('Subcollection products sync notice:', prodErr);
