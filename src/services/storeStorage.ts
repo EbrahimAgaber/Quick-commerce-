@@ -498,14 +498,14 @@ export class StoreStorage {
 
   static getProducts(): Product[] {
     try {
+      if (memoryProductsMirror && Array.isArray(memoryProductsMirror) && memoryProductsMirror.length > 0) {
+        return memoryProductsMirror;
+      }
       const data = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
       if (data !== null) {
         const parsed = JSON.parse(data);
         if (Array.isArray(parsed)) {
           const valid = parsed.filter((p) => p && typeof p === 'object' && p.id);
-          if (memoryProductsMirror && memoryProductsMirror.length === valid.length) {
-            return memoryProductsMirror;
-          }
           return valid;
         }
       }

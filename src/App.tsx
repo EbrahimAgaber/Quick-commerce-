@@ -13,6 +13,7 @@ import {
 } from './types/store';
 import { StoreStorage, DEFAULT_PRODUCTS, MODERN_RETAIL_THEME, safeSetLocalStorage } from './services/storeStorage';
 import { StoreManager } from './services/storeManager';
+import { LargeCatalogStorage } from './services/catalogIndexedDB';
 import { AuthService } from './services/authService';
 import { onFirebaseAuthStateChanged, auth } from './services/firebase';
 import { injectBrandThemeStyles } from './utils/themeInjector';
@@ -167,7 +168,7 @@ export default function App() {
     // Hydrate from Local Server Database (/api/store/data -> /data/stores.json)
     // so products & settings persist across Edge, Chrome, and browser cache clears
     StoreManager.fetchStoresFromLocalServer()
-      .then((serverData) => {
+      .then(async (serverData) => {
         if (serverData?.stores && serverData.stores.length > 0) {
           setAllStores(StoreManager.getAllStores());
           const currentBoundId = activeStoreIdRef.current;
@@ -177,22 +178,49 @@ export default function App() {
               ? serverData.stores.find((s) => s.id !== 'store_aurora_01') || serverData.stores[0]
               : null);
           if (matchingStore) {
+            let finalProds = matchingStore.products || [];
+            try {
+              const idbProds = await LargeCatalogStorage.getStoreProducts(matchingStore.id);
+              if (Array.isArray(idbProds) && idbProds.length > finalProds.length) {
+                finalProds = idbProds;
+              }
+            } catch {}
+
+            const mergedStore = { ...matchingStore, products: finalProds };
             activeStoreIdRef.current = matchingStore.id;
-            setActiveStore(matchingStore);
-            setSettings(matchingStore.settings);
-            setProducts(matchingStore.products || []);
-            setOrders(matchingStore.orders || []);
-            setPolicies(matchingStore.policies || []);
+            setActiveStore(mergedStore);
+            setSettings(mergedStore.settings);
+            setProducts(finalProds);
+            setOrders(mergedStore.orders || []);
+            setPolicies(mergedStore.policies || []);
             StoreStorage.hydrateStore({
-              settings: matchingStore.settings,
-              products: matchingStore.products || [],
-              orders: matchingStore.orders || [],
-              policies: matchingStore.policies || [],
+              settings: mergedStore.settings,
+              products: finalProds,
+              orders: mergedStore.orders || [],
+              policies: mergedStore.policies || [],
             });
           }
         }
       })
       .catch(() => {});
+
+    // Asynchronously check LargeCatalogStorage (IndexedDB) for active store products immediately on boot/refresh
+    if (activeStore && activeStore.id) {
+      LargeCatalogStorage.getStoreProducts(activeStore.id)
+        .then((idbProds) => {
+          if (Array.isArray(idbProds) && idbProds.length > 0) {
+            setProducts((curr) => {
+              if (idbProds.length > curr.length) {
+                setActiveStore((prev) => ({ ...prev, products: idbProds }));
+                StoreStorage.saveProducts(idbProds);
+                return idbProds;
+              }
+              return curr;
+            });
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   // Listen to local storage & cross-tab sync events

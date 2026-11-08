@@ -27,7 +27,8 @@ import {
   limit,
   getDocs,
   onSnapshot,
-  Unsubscribe
+  Unsubscribe,
+  writeBatch
 } from 'firebase/firestore';
 
 import { RESERVED_SLUGS_SET, RESERVED_SLUGS as RESERVED_SLUGS_LIST } from '../constants/slugs';
@@ -493,7 +494,15 @@ export class StoreManager {
             const locProds = locMatch?.products || [];
             const srvProds = srvStore.products || [];
             // Preserve the catalog that has more products (prevents accidental truncation)
-            const resolvedProducts = locProds.length >= srvProds.length && locProds.length > 0 ? locProds : srvProds;
+            let resolvedProducts = locProds.length >= srvProds.length && locProds.length > 0 ? locProds : srvProds;
+            if (typeof window !== 'undefined') {
+              try {
+                const idbProds = await LargeCatalogStorage.getStoreProducts(srvStore.id);
+                if (Array.isArray(idbProds) && idbProds.length > resolvedProducts.length) {
+                  resolvedProducts = idbProds;
+                }
+              } catch {}
+            }
             const resolvedOrders = deduplicateOrders([
               ...(srvStore.orders || []),
               ...(locMatch?.orders || []),
@@ -915,16 +924,19 @@ export class StoreManager {
         if (snapshot.exists()) {
           const raw = snapshot.data();
           
-          // 4. Load products subcollection if not present or empty in main document
+          // 4. Load products subcollection if not present or incomplete in main document
           let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
-          if (!Array.isArray(raw.products) || productsList.length === 0) {
+          const totalExpectedCount = typeof raw.totalProductsCount === 'number' ? raw.totalProductsCount : productsList.length;
+          const isMainDocIncomplete = raw.hasSubcollectionProducts || totalExpectedCount > productsList.length || productsList.length === 0;
+
+          if (isMainDocIncomplete) {
             try {
               const productsSubCol = collection(db, 'stores', storeIdToFetch, 'products');
               const productsSnap = await getDocs(productsSubCol);
               if (!productsSnap.empty) {
                 const subColProducts: Product[] = [];
                 productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
-                if (subColProducts.length > 0) {
+                if (subColProducts.length > productsList.length) {
                   productsList = subColProducts;
                 }
               }
@@ -940,7 +952,8 @@ export class StoreManager {
           // CRITICAL SAFEGUARD: Never truncate or overwrite products with a smaller list if local store or IndexedDB has the full catalog
           if (existingStore && Array.isArray(existingStore.products) && existingStore.products.length > productsList.length) {
             productsList = existingStore.products;
-          } else if (typeof window !== 'undefined' && storeIdToFetch) {
+          }
+          if (typeof window !== 'undefined' && storeIdToFetch) {
             try {
               const idbProds = await LargeCatalogStorage.getStoreProducts(storeIdToFetch);
               if (Array.isArray(idbProds) && idbProds.length > productsList.length) {
@@ -1037,15 +1050,29 @@ export class StoreManager {
       // Clean products deeply to eliminate any undefined fields that cause Firestore setDoc() to throw
       const cleanProducts = (products || []).map((p) => JSON.parse(JSON.stringify(p)));
 
-      // If catalog is large (e.g. > 500 items), store doc must not exceed Firestore's 1MB limit.
-      // We store up to 250 in the main doc and rely on the /products subcollection & server /data/stores.json
-      const mainDocProducts = cleanProducts.length > 250 ? cleanProducts.slice(0, 250) : cleanProducts;
+      // Firestore has a strict 1MB document limit.
+      // We check the serialized size: if the catalog fits within ~800KB, store all products in the main doc.
+      // If the catalog exceeds 800KB, slice what fits safely in the main doc, flag hasSubcollectionProducts,
+      // and persist the rest into the /products subcollection & server /data/stores.json & IndexedDB.
+      let mainDocProducts: Product[] = cleanProducts;
+      let hasSubcollectionProducts = false;
+      const cleanJsonLength = JSON.stringify(cleanProducts).length;
+      if (cleanJsonLength > 800000) {
+        hasSubcollectionProducts = true;
+        // Binary search or slice down to what safely fits under 750KB
+        let fitLimit = cleanProducts.length;
+        while (fitLimit > 250 && JSON.stringify(cleanProducts.slice(0, fitLimit)).length > 750000) {
+          fitLimit = Math.floor(fitLimit * 0.8);
+        }
+        mainDocProducts = cleanProducts.slice(0, fitLimit);
+      }
 
       const publicPayload = JSON.parse(
         JSON.stringify({
           ...publicStoreData,
           products: mainDocProducts,
           totalProductsCount: cleanProducts.length,
+          hasSubcollectionProducts,
           settings: publicSettings,
           storeName: store.settings.storeName || 'متجر إلكتروني',
           updatedAt: new Date().toISOString(),
@@ -1086,16 +1113,16 @@ export class StoreManager {
         await Promise.all(deletePromises);
 
         if (Array.isArray(cleanProducts) && cleanProducts.length > 0) {
-          // Sync in chunks of 50 to avoid Firestore parallel connection exhaustion
-          const chunkSize = 50;
-          for (let i = 0; i < cleanProducts.length; i += chunkSize) {
-            const chunk = cleanProducts.slice(i, i + chunkSize);
-            await Promise.all(
-              chunk.map((prod) => {
-                const prodRef = doc(db, 'stores', store.id, 'products', prod.id);
-                return setDoc(prodRef, prod, { merge: true });
-              })
-            );
+          // Use Firestore writeBatch for high-throughput batch writes (up to 400 operations per batch)
+          const batchSize = 400;
+          for (let i = 0; i < cleanProducts.length; i += batchSize) {
+            const batchChunk = cleanProducts.slice(i, i + batchSize);
+            const batch = writeBatch(db);
+            for (const prod of batchChunk) {
+              const prodRef = doc(db, 'stores', store.id, 'products', prod.id);
+              batch.set(prodRef, prod, { merge: true });
+            }
+            await batch.commit();
           }
         }
       } catch (prodErr) {
@@ -1160,16 +1187,19 @@ export class StoreManager {
           const raw = d.data() as StoreInstance;
           const orders = await this.fetchStoreOrdersFromFirestore(raw.id);
 
-          // Fetch products from subcollection if not present in main doc
+          // Fetch products from subcollection if not present or incomplete in main doc
           let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
-          if (!Array.isArray(raw.products) || productsList.length === 0) {
+          const userStoreExpectedCount = typeof (raw as any).totalProductsCount === 'number' ? (raw as any).totalProductsCount : productsList.length;
+          const isUserStoreDocIncomplete = (raw as any).hasSubcollectionProducts || userStoreExpectedCount > productsList.length || productsList.length === 0;
+
+          if (isUserStoreDocIncomplete) {
             try {
               const productsSubCol = collection(db, 'stores', raw.id, 'products');
               const productsSnap = await getDocs(productsSubCol);
               if (!productsSnap.empty) {
                 const subColProducts: Product[] = [];
                 productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
-                if (subColProducts.length > 0) {
+                if (subColProducts.length > productsList.length) {
                   productsList = subColProducts;
                 }
               }
@@ -1214,13 +1244,13 @@ export class StoreManager {
         const existing = this.getAllStores();
         const mergedMap = new Map<string, StoreInstance>();
 
-        // Put user's own stores first in the cache, safely preserving local products if cloud has none
+        // Put user's own stores first in the cache, safely preserving local products if cloud has fewer or none
         userStores.forEach((cloudStore) => {
           const localStore = existing.find((e) => e.id === cloudStore.id);
           let resolvedProducts = cloudStore.products || [];
-          if (resolvedProducts.length === 0 && localStore && (localStore.products || []).length > 0) {
+          if (localStore && (localStore.products || []).length > resolvedProducts.length) {
             resolvedProducts = localStore.products;
-            // Backfill repair to Firestore immediately
+            // Backfill repair to Firestore immediately if authenticated owner
             if (auth.currentUser && cloudStore.ownerId === auth.currentUser.uid) {
               this.syncStoreToFirestore({ ...cloudStore, products: resolvedProducts }).catch(console.warn);
             }
