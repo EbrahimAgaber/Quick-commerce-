@@ -924,19 +924,18 @@ export class StoreManager {
         if (snapshot.exists()) {
           const raw = snapshot.data();
           
-          // 4. Load products subcollection if not present or incomplete in main document
+          // 4. Load products: The main document contains up to ~3000 products directly for instant 0ms FCP.
+          // We only fetch from subcollection if the main doc products array is completely empty,
+          // avoiding downloading thousands of individual Firestore documents and exhausting daily quotas.
           let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
-          const totalExpectedCount = typeof raw.totalProductsCount === 'number' ? raw.totalProductsCount : productsList.length;
-          const isMainDocIncomplete = raw.hasSubcollectionProducts || totalExpectedCount > productsList.length || productsList.length === 0;
-
-          if (isMainDocIncomplete) {
+          if (productsList.length === 0) {
             try {
               const productsSubCol = collection(db, 'stores', storeIdToFetch, 'products');
               const productsSnap = await getDocs(productsSubCol);
               if (!productsSnap.empty) {
                 const subColProducts: Product[] = [];
                 productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
-                if (subColProducts.length > productsList.length) {
+                if (subColProducts.length > 0) {
                   productsList = subColProducts;
                 }
               }
@@ -1187,19 +1186,17 @@ export class StoreManager {
           const raw = d.data() as StoreInstance;
           const orders = await this.fetchStoreOrdersFromFirestore(raw.id);
 
-          // Fetch products from subcollection if not present or incomplete in main doc
+          // Fetch products: The main document contains products directly for instant response.
+          // Only fetch subcollection if main doc has no products to avoid quota exhaustion.
           let productsList: Product[] = Array.isArray(raw.products) ? raw.products : [];
-          const userStoreExpectedCount = typeof (raw as any).totalProductsCount === 'number' ? (raw as any).totalProductsCount : productsList.length;
-          const isUserStoreDocIncomplete = (raw as any).hasSubcollectionProducts || userStoreExpectedCount > productsList.length || productsList.length === 0;
-
-          if (isUserStoreDocIncomplete) {
+          if (productsList.length === 0) {
             try {
               const productsSubCol = collection(db, 'stores', raw.id, 'products');
               const productsSnap = await getDocs(productsSubCol);
               if (!productsSnap.empty) {
                 const subColProducts: Product[] = [];
                 productsSnap.forEach((pDoc) => subColProducts.push(pDoc.data() as Product));
-                if (subColProducts.length > productsList.length) {
+                if (subColProducts.length > 0) {
                   productsList = subColProducts;
                 }
               }

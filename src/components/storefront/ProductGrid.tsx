@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Product, StoreSettings } from '../../types/store';
 import { ProductCard } from './ProductCard';
-import { SearchX, SlidersHorizontal } from 'lucide-react';
+import { SearchX, SlidersHorizontal, ChevronDown } from 'lucide-react';
 
 interface ProductGridProps {
   products: Product[];
@@ -14,6 +14,8 @@ interface ProductGridProps {
   isLoading?: boolean;
 }
 
+const PAGE_SIZE = 40;
+
 export const ProductGrid: React.FC<ProductGridProps> = ({
   products,
   settings,
@@ -25,6 +27,13 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   isLoading = false,
 }) => {
   const [sortBy, setSortBy] = useState<'default' | 'newest' | 'discount' | 'price-asc' | 'price-desc'>('default');
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset pagination when filter or sort changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [products, sortBy]);
 
   const brand = settings.brandTheme || {
     primaryColor: '#0B253F',
@@ -56,6 +65,31 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       return 0;
     });
   }, [products, sortBy]);
+
+  const visibleProducts = useMemo(() => {
+    return sortedProducts.slice(0, visibleCount);
+  }, [sortedProducts, visibleCount]);
+
+  const hasMore = visibleCount < sortedProducts.length;
+
+  // Infinite Scroll intersection observer: loads next batch seamlessly without freezing
+  useEffect(() => {
+    if (!hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, sortedProducts.length));
+        }
+      },
+      { rootMargin: '400px' }
+    );
+
+    const el = loadMoreRef.current;
+    if (el) observer.observe(el);
+    return () => {
+      if (el) observer.unobserve(el);
+    };
+  }, [hasMore, sortedProducts.length]);
 
   return (
     <section className="space-y-3 sm:space-y-4">
@@ -132,18 +166,34 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-6">
-          {sortedProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              settings={settings}
-              onSelectProduct={onSelectProduct}
-              onQuickAdd={onQuickAdd}
-              isAddedJustNow={justAddedId === product.id}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-4 md:gap-6">
+            {visibleProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                settings={settings}
+                onSelectProduct={onSelectProduct}
+                onQuickAdd={onQuickAdd}
+                isAddedJustNow={justAddedId === product.id}
+              />
+            ))}
+          </div>
+
+          {/* Infinite Scroll trigger & Manual Fallback Button */}
+          {hasMore && (
+            <div ref={loadMoreRef} className="py-8 flex flex-col items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((prev) => Math.min(prev + PAGE_SIZE * 2, sortedProducts.length))}
+                className="px-6 py-2.5 rounded-xl border border-stone-200 bg-white hover:bg-stone-50 text-stone-700 text-xs font-bold shadow-2xs flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+              >
+                <span>عرض المزيد من المنتجات ({sortedProducts.length - visibleCount} متبقي)</span>
+                <ChevronDown className="w-4 h-4 text-stone-400" />
+              </button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

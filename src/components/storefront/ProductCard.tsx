@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
 import { Product, StoreSettings, getProductUnitLabel } from '../../types/store';
 import { Plus, Check, Flame, Package, Eye } from 'lucide-react';
 import { getZatcaComplianceType } from '../../utils/zatca';
@@ -63,15 +62,14 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
     : 'إضافة سريعة للسلة';
 
   return (
-    <motion.div
-      whileHover={{ y: -3 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+    <div
       onClick={() => onSelectProduct(product)}
-      className="group relative bg-white rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-300 flex flex-col cursor-pointer border hover:shadow-md select-none"
+      className="group relative bg-white rounded-xl sm:rounded-2xl overflow-hidden transition-all duration-200 flex flex-col cursor-pointer border hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] select-none"
       style={{ 
         borderColor: brand.neutralColor,
-        boxShadow: '0 2px 10px rgba(15,23,42,0.04)'
+        boxShadow: '0 2px 10px rgba(15,23,42,0.04)',
+        contentVisibility: 'auto',
+        containIntrinsicSize: '0 320px',
       }}
     >
       {/* Product Image Frame */}
@@ -200,7 +198,7 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({
           </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 
