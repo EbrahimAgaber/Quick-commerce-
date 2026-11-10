@@ -1592,6 +1592,163 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                   يرسل للمندوب والعميل بنقرة واحدة لفتح اتجاهات القيادة واستلام الطرود من موقعك
                 </span>
               </div>
+
+              {/* Delivery Zone & Radius Safeguard */}
+              <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/80 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-amber-100 text-amber-900 font-bold">
+                      🛡️
+                    </span>
+                    <div>
+                      <span className="font-bold text-stone-900 block text-xs">
+                        نطاق التغطية ومناطق استلام طلبات التوصيل (Delivery Zone Safeguard)
+                      </span>
+                      <span className="text-[11px] text-stone-600 block">
+                        تحديد المسافة الجغرافية أو المدن المسموح باستقبال طلبات التوصيل منها لحماية متجرك ومندوبك
+                      </span>
+                    </div>
+                  </div>
+
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold self-start sm:self-auto ${
+                    (editableSettings.deliveryZoneType || 'anywhere') === 'anywhere'
+                      ? 'bg-stone-200 text-stone-700'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}>
+                    {(editableSettings.deliveryZoneType || 'anywhere') === 'anywhere'
+                      ? 'توصيل لكافة المناطق 🌍'
+                      : editableSettings.deliveryZoneType === 'radius'
+                      ? `نطاق محدد (${editableSettings.maxDeliveryRadiusKm || 30} كم) 📍`
+                      : `داخل (${editableSettings.city || 'مدينة المتجر'}) فقط 🏙️`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        deliveryZoneType: 'anywhere',
+                      })
+                    }
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer ${
+                      (editableSettings.deliveryZoneType || 'anywhere') === 'anywhere'
+                        ? 'border-blue-600 bg-white text-blue-900 ring-1 ring-blue-500 shadow-2xs'
+                        : 'border-stone-200 bg-stone-50/70 text-stone-600 hover:bg-white'
+                    }`}
+                  >
+                    <span>كافة المناطق (بدون تقييد)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        deliveryZoneType: 'radius',
+                        maxDeliveryRadiusKm: editableSettings.maxDeliveryRadiusKm || 30,
+                      })
+                    }
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer ${
+                      editableSettings.deliveryZoneType === 'radius'
+                        ? 'border-amber-600 bg-white text-amber-950 ring-1 ring-amber-500 shadow-2xs'
+                        : 'border-stone-200 bg-stone-50/70 text-stone-600 hover:bg-white'
+                    }`}
+                  >
+                    <span>نطاق دائري بالكيلومتر (مثلاً 30 كم) 🎯</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        deliveryZoneType: 'city_only',
+                      })
+                    }
+                    className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer ${
+                      editableSettings.deliveryZoneType === 'city_only'
+                        ? 'border-emerald-600 bg-white text-emerald-950 ring-1 ring-emerald-500 shadow-2xs'
+                        : 'border-stone-200 bg-stone-50/70 text-stone-600 hover:bg-white'
+                    }`}
+                  >
+                    <span>نفس مدينة المتجر فقط ({editableSettings.city || 'العلا'}) 🏙️</span>
+                  </button>
+                </div>
+
+                {editableSettings.deliveryZoneType === 'radius' && (
+                  <div className="pt-1.5 space-y-2 animate-in fade-in duration-150 bg-white p-3 rounded-xl border border-amber-200/70">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="font-bold text-stone-800 text-xs">
+                        أقصى مسافة توصيل مسموحة من موقع المحل (بالكيلومتر km):
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min="1"
+                          max="500"
+                          value={editableSettings.maxDeliveryRadiusKm ?? 30}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            setEditableSettings({
+                              ...editableSettings,
+                              maxDeliveryRadiusKm: isNaN(val) ? 30 : Math.max(1, val),
+                            });
+                          }}
+                          className="w-20 px-2 py-1 bg-amber-50 border border-amber-300 rounded-lg text-xs font-mono font-bold text-center"
+                          dir="ltr"
+                        />
+                        <span className="text-xs font-bold text-stone-600">كم (km)</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-1 text-[11px]">
+                      {[15, 25, 30, 45, 60, 100].map((km) => (
+                        <button
+                          key={km}
+                          type="button"
+                          onClick={() =>
+                            setEditableSettings({
+                              ...editableSettings,
+                              maxDeliveryRadiusKm: km,
+                            })
+                          }
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold transition-colors cursor-pointer ${
+                            (editableSettings.maxDeliveryRadiusKm ?? 30) === km
+                              ? 'bg-amber-500 text-white border-amber-600'
+                              : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
+                          }`}
+                        >
+                          {km} كم
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-stone-500">
+                      يتم حساب المسافة الجغرافية الحقيقية (GPS Distance) بين إحداثيات موقعك وموقع العميل لحظة إدخال العنوان لمنع الطلبات البعيدة.
+                    </p>
+                  </div>
+                )}
+
+                {((editableSettings.deliveryZoneType === 'radius') || (editableSettings.deliveryZoneType === 'city_only')) && (
+                  <div className="pt-1 space-y-1">
+                    <label className="block font-bold text-stone-700 text-[11px]">
+                      رسالة تنبيه مخصصة للمتسوق عند وجوده خارج النطاق (اختياري):
+                    </label>
+                    <input
+                      type="text"
+                      value={editableSettings.customDeliveryOutOfZoneMessage || ''}
+                      onChange={(e) =>
+                        setEditableSettings({
+                          ...editableSettings,
+                          customDeliveryOutOfZoneMessage: e.target.value,
+                        })
+                      }
+                      placeholder="عذراً، موقع التوصيل يبعد عن متجرنا وهو خارج نطاق التوصيل السريع حالياً..."
+                      className="w-full px-3 py-2 bg-white border border-stone-200 rounded-xl text-xs text-stone-800 placeholder-stone-400"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

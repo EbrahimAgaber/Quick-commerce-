@@ -44,7 +44,7 @@ import { MoyasarPaymentModal } from './MoyasarPaymentModal';
 import { PaylinkPaymentModal } from './PaylinkPaymentModal';
 import { LocationPickerModal } from './LocationPickerModal';
 import { TurnstileWidget } from '../common/TurnstileWidget';
-import { isSameSaudiCity } from '../../utils/cityUtils';
+import { isSameSaudiCity, evaluateDeliveryZoneEligibility } from '../../utils/cityUtils';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -534,6 +534,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         setErrorMsg('يرجى تدوين عنوان التوصيل أو الحي');
         return;
       }
+
+      // Safeguard: Evaluate Delivery Zone Coverage (Radius or City restriction)
+      const zoneCheck = evaluateDeliveryZoneEligibility({
+        deliveryType: 'delivery',
+        storeSettings: settings,
+        customer: {
+          city: city === 'مدينة أخرى' ? customCity.trim() : city,
+          address: deliveryAddress.trim(),
+          googleMapsUrl: googleMapsUrl.trim(),
+        },
+      });
+
+      if (!zoneCheck.allowed) {
+        setErrorMsg(
+          zoneCheck.message ||
+            'عذراً، موقع التوصيل المحدد يقع خارج نطاق التغطية والتوصيل المتاح لهذا المتجر حالياً.'
+        );
+        return;
+      }
     }
 
     setCurrentStep(2);
@@ -557,6 +576,27 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     const finalAddress = deliveryType === 'pickup' 
       ? (settings.storePickupAddress || 'استلام مباشر من مقر المتجر') 
       : deliveryAddress.trim();
+
+    // Secondary Safeguard on Submit
+    if (deliveryType === 'delivery') {
+      const zoneCheck = evaluateDeliveryZoneEligibility({
+        deliveryType: 'delivery',
+        storeSettings: settings,
+        customer: {
+          city: finalCity,
+          address: finalAddress,
+          googleMapsUrl: googleMapsUrl.trim(),
+        },
+      });
+
+      if (!zoneCheck.allowed) {
+        setErrorMsg(
+          zoneCheck.message ||
+            'عذراً، موقع التوصيل المحدد يقع خارج نطاق التغطية والتوصيل المتاح لهذا المتجر حالياً.'
+        );
+        return;
+      }
+    }
 
     setIsSubmitting(true);
     setErrorMsg('');

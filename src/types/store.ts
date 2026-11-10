@@ -111,6 +111,9 @@ export interface StoreSettings {
   metaKeywords?: string[];
   geoCity?: string;
   geoCoordinates?: { lat: number; lng: number };
+  deliveryZoneType?: 'anywhere' | 'radius' | 'city_only'; // Delivery coverage safeguard
+  maxDeliveryRadiusKm?: number; // e.g. 30 (30km from store coordinates)
+  customDeliveryOutOfZoneMessage?: string; // Optional custom polite notice to shoppers
 }
 
 export type ProductUnit =

@@ -12,6 +12,7 @@ import { normalizeArabicDigits, toWhatsAppNumber } from '../utils/digits';
 import { generateOrderId, getOrderDeliveryPin, generateDeliveryPin } from '../utils/whatsappInvoice';
 import { NotificationHub } from './notificationService';
 import { getZatcaComplianceType, calculateVatBreakdown } from '../utils/zatca';
+import { evaluateDeliveryZoneEligibility } from '../utils/cityUtils';
 import { isLegacyWatchPlaceholder, resolveStaticGoogleDriveAsset } from '../utils/imageOptimizer';
 import { LargeCatalogStorage } from './catalogIndexedDB';
 import { 
@@ -1906,6 +1907,24 @@ export class StoreManager {
           : INITIAL_AURORA_STORE.products;
 
       const storeSettings = store?.settings || DEFAULT_SETTINGS;
+
+      // Delivery Zone Evaluation (Radius & City safeguard)
+      const zoneCheck = evaluateDeliveryZoneEligibility({
+        deliveryType: params.customer.deliveryType,
+        storeSettings,
+        customer: {
+          city: params.customer.city,
+          address: params.customer.address,
+          googleMapsUrl: params.customer.googleMapsUrl,
+        },
+      });
+
+      if (!zoneCheck.allowed) {
+        return {
+          success: false,
+          error: zoneCheck.message || 'عذراً، موقع التوصيل المحدد خارج نطاق التوصيل المتاح لهذا المتجر.',
+        };
+      }
 
       // Verify each item, check stock, and calculate true subtotal
       let subtotal = 0;

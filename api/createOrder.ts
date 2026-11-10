@@ -7,6 +7,7 @@ import {
   verifyTurnstileToken,
 } from './_security';
 import { dispatchServerOrderNotifications } from './_notifications';
+import { evaluateDeliveryZoneEligibility } from '../src/utils/cityUtils';
 
 interface OrderItemInput {
   productId: string;
@@ -179,6 +180,21 @@ export default async function handler(req: any, res: any) {
       }
       const storeData = storeSnap.data() || {};
       const settings = storeData.settings || {};
+
+      // 1a. Delivery Zone Evaluation (Radius & City safeguard)
+      const zoneCheck = evaluateDeliveryZoneEligibility({
+        deliveryType: customer.deliveryType,
+        storeSettings: settings,
+        customer: {
+          city: customer.city,
+          address: customer.address,
+          googleMapsUrl: customer.googleMapsUrl,
+        },
+      });
+
+      if (!zoneCheck.allowed) {
+        throw new Error(zoneCheck.message || 'عذراً، موقع التوصيل المحدد خارج نطاق التوصيل المتاح لهذا المتجر.');
+      }
 
       // 2. Read Private Store Config (promo codes, private keys)
       const privateConfigRef = storeRef.collection('private').doc('config');

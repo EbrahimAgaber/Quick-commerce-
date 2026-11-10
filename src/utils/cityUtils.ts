@@ -110,3 +110,177 @@ export function getSaudiCityCoordinates(cityName?: string): { lat: number; lng: 
 
   return { lat: 24.7136, lng: 46.6753 };
 }
+
+/**
+ * Calculates geodesic distance between two GPS coordinates using the Haversine formula (in Kilometers)
+ */
+export function calculateHaversineDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lon1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lon2)
+  ) {
+    return 0;
+  }
+
+  const R = 6371; // Earth's mean radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c;
+  return Math.round(distance * 10) / 10; // Round to 1 decimal place (e.g. 14.2 km)
+}
+
+/**
+ * Extracts latitude and longitude from a Google Maps URL, string coordinates, or returns null
+ */
+export function extractCoordinatesFromLocation(
+  urlOrString?: string
+): { lat: number; lng: number } | null {
+  if (!urlOrString || typeof urlOrString !== 'string') return null;
+
+  // Pattern 1: ?q=24.1234,46.5678 or &q=24.1234,46.5678
+  const qMatch = urlOrString.match(/[?&]q=(-?\d+(\.\d+)?),(-?\d+(\.\d+)?)/);
+  if (qMatch) {
+    const lat = parseFloat(qMatch[1]);
+    const lng = parseFloat(qMatch[3]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+
+  // Pattern 2: @24.1234,46.5678
+  const atMatch = urlOrString.match(/@(-?\d+(\.\d+)?),(-?\d+(\.\d+)?)/);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[3]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+
+  // Pattern 3: plain "24.1234, 46.5678"
+  const rawMatch = urlOrString.match(/(-?\d+(\.\d+)?)[,\s]+(-?\d+(\.\d+)?)/);
+  if (rawMatch) {
+    const lat = parseFloat(rawMatch[1]);
+    const lng = parseFloat(rawMatch[3]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Evaluates whether a customer delivery destination is within the merchant's configured delivery zone
+ */
+export function evaluateDeliveryZoneEligibility(params: {
+  deliveryType?: 'delivery' | 'pickup';
+  storeSettings?: {
+    city?: string;
+    geoCity?: string;
+    geoCoordinates?: { lat: number; lng: number };
+    storeLocationUrl?: string;
+    deliveryZoneType?: 'anywhere' | 'radius' | 'city_only';
+    maxDeliveryRadiusKm?: number;
+    customDeliveryOutOfZoneMessage?: string;
+  };
+  customer: {
+    city?: string;
+    address?: string;
+    googleMapsUrl?: string;
+    coords?: { lat: number; lng: number };
+  };
+}): {
+  allowed: boolean;
+  distanceKm?: number;
+  maxRadiusKm?: number;
+  message?: string;
+} {
+  // Store pickup is always allowed regardless of distance
+  if (params.deliveryType === 'pickup') {
+    return { allowed: true };
+  }
+
+  const settings = params.storeSettings || {};
+  const zoneType = settings.deliveryZoneType || 'anywhere';
+
+  // 1. If merchant delivers anywhere, always allowed
+  if (zoneType === 'anywhere') {
+    return { allowed: true };
+  }
+
+  const storeCity = settings.city || settings.geoCity || 'الرياض';
+  const customerCity = params.customer.city || '';
+
+  // 2. City-only restriction
+  if (zoneType === 'city_only') {
+    const isSame = isSameSaudiCity(customerCity, storeCity);
+    if (!isSame) {
+      const defaultMsg = `عذراً، المتجر يوصل طلبات التوصيل المنزلي داخل نطاق مدينة (${storeCity}) فقط حالياً. بإمكانك اختيار "الاستلام من الفرع" أو التواصل معنا لتنسيق شحن خاص.`;
+      return {
+        allowed: false,
+        message: settings.customDeliveryOutOfZoneMessage?.trim() || defaultMsg,
+      };
+    }
+    return { allowed: true };
+  }
+
+  // 3. Radius restriction (e.g. 30km from store)
+  if (zoneType === 'radius') {
+    const maxRadius = typeof settings.maxDeliveryRadiusKm === 'number' && settings.maxDeliveryRadiusKm > 0
+      ? settings.maxDeliveryRadiusKm
+      : 30; // default 30km if enabled
+
+    // Determine store coordinates: either geoCoordinates, or parsed from storeLocationUrl, or city center
+    let storeCoords = settings.geoCoordinates;
+    if (!storeCoords || !Number.isFinite(storeCoords.lat)) {
+      storeCoords = extractCoordinatesFromLocation(settings.storeLocationUrl) || getSaudiCityCoordinates(storeCity);
+    }
+
+    // Determine customer coordinates: passed coords, or extracted from googleMapsUrl, or customer city center
+    let customerCoords: { lat: number; lng: number } | null | undefined = params.customer.coords;
+    if (!customerCoords || !Number.isFinite(customerCoords.lat)) {
+      customerCoords = extractCoordinatesFromLocation(params.customer.googleMapsUrl) || extractCoordinatesFromLocation(params.customer.address);
+    }
+
+    // If customer has no exact GPS pin, fall back to comparing with their selected city coordinates
+    if (!customerCoords || !Number.isFinite(customerCoords.lat)) {
+      customerCoords = getSaudiCityCoordinates(customerCity);
+    }
+
+    const distanceKm = calculateHaversineDistanceKm(
+      storeCoords.lat,
+      storeCoords.lng,
+      customerCoords.lat,
+      customerCoords.lng
+    );
+
+    if (distanceKm > maxRadius) {
+      const defaultMsg = `عذراً، موقع التوصيل يبعد قرابة (${distanceKm} كم) وهو خارج نطاق التوصيل المتاح حالياً لهذا المتجر (${maxRadius} كم من المتجر). يمكنك اختيار "الاستلام من الفرع مجاناً" أو تغيير موقع التوصيل.`;
+      return {
+        allowed: false,
+        distanceKm,
+        maxRadiusKm: maxRadius,
+        message: settings.customDeliveryOutOfZoneMessage?.trim() || defaultMsg,
+      };
+    }
+
+    return {
+      allowed: true,
+      distanceKm,
+      maxRadiusKm: maxRadius,
+    };
+  }
+
+  return { allowed: true };
+}
