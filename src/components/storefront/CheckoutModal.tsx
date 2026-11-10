@@ -176,9 +176,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     return Boolean(savedProfile?.customerName && savedProfile?.customerPhone);
   });
 
-  // Ensure deliveryType strictly resets to 'delivery' if merchant disables store pickup
+  // Ensure deliveryType strictly resets to 'delivery' only if merchant explicitly disables store pickup
   useEffect(() => {
-    if (!settings.enableStorePickup && deliveryType === 'pickup') {
+    if (settings.enableStorePickup === false && deliveryType === 'pickup') {
       setDeliveryType('delivery');
     }
   }, [settings.enableStorePickup, deliveryType]);
@@ -811,8 +811,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </p>
               </div>
 
-              {/* Delivery or Store Pickup Toggle */}
-              {(settings.enableStorePickup || Boolean(settings.storePickupAddress || settings.storeLocationUrl)) && (
+              {/* Delivery or Store Pickup Toggle: Available by default across all stores */}
+              {settings.enableStorePickup !== false && (
                 <div className="pt-1">
                   <label className="block text-xs font-bold text-stone-800 mb-1.5">
                     طريقة الاستلام:
@@ -823,7 +823,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       onClick={() => setDeliveryType('delivery')}
                       className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                         deliveryType === 'delivery'
-                          ? 'border-blue-600 bg-blue-50/50 text-blue-900 ring-1 ring-blue-500'
+                          ? 'border-blue-600 bg-blue-50/50 text-blue-900 ring-1 ring-blue-500 shadow-2xs'
                           : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
                       }`}
                     >
@@ -835,7 +835,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                       onClick={() => setDeliveryType('pickup')}
                       className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                         deliveryType === 'pickup'
-                          ? 'border-emerald-600 bg-emerald-50/50 text-emerald-900 ring-1 ring-emerald-500'
+                          ? 'border-emerald-600 bg-emerald-50/50 text-emerald-900 ring-1 ring-emerald-500 shadow-2xs'
                           : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
                       }`}
                     >
@@ -1338,11 +1338,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   <p className="font-mono text-stone-600 text-[11px]" dir="ltr">{customerPhone}</p>
                 </div>
                 <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl space-y-0.5">
-                  <span className="text-stone-400 block text-[10px]">طريقة الدفع:</span>
+                  <span className="text-stone-400 block text-[10px]">طريقة الاستلام والدفع:</span>
                   <p className="font-bold text-stone-900 truncate">{paymentMethod}</p>
-                  <p className="text-stone-600 text-[11px]">
-                    {deliveryType === 'pickup' ? 'استلام من الفرع' : city}
-                  </p>
+                  <div className="flex items-center gap-1 text-[11px] font-bold">
+                    {deliveryType === 'pickup' ? (
+                      <span className="text-emerald-700 bg-emerald-100/90 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <Store className="w-3 h-3" />
+                        <span>استلام من الفرع (0 ر.س)</span>
+                      </span>
+                    ) : (
+                      <span className="text-blue-700 bg-blue-100/90 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <Truck className="w-3 h-3" />
+                        <span>توصيل إلى {city === 'مدينة أخرى' && customCity.trim() ? customCity.trim() : city}</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
