@@ -558,12 +558,14 @@ export const OrderTrackerModal: React.FC<OrderTrackerModalProps> = ({
         </div>
       </div>
 
-      {/* ZATCA Tax Invoice Modal */}
+      {/* ZATCA Tax Invoice Modal (Customer View: A4 Invoice only) */}
       <InvoiceModal
         isOpen={showInvoiceModal}
         onClose={() => setShowInvoiceModal(false)}
         order={searchedOrder}
         settings={settings}
+        initialFormat="a4"
+        isCustomerView={true}
       />
 
       {/* Return Request Modal */}

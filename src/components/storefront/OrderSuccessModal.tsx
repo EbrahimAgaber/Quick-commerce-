@@ -203,12 +203,14 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
         </div>
       </div>
 
-      {/* ZATCA Tax Invoice Modal */}
+      {/* ZATCA Tax Invoice Modal (Customer View: A4 Invoice only, internal merchant labels hidden) */}
       <InvoiceModal
         isOpen={showInvoiceModal}
         onClose={() => setShowInvoiceModal(false)}
         order={order}
         settings={settings}
+        initialFormat="a4"
+        isCustomerView={true}
       />
     </div>
   );

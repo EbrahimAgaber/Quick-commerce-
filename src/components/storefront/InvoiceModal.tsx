@@ -35,6 +35,7 @@ interface InvoiceModalProps {
   order: Order | null;
   settings: StoreSettings;
   initialFormat?: PrintDocumentFormat;
+  isCustomerView?: boolean;
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
@@ -43,8 +44,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   order,
   settings,
   initialFormat = 'a4',
+  isCustomerView = false,
 }) => {
-  const [format, setFormat] = useState<PrintDocumentFormat>(initialFormat);
+  const [format, setFormat] = useState<PrintDocumentFormat>(isCustomerView ? 'a4' : initialFormat);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [trackingQrDataUrl, setTrackingQrDataUrl] = useState<string>('');
   const printableAreaRef = useRef<HTMLDivElement>(null);
@@ -326,45 +328,58 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         {/* Top Control Bar */}
         <div className="no-print p-4 border-b border-stone-200 bg-stone-50 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-bold text-stone-700">نوع المستند للطباعة:</span>
-            <div className="flex rounded-xl bg-stone-200 p-0.5 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setFormat('a4')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                  format === 'a4'
-                    ? 'bg-white text-stone-900 shadow-xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5 text-blue-600" />
-                <span>فاتورة A4</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setFormat('thermal')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                  format === 'thermal'
-                    ? 'bg-white text-stone-900 shadow-xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                <Receipt className="w-3.5 h-3.5 text-emerald-600" />
-                <span>إيصال حراري 80mm</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setFormat('label')}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                  format === 'label'
-                    ? 'bg-[#0F172A] text-white shadow-xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                <Tag className="w-3.5 h-3.5 text-amber-500" />
-                <span>بوليصة شحن / ملصق الطرد (Label)</span>
-              </button>
-            </div>
+            {!isCustomerView ? (
+              <>
+                <span className="text-xs font-bold text-stone-700">نوع المستند للطباعة:</span>
+                <div className="flex rounded-xl bg-stone-200 p-0.5 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setFormat('a4')}
+                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                      format === 'a4'
+                        ? 'bg-white text-stone-900 shadow-xs'
+                        : 'text-stone-600 hover:text-stone-900'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    <span>فاتورة A4</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormat('thermal')}
+                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                      format === 'thermal'
+                        ? 'bg-white text-stone-900 shadow-xs'
+                        : 'text-stone-600 hover:text-stone-900'
+                    }`}
+                  >
+                    <Receipt className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>إيصال حراري 80mm</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormat('label')}
+                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                      format === 'label'
+                        ? 'bg-[#0F172A] text-white shadow-xs'
+                        : 'text-stone-600 hover:text-stone-900'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5 text-amber-500" />
+                    <span>بوليصة شحن / ملصق الطرد (Label)</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-blue-100 text-blue-800 rounded-lg">
+                  <FileText className="w-4 h-4" />
+                </span>
+                <span className="text-xs font-bold text-stone-800">
+                  فاتورة الشراء الضريبية المعتمدة
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5">

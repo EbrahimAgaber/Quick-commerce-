@@ -28,11 +28,14 @@ import {
   HardDrive,
   FileJson,
   Download,
+  MapPin,
+  Navigation,
 } from 'lucide-react';
 import type { StorePolicy, StoreSettings, PromoCode } from '../../../types/store';
 import { normalizeArabicDigits } from '../../../utils/digits';
 import { SAUDI_CITIES_GEO } from '../../../utils/seoManager';
 import { MerchantCaptainsDirectory } from '../../admin/MerchantCaptainsDirectory';
+import { LocationPickerModal } from '../../storefront/LocationPickerModal';
 
 interface SettingsTabProps {
   editableSettings: StoreSettings;
@@ -122,6 +125,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   const [newPromoCode, setNewPromoCode] = useState('');
   const [newPromoType, setNewPromoType] = useState<'percentage' | 'fixed'>('percentage');
   const [newPromoValue, setNewPromoValue] = useState<number>(10);
+  const [showStoreLocationPicker, setShowStoreLocationPicker] = useState(false);
+  const [storeLocationPickerTarget, setStoreLocationPickerTarget] = useState<'warehouse' | 'pickup'>('warehouse');
 
   const handleCopyDns = (key: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -1540,24 +1545,51 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               </div>
 
               <div>
-                <label className="block font-bold text-stone-700 mb-1">
-                  رابط موقع المحل / المستودع على Google Maps
-                </label>
-                <input
-                  type="url"
-                  value={editableSettings.storeLocationUrl || ''}
-                  onChange={(e) =>
-                    setEditableSettings({
-                      ...editableSettings,
-                      storeLocationUrl: e.target.value,
-                    })
-                  }
-                  placeholder="https://maps.app.goo.gl/..."
-                  className="w-full px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
-                  dir="ltr"
-                />
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <label className="block font-bold text-stone-700">
+                    رابط موقع المحل / المستودع على Google Maps
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStoreLocationPickerTarget('warehouse');
+                      setShowStoreLocationPicker(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-emerald-800 bg-emerald-100/80 hover:bg-emerald-200/90 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>تثبيت الموقع على الخريطة 📍</span>
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={editableSettings.storeLocationUrl || ''}
+                    onChange={(e) =>
+                      setEditableSettings({
+                        ...editableSettings,
+                        storeLocationUrl: e.target.value,
+                      })
+                    }
+                    placeholder="https://maps.app.goo.gl/..."
+                    className="flex-1 px-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl font-mono"
+                    dir="ltr"
+                  />
+                  {editableSettings.storeLocationUrl && (
+                    <a
+                      href={editableSettings.storeLocationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors shrink-0"
+                      title="فتح الرابط للمعاينة"
+                    >
+                      <Navigation className="w-3.5 h-3.5" />
+                      <span>معاينة</span>
+                    </a>
+                  )}
+                </div>
                 <span className="text-[10px] text-stone-400 mt-0.5 block">
-                  يرسل للمندوب بنقرة واحدة لفتح اتجاهات القيادة واستلام الطرود من محلك
+                  يرسل للمندوب والعميل بنقرة واحدة لفتح اتجاهات القيادة واستلام الطرود من موقعك
                 </span>
               </div>
             </div>
@@ -1615,10 +1647,23 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 </label>
 
                 {editableSettings.enableStorePickup && (
-                  <div className="pt-1 space-y-1.5 animate-in fade-in duration-150">
-                    <label className="block font-bold text-stone-700 text-xs">
-                      عنوان وموقع الاستلام المباشر للعميل
-                    </label>
+                  <div className="pt-1 space-y-2 animate-in fade-in duration-150">
+                    <div className="flex items-center justify-between gap-1">
+                      <label className="block font-bold text-stone-700 text-xs">
+                        عنوان وموقع الاستلام المباشر للعميل
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStoreLocationPickerTarget('pickup');
+                          setShowStoreLocationPicker(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>تحديد وتثبيت العنوان بالخريطة 📍</span>
+                      </button>
+                    </div>
                     <input
                       type="text"
                       value={editableSettings.storePickupAddress || ''}
@@ -1631,9 +1676,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                       placeholder="مثال: الرياض - طريق الملك فهد - مجمع التحلية التجاري، المعرض 4"
                       className="w-full px-3 py-2.5 bg-white border border-stone-300 rounded-xl text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     />
-                    <p className="text-[10px] text-stone-400">
-                      يظهر هذا العنوان للعميل عند اختياره الاستلام من المتجر، كما يتم تضمينه في فاتورة الطلب.
-                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] text-stone-400">
+                      <span>يظهر هذا العنوان للعميل عند اختياره الاستلام من المتجر، كما يتم تضمينه في فاتورة الطلب.</span>
+                      {editableSettings.storeLocationUrl && (
+                        <a
+                          href={editableSettings.storeLocationUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-emerald-700 font-bold underline inline-flex items-center gap-1 shrink-0"
+                        >
+                          <Navigation className="w-3 h-3" />
+                          <span>رابط الخريطة المربوط حالياً</span>
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2127,6 +2183,32 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Interactive Store Location Pinning Modal */}
+      <LocationPickerModal
+        isOpen={showStoreLocationPicker}
+        onClose={() => setShowStoreLocationPicker(false)}
+        city={editableSettings.city || 'الرياض'}
+        initialAddress={
+          storeLocationPickerTarget === 'pickup'
+            ? editableSettings.storePickupAddress
+            : undefined
+        }
+        onConfirm={(locationData) => {
+          const updated = { ...editableSettings };
+          if (locationData.googleMapsUrl) {
+            updated.storeLocationUrl = locationData.googleMapsUrl;
+          }
+          if (storeLocationPickerTarget === 'pickup' || !updated.storePickupAddress) {
+            updated.storePickupAddress = locationData.address;
+          }
+          if (storeLocationPickerTarget === 'pickup') {
+            updated.enableStorePickup = true;
+          }
+          setEditableSettings(updated);
+          setShowStoreLocationPicker(false);
+        }}
+      />
     </div>
   );
 };

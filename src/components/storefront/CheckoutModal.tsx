@@ -812,7 +812,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
 
               {/* Delivery or Store Pickup Toggle */}
-              {settings.enableStorePickup && (
+              {(settings.enableStorePickup || Boolean(settings.storePickupAddress || settings.storeLocationUrl)) && (
                 <div className="pt-1">
                   <label className="block text-xs font-bold text-stone-800 mb-1.5">
                     طريقة الاستلام:
@@ -1022,14 +1022,32 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
                 </>
               ) : (
-                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-1 text-xs">
-                  <div className="font-bold text-emerald-900 flex items-center gap-1.5">
-                    <Store className="w-4 h-4 text-emerald-700" />
-                    <span>عنوان الاستلام من مقر المتجر:</span>
+                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2 text-xs">
+                  <div className="font-bold text-emerald-900 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Store className="w-4 h-4 text-emerald-700" />
+                      <span>عنوان وموقع الاستلام من الفرع:</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-bold">
+                      بدون رسوم توصيل (0.00 ر.س)
+                    </span>
                   </div>
-                  <p className="text-emerald-800 font-medium">
-                    {settings.storePickupAddress || 'الفرع الرئيسي للمتجر — سيتم إرسال الموقع والتفاصيل عبر الواتساب فور تأكيد الطلب.'}
+                  <p className="text-emerald-950 font-medium leading-relaxed">
+                    {settings.storePickupAddress || 'الفرع الرئيسي للمتجر — سيتم إرسال الموقع الدقيق والتفاصيل عبر الواتساب فور تأكيد الطلب.'}
                   </p>
+                  {settings.storeLocationUrl && (
+                    <div className="pt-1">
+                      <a
+                        href={settings.storeLocationUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-300 rounded-xl text-emerald-800 font-bold text-[11px] hover:bg-emerald-50 shadow-2xs transition-colors"
+                      >
+                        <Navigation className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>فتح موقع الفرع على خرائط Google Maps</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
