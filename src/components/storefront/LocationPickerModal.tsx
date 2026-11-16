@@ -39,6 +39,7 @@ interface LocationPickerModalProps {
     lng: number;
     address: string;
     googleMapsUrl: string;
+    detectedCity?: string;
   }) => void;
   primaryColor?: string;
   accentColor?: string;
@@ -476,6 +477,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   const [lat, setLat] = useState<number>(defaultCoords.lat);
   const [lng, setLng] = useState<number>(defaultCoords.lng);
   const [detectedAddress, setDetectedAddress] = useState<string>(initialAddress);
+  const [detectedCity, setDetectedCity] = useState<string>('');
   const [buildingNumber, setBuildingNumber] = useState<string>('');
   const [landmark, setLandmark] = useState<string>('');
   const [isReverseGeocoding, setIsReverseGeocoding] = useState<boolean>(false);
@@ -499,6 +501,9 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
         const data = await res.json();
         if (data.success && data.formattedAddress) {
           setDetectedAddress(data.formattedAddress);
+          if (data.city) {
+            setDetectedCity(data.city);
+          }
           if (data.buildingNumber && !buildingNumber) {
             setBuildingNumber(data.buildingNumber);
           }
@@ -533,6 +538,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
       lng,
       address: finalAddress,
       googleMapsUrl: directMapsUrl,
+      detectedCity: detectedCity || undefined,
     });
     onClose();
   };

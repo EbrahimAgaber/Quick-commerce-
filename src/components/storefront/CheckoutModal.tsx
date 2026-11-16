@@ -155,6 +155,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   }, []);
 
+  // Determine store's location city to provide as smart default
+  const resolvedStoreCity = (settings.city || settings.geoCity || '').trim();
+  const matchedStoreDefaultCity = DEFAULT_CITIES.find(
+    (c) => c !== 'مدينة أخرى' && (c === resolvedStoreCity || isSameSaudiCity(c, resolvedStoreCity))
+  );
+  const fallbackCity = matchedStoreDefaultCity || DEFAULT_CITIES[0];
+
   // Form fields
   const [customerName, setCustomerName] = useState(() => savedProfile?.customerName || '');
   const [customerPhone, setCustomerPhone] = useState(() => savedProfile?.customerPhone || '');
@@ -167,7 +174,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (savedProfile?.customCity) {
       return 'مدينة أخرى';
     }
-    return DEFAULT_CITIES[0];
+    return fallbackCity;
   });
   const [customCity, setCustomCity] = useState(() => savedProfile?.customCity || '');
   const [deliveryAddress, setDeliveryAddress] = useState(() => savedProfile?.deliveryAddress || '');
@@ -221,9 +228,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   // Determine current active shopper city & store city
   const shopperCity = deliveryType === 'pickup' 
-    ? (settings.city || 'الرياض') 
+    ? (resolvedStoreCity || 'الرياض') 
     : (city === 'مدينة أخرى' && customCity.trim() ? customCity.trim() : city);
-  const storeCity = settings.city || 'العلا';
+  const storeCity = resolvedStoreCity || 'العلا';
   const isDifferentCity = deliveryType === 'delivery' && !isSameSaudiCity(shopperCity, storeCity);
   const isCodRestricted = Boolean(settings.restrictCodToStoreCity && isDifferentCity);
 
@@ -453,7 +460,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     // Determine current shopper city
     const currentSelectedCity = city === 'مدينة أخرى' && customCity.trim() ? customCity.trim() : city;
-    const isDefaultCityUntouched = city === DEFAULT_CITIES[0] && !customCity.trim();
+    const isDefaultCityUntouched = (city === fallbackCity || city === DEFAULT_CITIES[0]) && !customCity.trim();
 
     try {
       const res = await fetch(`/api/geo/nationalAddress?shortCode=${encodeURIComponent(cleaned)}`);
@@ -1561,6 +1568,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           onConfirm={(loc) => {
             setGoogleMapsUrl(loc.googleMapsUrl);
             setDeliveryAddress(loc.address);
+            if (loc.detectedCity) {
+              const matchedCity = DEFAULT_CITIES.find(
+                (c) => c !== 'مدينة أخرى' && (c === loc.detectedCity || isSameSaudiCity(c, loc.detectedCity))
+              );
+              if (matchedCity) {
+                setCity(matchedCity);
+              } else {
+                setCity('مدينة أخرى');
+                setCustomCity(loc.detectedCity);
+              }
+            }
             setShowLocationPickerModal(false);
           }}
         />

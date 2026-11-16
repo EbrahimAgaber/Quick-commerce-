@@ -1475,6 +1475,13 @@ export default function App() {
               } else if (tab === 'search') {
                 setViewMode('storefront');
                 setIsMobileSearchExpanded(true);
+                // Smooth scroll to catalog and focus search input on next tick
+                const el = document.getElementById('catalog-section');
+                el?.scrollIntoView({ behavior: 'smooth' });
+                setTimeout(() => {
+                  const searchInput = document.querySelector('input[type="text"][placeholder*="ابحث"]') as HTMLInputElement;
+                  searchInput?.focus();
+                }, 150);
               } else if (tab === 'tracker') {
                 setTrackerInitialId('');
                 setIsTrackerOpen(true);
@@ -1492,7 +1499,14 @@ export default function App() {
               setIsTrackerOpen(true);
             }}
             onToggleSearch={() => {
-              setIsMobileSearchExpanded((prev) => !prev);
+              setViewMode('storefront');
+              setIsMobileSearchExpanded(true);
+              const el = document.getElementById('catalog-section');
+              el?.scrollIntoView({ behavior: 'smooth' });
+              setTimeout(() => {
+                const searchInput = document.querySelector('input[type="text"][placeholder*="ابحث"]') as HTMLInputElement;
+                searchInput?.focus();
+              }, 150);
             }}
             onOpenDashboard={() => setViewMode('dashboard')}
             isStoreOwner={isStoreOwner}
